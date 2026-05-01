@@ -7,6 +7,7 @@ use App\Services\LdapAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
@@ -28,9 +29,36 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $ldapUser = $this->ldap->authenticate($data['username'], $data['password']);
+        $localEnabled = filter_var(env('AUTH_LOCAL_ENABLED', false), FILTER_VALIDATE_BOOLEAN);
+        $ldapEnabled  = filter_var(env('AUTH_LDAP_ENABLED', true), FILTER_VALIDATE_BOOLEAN);
 
-        if (!$ldapUser) {
+        $authMethod = null;
+        $authPayload = null;
+
+        // 1) Intento de autenticación local (si está habilitada)
+        if ($localEnabled) {
+            $localUser = UserRole::where('username', $data['username'])->first();
+            if ($localUser && $localUser->hasLocalPassword()
+                && Hash::check($data['password'], $localUser->password)) {
+                $authMethod  = 'local';
+                $authPayload = [
+                    'username'     => $localUser->username,
+                    'display_name' => $localUser->display_name,
+                    'email'        => $localUser->email,
+                ];
+            }
+        }
+
+        // 2) Fallback a LDAP (si está habilitado y la auth local no autorizó)
+        if (!$authMethod && $ldapEnabled) {
+            $ldapUser = $this->ldap->authenticate($data['username'], $data['password']);
+            if ($ldapUser) {
+                $authMethod  = 'ldap';
+                $authPayload = $ldapUser;
+            }
+        }
+
+        if (!$authMethod) {
             return response()->json([
                 'error'   => 'invalid_credentials',
                 'message' => 'Usuario o contraseña inválidos.',
@@ -38,14 +66,14 @@ class AuthController extends Controller
         }
 
         // Crear o actualizar el registro local de roles
-        $user = UserRole::firstOrNew(['username' => $ldapUser['username']]);
+        $user = UserRole::firstOrNew(['username' => $authPayload['username']]);
         $isNew = !$user->exists;
         if ($isNew) {
             $user->rol    = 'consulta';
             $user->activo = 1;
         }
-        $user->display_name = $ldapUser['display_name'] ?? $user->display_name ?? $ldapUser['username'];
-        $user->email        = $ldapUser['email'] ?? $user->email;
+        $user->display_name = $authPayload['display_name'] ?? $user->display_name ?? $authPayload['username'];
+        $user->email        = $authPayload['email'] ?? $user->email;
         $user->last_login   = now();
         $user->save();
 
@@ -64,6 +92,7 @@ class AuthController extends Controller
             'username' => $user->username,
             'rol'      => $user->rol,
             'new'      => $isNew,
+            'method'   => $authMethod,
         ]);
 
         return response()->json([

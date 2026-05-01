@@ -44,6 +44,8 @@ async function request(path, { method = 'GET', body, headers = {}, raw = false }
         method,
         headers: {
             Accept: 'application/json',
+            // Evita la página intersticial cuando se accede vía túnel ngrok
+            'ngrok-skip-browser-warning': 'true',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...headers,
         },

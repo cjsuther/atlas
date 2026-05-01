@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
   username   VARCHAR(200) NOT NULL,
   display_name VARCHAR(200),
   email      VARCHAR(200),
+  password   VARCHAR(255) NULL,
   rol        ENUM('admin','operador','consulta') NOT NULL DEFAULT 'consulta',
   activo     TINYINT(1) DEFAULT 1,
   last_login TIMESTAMP NULL,

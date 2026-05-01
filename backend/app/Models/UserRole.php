@@ -16,6 +16,7 @@ class UserRole extends Authenticatable
         'username',
         'display_name',
         'email',
+        'password',
         'rol',
         'activo',
         'last_login',
@@ -24,11 +25,17 @@ class UserRole extends Authenticatable
     protected $casts = [
         'activo'     => 'boolean',
         'last_login' => 'datetime',
+        'password'   => 'hashed',
     ];
 
     protected $hidden = [
-        // Este modelo no maneja contraseñas — vienen del LDAP.
+        'password',
     ];
+
+    public function hasLocalPassword(): bool
+    {
+        return !empty($this->password);
+    }
 
     public function isAdmin(): bool
     {

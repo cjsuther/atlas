@@ -34,6 +34,7 @@ export function renderShell(activeNavId, pageTitle) {
 
     app.innerHTML = `
         <div class="app-shell ${collapsed ? 'collapsed' : ''}" id="app-shell">
+            <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
             <aside class="app-sidebar">
                 <div class="brand">
                     ${logoSvg(28)}
@@ -76,10 +77,33 @@ export function renderShell(activeNavId, pageTitle) {
 
     titleEl = document.getElementById('page-title');
 
+    const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
+    const shell = document.getElementById('app-shell');
+
     document.getElementById('btn-toggle').addEventListener('click', () => {
-        const shell = document.getElementById('app-shell');
-        shell.classList.toggle('collapsed');
-        localStorage.setItem(SIDEBAR_KEY, shell.classList.contains('collapsed') ? '1' : '0');
+        if (isMobile()) {
+            shell.classList.toggle('mobile-open');
+        } else {
+            shell.classList.toggle('collapsed');
+            localStorage.setItem(SIDEBAR_KEY, shell.classList.contains('collapsed') ? '1' : '0');
+        }
+    });
+
+    // Cerrar drawer al tocar el backdrop
+    document.getElementById('sidebar-backdrop').addEventListener('click', () => {
+        shell.classList.remove('mobile-open');
+    });
+
+    // Cerrar drawer al navegar dentro del menú (sólo en mobile)
+    shell.querySelectorAll('.app-sidebar .nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (isMobile()) shell.classList.remove('mobile-open');
+        });
+    });
+
+    // Si el viewport pasa de mobile a desktop con el drawer abierto, lo cerramos
+    window.addEventListener('resize', () => {
+        if (!isMobile()) shell.classList.remove('mobile-open');
     });
 
     document.getElementById('btn-logout').addEventListener('click', async () => {

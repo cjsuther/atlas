@@ -51,6 +51,9 @@ services:
       LDAP_USE_TLS: ${LDAP_USE_TLS}
       LDAP_USER_ATTRIBUTE: ${LDAP_USER_ATTRIBUTE}
 
+      AUTH_LOCAL_ENABLED: ${AUTH_LOCAL_ENABLED:-false}
+      AUTH_LDAP_ENABLED: ${AUTH_LDAP_ENABLED:-true}
+
       FIRST_ADMIN_USERNAME: ${FIRST_ADMIN_USERNAME}
 
       SANCTUM_STATEFUL_DOMAINS: localhost
@@ -90,6 +93,35 @@ services:
     depends_on:
       - frontend
       - backend
+    networks:
+      - atlas_net
+
+  # ----------------------------------------------------------------------
+  # Túnel ngrok — acceso remoto temporal al gateway nginx.
+  # Sólo arranca cuando se invoca con el perfil "tunnel":
+  #   docker compose --profile tunnel up -d
+  # Requiere NGROK_AUTHTOKEN en .env (cuenta gratuita en ngrok.com).
+  # Web inspector local: http://localhost:4040
+  # ----------------------------------------------------------------------
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: atlas_ngrok
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        if [ -n "$$NGROK_DOMAIN" ]; then
+          exec ngrok http --log=stdout --domain=$$NGROK_DOMAIN nginx:80;
+        else
+          exec ngrok http --log=stdout nginx:80;
+        fi
+    ports:
+      - "4040:4040"
+    depends_on:
+      - nginx
     networks:
       - atlas_net
 

@@ -586,3 +586,157 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
 @media (max-width: 720px) {
     .detail-grid { grid-template-columns: 1fr; }
 }
+
+/* ----------------------------------------------------------------------
+   Sidebar backdrop (sólo se ve en mobile cuando el drawer está abierto)
+   ---------------------------------------------------------------------- */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1099;
+}
+
+/* ----------------------------------------------------------------------
+   Responsive — Tablet (≤ 768px)
+   ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    /* Layout: una columna; el sidebar pasa a ser drawer */
+    .app-shell {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "header"
+            "main";
+    }
+    .app-shell.collapsed { grid-template-columns: 1fr; }
+
+    .app-sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        width: var(--sidebar-w);
+        z-index: 1100;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: var(--shadow-lg);
+    }
+    .app-shell.mobile-open .app-sidebar { transform: none; }
+    .app-shell.mobile-open .sidebar-backdrop { display: block; }
+
+    /* En mobile el sidebar nunca queda en modo "colapsado": siempre muestra labels */
+    .app-shell.collapsed .app-sidebar .brand .name,
+    .app-shell.collapsed .app-sidebar .nav-item .label,
+    .app-shell.collapsed .app-sidebar .nav-section-title { display: initial; }
+
+    /* Header */
+    .app-header { padding: 0 12px; }
+    .app-header .user-area { gap: 8px; }
+    .app-header .user-info .role { display: none; }
+    .app-header .user-info .name {
+        font-size: 13px;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .toggle-sidebar {
+        margin-right: 4px;
+        padding: 8px;
+        min-width: 40px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .app-header .title {
+        font-size: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 40vw;
+    }
+
+    /* Contenido */
+    .app-main { padding: 16px 12px; }
+    .page-title { font-size: 18px; }
+    .page-subtitle { font-size: 13px; }
+
+    /* Toolbar y filtros */
+    .toolbar { gap: 8px; }
+    .toolbar .search-box { flex: 1 1 100%; max-width: 100%; }
+    .filters-panel { padding: 12px; }
+    .filters-panel .filters-grid { grid-template-columns: 1fr; }
+    .filters-panel .actions { justify-content: stretch; }
+    .filters-panel .actions .btn { flex: 1; }
+
+    /* Tablas: padding compacto y áreas de tap más generosas en acciones */
+    table.atlas-table { font-size: 12px; }
+    table.atlas-table th,
+    table.atlas-table td { padding: 8px; }
+    table.atlas-table .actions { gap: 4px; }
+    table.atlas-table .actions button {
+        padding: 6px 10px;
+        font-size: 12px;
+        min-height: 32px;
+    }
+
+    /* Paginador en columna */
+    .pager {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    .pager .pages {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .pager .info { text-align: center; }
+
+    /* Modales */
+    .modal-backdrop {
+        padding: 8px;
+        align-items: flex-start;
+        padding-top: 24px;
+    }
+    .modal { max-height: calc(100vh - 32px); }
+    .modal-header { padding: 12px 16px; }
+    .modal-header h3 { font-size: 16px; }
+    .modal-body { padding: 16px; }
+    .modal-footer {
+        padding: 12px 16px;
+        flex-direction: column-reverse;
+    }
+    .modal-footer .btn { width: 100%; }
+
+    /* Toasts ocupan el ancho útil */
+    #toast-root {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+    }
+    .toast {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    /* KPIs */
+    .kpi-card { padding: 14px 16px; }
+    .kpi-card .value { font-size: 22px; }
+
+    /* Login */
+    .login-box { padding: 24px 20px; }
+
+    /* Botones más fáciles de tocar */
+    .btn { min-height: 40px; padding: 10px 14px; }
+}
+
+/* ----------------------------------------------------------------------
+   Responsive — Teléfono (≤ 480px)
+   ---------------------------------------------------------------------- */
+@media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+    .app-header .title { display: none; }
+    .app-header .user-info .name { max-width: 90px; }
+    .page-title { font-size: 17px; }
+    .login-box { padding: 20px 16px; }
+}
