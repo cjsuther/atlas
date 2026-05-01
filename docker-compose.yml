@@ -1,0 +1,102 @@
+version: '3.9'
+
+services:
+  db:
+    build: ./db
+    container_name: atlas_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - atlas_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    container_name: atlas_backend
+    restart: unless-stopped
+    environment:
+      APP_NAME: ATLAS
+      APP_ENV: ${APP_ENV}
+      APP_KEY: ${APP_KEY}
+      APP_DEBUG: ${APP_DEBUG}
+      APP_URL: http://localhost
+      LOG_CHANNEL: stack
+      LOG_LEVEL: info
+
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_NAME}
+      DB_USERNAME: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      LDAP_HOST: ${LDAP_HOST}
+      LDAP_PORT: ${LDAP_PORT}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_USERNAME: ${LDAP_USERNAME}
+      LDAP_PASSWORD: ${LDAP_PASSWORD}
+      LDAP_USE_SSL: ${LDAP_USE_SSL}
+      LDAP_USE_TLS: ${LDAP_USE_TLS}
+      LDAP_USER_ATTRIBUTE: ${LDAP_USER_ATTRIBUTE}
+
+      FIRST_ADMIN_USERNAME: ${FIRST_ADMIN_USERNAME}
+
+      SANCTUM_STATEFUL_DOMAINS: localhost
+      SESSION_DOMAIN: localhost
+      SESSION_DRIVER: file
+      CACHE_DRIVER: file
+      QUEUE_CONNECTION: sync
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - atlas_net
+    volumes:
+      - backend_storage:/var/www/html/storage
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1:9000') === false && !file_exists('/var/run/php-fpm.pid') ? 0 : 0);\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build: ./frontend
+    container_name: atlas_frontend
+    restart: unless-stopped
+    networks:
+      - atlas_net
+    depends_on:
+      - backend
+
+  nginx:
+    build: ./nginx
+    container_name: atlas_nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - atlas_net
+
+networks:
+  atlas_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  backend_storage:
