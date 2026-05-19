@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Contrato;
+use App\Models\ContratoEjecucion;
+use App\Models\ContratoPrincipal;
 use App\Models\Uvt;
 
 class UvtService extends BaseCrudService
@@ -13,9 +14,13 @@ class UvtService extends BaseCrudService
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
-        $count = Contrato::where('uvt_id', $id)->count();
-        if ($count > 0) {
-            $msgs[] = "Existen {$count} contrato(s) asociado(s) a esta UVT.";
+        $cP = ContratoPrincipal::where('uvt_id', $id)->count();
+        if ($cP > 0) {
+            $msgs[] = "Existen {$cP} contrato(s) principal(es) asociado(s) a esta UVT.";
+        }
+        $cE = ContratoEjecucion::where('uvt_id', $id)->count();
+        if ($cE > 0) {
+            $msgs[] = "Existen {$cE} contrato(s) de ejecución asociado(s) a esta UVT.";
         }
         return $msgs;
     }

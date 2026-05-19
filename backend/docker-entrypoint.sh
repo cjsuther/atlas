@@ -27,6 +27,9 @@ php artisan config:clear || true
 php artisan route:clear || true
 php artisan cache:clear || true
 
+# Directorio de facturas (persistido por backend_storage volume)
+mkdir -p storage/app/private/facturas
+
 # Permisos
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true

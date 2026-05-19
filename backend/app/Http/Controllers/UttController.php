@@ -18,6 +18,7 @@ class UttController extends CrudController
         return [
             'denominacion' => ['required', 'string', 'max:50', Rule::unique('utt', 'denominacion')],
             'nombre'       => ['required', 'string', 'max:300'],
+            'regimen'      => ['nullable', 'in:160,317,ambos'],
         ];
     }
 
@@ -28,7 +29,8 @@ class UttController extends CrudController
                 'required', 'string', 'max:50',
                 Rule::unique('utt', 'denominacion')->ignore($id, 'utt_id'),
             ],
-            'nombre' => ['required', 'string', 'max:300'],
+            'nombre'  => ['required', 'string', 'max:300'],
+            'regimen' => ['nullable', 'in:160,317,ambos'],
         ];
     }
 }

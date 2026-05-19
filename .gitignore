@@ -28,3 +28,13 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Documentación local (no se versionan archivos .md)
+*.md
+
+# Directorio definiciones: sólo se versionan los entregables formales
+definiciones/*
+!definiciones/atlas_install_bd.sql
+!definiciones/ATLAS_Manual_Implementacion.docx
+!definiciones/ATLAS_Adaptacion_Autenticacion_API.docx
+

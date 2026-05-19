@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Models\Contrato;
+use App\Models\ContratoEjecucion;
+use App\Models\ContratoPrincipal;
 use App\Models\Personal;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -19,9 +20,13 @@ class PersonalService extends BaseCrudService
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
-        $count = Contrato::where('resp1_id', $id)->orWhere('resp2_id', $id)->count();
-        if ($count > 0) {
-            $msgs[] = "Esta persona figura como responsable en {$count} contrato(s).";
+        $cP = ContratoPrincipal::where('resp1_id', $id)->orWhere('resp2_id', $id)->count();
+        if ($cP > 0) {
+            $msgs[] = "Esta persona figura como responsable en {$cP} contrato(s) principal(es).";
+        }
+        $cE = ContratoEjecucion::where('resp1_id', $id)->orWhere('resp2_id', $id)->count();
+        if ($cE > 0) {
+            $msgs[] = "Esta persona figura como responsable en {$cE} contrato(s) de ejecución.";
         }
         return $msgs;
     }

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Contrato;
 use App\Models\Personal;
 use App\Models\Sector;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,10 +21,6 @@ class SectorService extends BaseCrudService
         $msgs = [];
         if (Sector::where('dependencia_id', $id)->exists()) {
             $msgs[] = 'Existen sectores que dependen de éste.';
-        }
-        $contratos = Contrato::where('sector_id', $id)->count();
-        if ($contratos > 0) {
-            $msgs[] = "Existen {$contratos} contrato(s) asociado(s) a este sector.";
         }
         $pers = Personal::where('lugar_trabajo_id', $id)->count();
         if ($pers > 0) {

@@ -1,5 +1,5 @@
 /* =====================================================================
-   ATLAS — Sistema de diseño
+   ATLAS v2 — Sistema de diseño (Vue 3)
    ===================================================================== */
 :root {
     --color-primary:     #1a2e4a;
@@ -14,10 +14,11 @@
     --color-text:        #2d3748;
     --color-muted:       #718096;
 
-    --color-success:     #38a169;  /* En Ejecución */
-    --color-info:        #3182ce;  /* En Tramitación */
-    --color-neutral:     #718096;  /* Finalizado */
-    --color-danger:      #e53e3e;  /* Sin efecto */
+    --color-success:     #38a169;
+    --color-info:        #3182ce;
+    --color-neutral:     #718096;
+    --color-danger:      #e53e3e;
+    --color-warning:     #d69e2e;
 
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
     --shadow:    0 4px 12px rgba(26,46,74,0.08);
@@ -88,7 +89,6 @@ a:hover { text-decoration: underline; }
     padding: 14px 16px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-.app-sidebar .brand svg { flex-shrink: 0; }
 .app-sidebar .brand .name {
     font-weight: 700;
     font-size: 18px;
@@ -121,9 +121,10 @@ a:hover { text-decoration: underline; }
     user-select: none;
     transition: background 0.15s, color 0.15s;
     font-weight: 500;
+    text-decoration: none;
 }
-.nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.nav-item.active { background: var(--color-accent); color: #fff; }
+.nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; text-decoration: none; }
+.nav-item.router-link-active, .nav-item.active { background: var(--color-accent); color: #fff; }
 .nav-item .icon { width: 18px; height: 18px; flex-shrink: 0; }
 
 .app-header {
@@ -170,9 +171,7 @@ a:hover { text-decoration: underline; }
     overflow: auto;
 }
 
-/* ----------------------------------------------------------------------
-   Componentes base
-   ---------------------------------------------------------------------- */
+/* Componentes base */
 .card {
     background: var(--color-surface);
     border-radius: var(--radius);
@@ -204,28 +203,15 @@ a:hover { text-decoration: underline; }
     font-weight: 500;
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.btn-primary {
-    background: var(--color-accent);
-    color: #fff;
-}
+.btn-primary { background: var(--color-accent); color: #fff; }
 .btn-primary:hover { background: #0098b8; }
-.btn-secondary {
-    background: var(--color-surface);
-    color: var(--color-primary);
-    border-color: var(--color-border);
-}
+.btn-secondary { background: var(--color-surface); color: var(--color-primary); border-color: var(--color-border); }
 .btn-secondary:hover { background: var(--color-surface-2); }
-.btn-danger {
-    background: var(--color-danger);
-    color: #fff;
-}
+.btn-danger { background: var(--color-danger); color: #fff; }
 .btn-danger:hover { background: #c53030; }
-.btn-ghost {
-    background: transparent;
-    color: var(--color-primary);
-    border-color: transparent;
-}
+.btn-ghost { background: transparent; color: var(--color-primary); border-color: transparent; }
 .btn-ghost:hover { background: var(--color-surface-2); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .input, .select, .textarea {
@@ -246,12 +232,7 @@ a:hover { text-decoration: underline; }
 }
 .textarea { min-height: 80px; resize: vertical; }
 
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
-}
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .field label {
     font-size: 12px;
     font-weight: 600;
@@ -259,24 +240,26 @@ a:hover { text-decoration: underline; }
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
-.field .error {
-    color: var(--color-danger);
-    font-size: 12px;
-    margin-top: 2px;
+.field .error { color: var(--color-danger); font-size: 12px; margin-top: 2px; }
+.field.inherited label::after {
+    content: ' · heredado';
+    color: var(--color-accent);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
 }
+.field.inherited .input,
+.field.inherited .select { background: var(--color-accent-soft); border-color: var(--color-accent); }
 
 /* Tablas */
 .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     border-radius: var(--radius);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
 }
-table.atlas-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-}
+table.atlas-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.atlas-table th, table.atlas-table td {
     padding: 10px 12px;
     text-align: left;
@@ -284,23 +267,16 @@ table.atlas-table th, table.atlas-table td {
     vertical-align: middle;
 }
 table.atlas-table th {
-    background: var(--color-primary);
-    color: #fff;
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    background: var(--color-primary); color: #fff;
+    font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
     user-select: none;
 }
 table.atlas-table th.sortable { cursor: pointer; }
 table.atlas-table th.sortable:hover { background: var(--color-primary-2); }
 table.atlas-table tbody tr:nth-child(even) { background: var(--color-surface-2); }
 table.atlas-table tbody tr:hover { background: var(--color-accent-soft); }
-table.atlas-table .actions {
-    display: flex;
-    gap: 6px;
-    justify-content: flex-end;
-}
+table.atlas-table .actions { display: flex; gap: 6px; justify-content: flex-end; }
 table.atlas-table .actions button {
     background: transparent;
     border: 1px solid var(--color-border);
@@ -311,14 +287,12 @@ table.atlas-table .actions button {
 }
 table.atlas-table .actions button:hover { background: var(--color-surface-2); }
 table.atlas-table .actions button.danger { color: var(--color-danger); }
+table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
 
 /* Pagination */
 .pager {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    gap: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px; gap: 12px;
 }
 .pager .info { color: var(--color-muted); font-size: 13px; }
 .pager .pages { display: flex; gap: 4px; }
@@ -331,13 +305,12 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     font-size: 13px;
 }
 .pager .pages button.active {
-    background: var(--color-primary);
-    color: #fff;
+    background: var(--color-primary); color: #fff;
     border-color: var(--color-primary);
 }
 .pager .pages button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Badges de estado */
+/* Badges */
 .badge {
     display: inline-block;
     padding: 3px 10px;
@@ -348,11 +321,17 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     letter-spacing: 0.5px;
     color: #fff;
 }
+.badge-default     { background: var(--color-muted); }
+.badge-info        { background: var(--color-info); }
+.badge-success     { background: var(--color-success); }
+.badge-warning     { background: var(--color-warning); color: #fff; }
+.badge-danger      { background: var(--color-danger); }
 .badge-tramitacion { background: var(--color-info); }
 .badge-ejecucion   { background: var(--color-success); }
 .badge-finalizado  { background: var(--color-neutral); }
+.badge-firma       { background: var(--color-warning); }
+.badge-borrador    { background: var(--color-muted); }
 .badge-sinefecto   { background: var(--color-danger); }
-.badge-default     { background: var(--color-muted); }
 
 /* KPI cards */
 .kpi-grid {
@@ -369,23 +348,19 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     box-shadow: var(--shadow-sm);
 }
 .kpi-card .label {
-    color: var(--color-muted);
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: var(--color-muted); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
 }
 .kpi-card .value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--color-primary);
-    margin-top: 4px;
+    font-size: 28px; font-weight: 700;
+    color: var(--color-primary); margin-top: 4px;
 }
 .kpi-card.success { border-left-color: var(--color-success); }
 .kpi-card.info    { border-left-color: var(--color-info); }
-.kpi-card.warning { border-left-color: #d69e2e; }
+.kpi-card.warning { border-left-color: var(--color-warning); }
 .kpi-card.danger  { border-left-color: var(--color-danger); }
 
-/* Filtros laterales */
+/* Filtros */
 .filters-panel {
     background: var(--color-surface);
     border-radius: var(--radius);
@@ -400,10 +375,8 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     gap: 12px;
 }
 .filters-panel .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 12px;
+    display: flex; justify-content: flex-end;
+    gap: 8px; margin-top: 12px;
 }
 
 /* Modales */
@@ -429,13 +402,10 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     border-bottom: 1px solid var(--color-border);
     display: flex; align-items: center; justify-content: space-between;
 }
-.modal-header h3 {
-    margin: 0;
-    color: var(--color-primary);
-    font-size: 18px;
-}
+.modal-header h3 { margin: 0; color: var(--color-primary); font-size: 18px; }
 .modal-header .close {
-    background: transparent; border: none; font-size: 22px; color: var(--color-muted); cursor: pointer;
+    background: transparent; border: none; font-size: 22px;
+    color: var(--color-muted); cursor: pointer;
 }
 .modal-body { padding: 20px; overflow-y: auto; }
 .modal-footer {
@@ -455,14 +425,11 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
 }
 
 /* Toasts */
-#toast-root {
+.toast-host {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    bottom: 20px; right: 20px;
     z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: flex; flex-direction: column; gap: 8px;
 }
 .toast {
     background: var(--color-primary);
@@ -501,16 +468,10 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     padding: 32px;
 }
 .login-box .logo {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 24px;
+    display: flex; flex-direction: column;
+    align-items: center; margin-bottom: 24px;
 }
-.login-box h2 {
-    margin: 12px 0 4px;
-    color: var(--color-primary);
-    font-size: 22px;
-}
+.login-box h2 { margin: 12px 0 4px; color: var(--color-primary); font-size: 22px; }
 .login-box .subtitle {
     color: var(--color-muted);
     text-align: center;
@@ -527,11 +488,10 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     margin-bottom: 12px;
 }
 
-/* Loading */
+/* Loader */
 .loader {
     display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: 18px; height: 18px;
     border: 2px solid rgba(255,255,255,0.3);
     border-top-color: #fff;
     border-radius: 50%;
@@ -540,26 +500,16 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
 .loader.dark { border-color: rgba(26,46,74,0.2); border-top-color: var(--color-primary); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--color-muted);
-}
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-muted); }
 
 .toolbar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
+    align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
 }
-.toolbar .search-box {
-    flex: 1 1 280px;
-    max-width: 360px;
-}
+.toolbar .search-box { flex: 1 1 280px; max-width: 360px; }
 
-/* Detalle de contrato */
+/* Detalle */
 .detail-section { margin-bottom: 20px; }
 .detail-section h4 {
     color: var(--color-primary);
@@ -577,37 +527,82 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
 }
 .detail-grid .item { padding: 6px 0; border-bottom: 1px dashed var(--color-border); }
 .detail-grid .item .label {
-    font-size: 11px;
-    color: var(--color-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-size: 11px; color: var(--color-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
 }
 .detail-grid .item .value { font-size: 14px; }
-@media (max-width: 720px) {
-    .detail-grid { grid-template-columns: 1fr; }
+@media (max-width: 720px) { .detail-grid { grid-template-columns: 1fr; } }
+
+/* Sección colapsable (historial, ejecuciones) */
+.collapsible {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    margin-top: 16px;
+    overflow: hidden;
+}
+.collapsible > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px 18px;
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.collapsible > summary::-webkit-details-marker { display: none; }
+.collapsible > summary::after {
+    content: '▾';
+    transition: transform 0.2s;
+}
+.collapsible[open] > summary::after { transform: rotate(180deg); }
+.collapsible-body { padding: 14px 18px; }
+
+/* Gráficos simples de barras */
+.bar-chart { display: flex; flex-direction: column; gap: 6px; }
+.bar-chart .row {
+    display: grid;
+    grid-template-columns: minmax(140px, 30%) 1fr 70px;
+    gap: 10px;
+    align-items: center;
+    font-size: 13px;
+}
+.bar-chart .row .label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--color-text);
+}
+.bar-chart .row .bar {
+    background: var(--color-accent-soft);
+    height: 16px;
+    border-radius: var(--radius-sm);
+    position: relative;
+    overflow: hidden;
+}
+.bar-chart .row .bar .fill {
+    background: var(--color-accent);
+    height: 100%;
+    border-radius: var(--radius-sm);
+    transition: width 0.25s;
+}
+.bar-chart .row .count {
+    text-align: right;
+    font-weight: 600;
+    color: var(--color-primary);
 }
 
-/* ----------------------------------------------------------------------
-   Sidebar backdrop (sólo se ve en mobile cuando el drawer está abierto)
-   ---------------------------------------------------------------------- */
+/* Backdrop drawer mobile */
 .sidebar-backdrop {
     display: none;
-    position: fixed;
-    inset: 0;
+    position: fixed; inset: 0;
     background: rgba(0,0,0,0.45);
     z-index: 1099;
 }
 
-/* ----------------------------------------------------------------------
-   Responsive — Tablet (≤ 768px)
-   ---------------------------------------------------------------------- */
+/* Responsive */
 @media (max-width: 768px) {
-    /* Layout: una columna; el sidebar pasa a ser drawer */
     .app-shell {
         grid-template-columns: 1fr;
-        grid-template-areas:
-            "header"
-            "main";
+        grid-template-areas: "header" "main";
     }
     .app-shell.collapsed { grid-template-columns: 1fr; }
 
@@ -622,46 +617,27 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     }
     .app-shell.mobile-open .app-sidebar { transform: none; }
     .app-shell.mobile-open .sidebar-backdrop { display: block; }
-
-    /* En mobile el sidebar nunca queda en modo "colapsado": siempre muestra labels */
     .app-shell.collapsed .app-sidebar .brand .name,
     .app-shell.collapsed .app-sidebar .nav-item .label,
     .app-shell.collapsed .app-sidebar .nav-section-title { display: initial; }
 
-    /* Header */
     .app-header { padding: 0 12px; }
     .app-header .user-area { gap: 8px; }
     .app-header .user-info .role { display: none; }
     .app-header .user-info .name {
-        font-size: 13px;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        font-size: 13px; max-width: 120px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .toggle-sidebar {
-        margin-right: 4px;
-        padding: 8px;
-        min-width: 40px;
-        min-height: 40px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
+    .toggle-sidebar { margin-right: 4px; padding: 8px; min-width: 40px; min-height: 40px; }
     .app-header .title {
-        font-size: 15px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 40vw;
+        font-size: 15px; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis; max-width: 40vw;
     }
 
-    /* Contenido */
     .app-main { padding: 16px 12px; }
     .page-title { font-size: 18px; }
     .page-subtitle { font-size: 13px; }
 
-    /* Toolbar y filtros */
     .toolbar { gap: 8px; }
     .toolbar .search-box { flex: 1 1 100%; max-width: 100%; }
     .filters-panel { padding: 12px; }
@@ -669,70 +645,56 @@ table.atlas-table .actions button.danger { color: var(--color-danger); }
     .filters-panel .actions { justify-content: stretch; }
     .filters-panel .actions .btn { flex: 1; }
 
-    /* Tablas: padding compacto y áreas de tap más generosas en acciones */
     table.atlas-table { font-size: 12px; }
-    table.atlas-table th,
-    table.atlas-table td { padding: 8px; }
+    table.atlas-table th, table.atlas-table td { padding: 8px; }
     table.atlas-table .actions { gap: 4px; }
-    table.atlas-table .actions button {
-        padding: 6px 10px;
-        font-size: 12px;
-        min-height: 32px;
+    table.atlas-table .actions button { padding: 6px 10px; font-size: 12px; min-height: 32px; }
+
+    /* Columna de acciones sticky a la derecha: queda visible aunque
+       el resto de la tabla esté scrolleada horizontalmente. */
+    table.atlas-table th:last-child,
+    table.atlas-table td:last-child {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        background: var(--color-surface);
+        box-shadow: -4px 0 6px -4px rgba(0,0,0,0.12);
+    }
+    table.atlas-table thead th:last-child {
+        background: var(--color-primary);
+    }
+    table.atlas-table tbody tr:nth-child(even) td:last-child {
+        background: var(--color-surface-2);
+    }
+    table.atlas-table tbody tr:hover td:last-child {
+        background: var(--color-accent-soft);
+    }
+    table.atlas-table tbody tr.deleted td:last-child {
+        background: var(--color-surface-2);
     }
 
-    /* Paginador en columna */
-    .pager {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-    }
-    .pager .pages {
-        justify-content: center;
-        flex-wrap: wrap;
-    }
+    .pager { flex-direction: column; align-items: stretch; gap: 8px; }
+    .pager .pages { justify-content: center; flex-wrap: wrap; }
     .pager .info { text-align: center; }
 
-    /* Modales */
-    .modal-backdrop {
-        padding: 8px;
-        align-items: flex-start;
-        padding-top: 24px;
-    }
+    .modal-backdrop { padding: 8px; align-items: flex-start; padding-top: 24px; }
     .modal { max-height: calc(100vh - 32px); }
     .modal-header { padding: 12px 16px; }
     .modal-header h3 { font-size: 16px; }
     .modal-body { padding: 16px; }
-    .modal-footer {
-        padding: 12px 16px;
-        flex-direction: column-reverse;
-    }
+    .modal-footer { padding: 12px 16px; flex-direction: column-reverse; }
     .modal-footer .btn { width: 100%; }
 
-    /* Toasts ocupan el ancho útil */
-    #toast-root {
-        left: 12px;
-        right: 12px;
-        bottom: 12px;
-    }
-    .toast {
-        max-width: 100%;
-        min-width: 0;
-    }
+    .toast-host { left: 12px; right: 12px; bottom: 12px; }
+    .toast { max-width: 100%; min-width: 0; }
 
-    /* KPIs */
     .kpi-card { padding: 14px 16px; }
     .kpi-card .value { font-size: 22px; }
 
-    /* Login */
     .login-box { padding: 24px 20px; }
-
-    /* Botones más fáciles de tocar */
     .btn { min-height: 40px; padding: 10px 14px; }
 }
 
-/* ----------------------------------------------------------------------
-   Responsive — Teléfono (≤ 480px)
-   ---------------------------------------------------------------------- */
 @media (max-width: 480px) {
     .kpi-grid { grid-template-columns: 1fr; }
     .app-header .title { display: none; }

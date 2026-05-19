@@ -10,5 +10,5 @@ class Utt extends Model
     protected $primaryKey = 'utt_id';
     public $timestamps    = false;
 
-    protected $fillable = ['denominacion', 'nombre'];
+    protected $fillable = ['denominacion', 'nombre', 'regimen'];
 }
