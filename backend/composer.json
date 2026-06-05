@@ -1,18 +1,18 @@
 {
     "name": "atlas/backend",
     "type": "project",
-    "description": "ATLAS — Backend Laravel 11 + LDAP",
+    "description": "ATLAS — Backend Laravel 12 + LDAP",
     "license": "proprietary",
     "require": {
         "php": "^8.2",
-        "laravel/framework": "^11.0",
+        "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.0",
-        "directorytree/ldaprecord-laravel": "^3.0",
+        "directorytree/ldaprecord-laravel": "^3.3",
         "maatwebsite/excel": "^3.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
-        "laravel/pint": "^1.13",
+        "laravel/pint": "^1.18",
         "phpunit/phpunit": "^11.0"
     },
     "autoload": {
