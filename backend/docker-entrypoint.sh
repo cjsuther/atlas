@@ -16,6 +16,10 @@ if [ -z "$APP_KEY" ] || echo "$APP_KEY" | grep -q "CAMBIAR\|not-a-real-key"; the
   php artisan key:generate --force --no-interaction || true
 fi
 
+# Aplicar migraciones de base de datos (idempotente)
+echo "[atlas] Aplicando migraciones..."
+php artisan migrate --force --no-interaction || echo "[atlas] WARN: fallo al aplicar migraciones"
+
 # Cargar admin inicial desde FIRST_ADMIN_USERNAME (idempotente)
 if [ -n "$FIRST_ADMIN_USERNAME" ]; then
   echo "[atlas] Asegurando admin inicial: $FIRST_ADMIN_USERNAME"

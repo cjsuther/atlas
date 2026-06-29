@@ -1,0 +1,14 @@
+# No copiar artefactos locales que pisarían lo generado dentro de la imagen
+vendor
+node_modules
+bootstrap/cache/*.php
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+.env
+.env.*
+.git
+.idea
+.vscode
+tests

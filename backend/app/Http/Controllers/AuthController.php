@@ -69,8 +69,9 @@ class AuthController extends Controller
         $user = UserRole::firstOrNew(['username' => $authPayload['username']]);
         $isNew = !$user->exists;
         if ($isNew) {
-            $user->rol    = 'consulta';
-            $user->activo = 1;
+            $user->rol         = 'consulta';
+            $user->activo      = 1;
+            $user->auth_source = $authMethod === 'ldap' ? 'ldap' : 'local';
         }
         $user->display_name = $authPayload['display_name'] ?? $user->display_name ?? $authPayload['username'];
         $user->email        = $authPayload['email'] ?? $user->email;
@@ -138,6 +139,7 @@ class AuthController extends Controller
             'display_name' => $user->display_name,
             'email'        => $user->email,
             'rol'          => $user->rol,
+            'auth_source'  => $user->auth_source,
             'activo'       => (bool) $user->activo,
             'last_login'   => optional($user->last_login)->toIso8601String(),
         ];

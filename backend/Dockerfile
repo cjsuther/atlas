@@ -1,4 +1,4 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.3-fpm-alpine
 
 # ---------------------------------------------------------------------
 # Dependencias del sistema y extensiones PHP necesarias para Laravel + LDAP

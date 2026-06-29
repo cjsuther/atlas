@@ -89,6 +89,7 @@ const NAV_SECTIONS = [
         title: 'Administración',
         items: [
             { label: 'Usuarios y Roles', icon: 'users', to: { name: 'usuarios' }, roles: ['admin'] },
+            { label: 'Exportar / Importar', icon: 'database', to: { name: 'export-import' }, roles: ['admin'] },
         ],
     },
 ];

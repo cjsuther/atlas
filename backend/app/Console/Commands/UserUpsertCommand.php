@@ -70,6 +70,9 @@ class UserUpsertCommand extends Command
             }
         }
 
+        // Origen: 'local' si tiene contraseña, 'ldap' si quedó sin contraseña local.
+        $user->auth_source = $user->password ? 'local' : 'ldap';
+
         $user->save();
 
         $this->info(($isNew ? 'Creado' : 'Actualizado') . ": {$username} (rol={$user->rol}, activo=" . ($user->activo ? 'sí' : 'no') . ')');

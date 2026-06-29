@@ -17,6 +17,7 @@ class UserRole extends Authenticatable
         'display_name',
         'email',
         'password',
+        'auth_source',
         'rol',
         'activo',
         'last_login',
@@ -35,6 +36,16 @@ class UserRole extends Authenticatable
     public function hasLocalPassword(): bool
     {
         return !empty($this->password);
+    }
+
+    public function isLocal(): bool
+    {
+        return $this->auth_source === 'local';
+    }
+
+    public function isLdap(): bool
+    {
+        return $this->auth_source === 'ldap';
     }
 
     public function isAdmin(): bool

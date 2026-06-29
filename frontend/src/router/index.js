@@ -50,6 +50,11 @@ const routes = [
             { path: 'usuarios', name: 'usuarios',
               component: () => import('@/views/Usuarios.vue'),
               meta: { title: 'Usuarios y Roles', requiresRole: ['admin'] } },
+
+            // Exportar / Importar base de datos (admin)
+            { path: 'export-import', name: 'export-import',
+              component: () => import('@/views/admin/ExportImport.vue'),
+              meta: { title: 'Exportar / Importar', requiresRole: ['admin'] } },
         ],
     },
 

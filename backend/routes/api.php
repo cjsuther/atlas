@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContratoEjecucionController;
 use App\Http\Controllers\ContratoPrincipalController;
+use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\EjecucionMovimientoController;
 use App\Http\Controllers\EstadoEjecucionController;
 use App\Http\Controllers\EstadoPrincipalController;
@@ -151,10 +152,18 @@ Route::middleware('auth:sanctum')->group(function () {
     }
 
     // ------------------------------------------------------------------
-    // Gestión de roles (sólo admin)
+    // Administración de usuarios (sólo admin)
     // ------------------------------------------------------------------
     Route::middleware('role:admin')->group(function () {
-        Route::get('/usuarios',              [UserRoleController::class, 'index']);
-        Route::put('/usuarios/{username}',   [UserRoleController::class, 'update']);
+        Route::get   ('/usuarios',                     [UserRoleController::class, 'index']);
+        Route::post  ('/usuarios',                     [UserRoleController::class, 'store']);
+        Route::get   ('/usuarios/{username}',          [UserRoleController::class, 'show']);
+        Route::put   ('/usuarios/{username}',          [UserRoleController::class, 'update']);
+        Route::delete('/usuarios/{username}',          [UserRoleController::class, 'destroy']);
+        Route::post  ('/usuarios/{username}/password', [UserRoleController::class, 'resetPassword']);
+
+        // Exportar / Importar toda la base de datos (Excel)
+        Route::get ('/admin/db/export', [DatabaseBackupController::class, 'export']);
+        Route::post('/admin/db/import', [DatabaseBackupController::class, 'import']);
     });
 });
