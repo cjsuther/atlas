@@ -7,7 +7,7 @@
             </div>
             <div>
                 <button class="btn btn-primary" @click="openNew">
-                    <IconLib name="plus" /> Nuevo usuario local
+                    <IconLib name="plus" /> Nuevo usuario
                 </button>
             </div>
         </div>
@@ -109,6 +109,17 @@
                         </select>
                         <div v-if="errors.rol" class="error">{{ errors.rol[0] }}</div>
                     </div>
+                    <div class="field" v-if="!editing">
+                        <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
+                        <select v-model="formData.auth_source" class="select" required>
+                            <option value="local">Base de datos (local)</option>
+                            <option value="ldap">LDAP / Active Directory</option>
+                        </select>
+                        <div class="hint" v-if="formData.auth_source === 'ldap'">
+                            Se autentica contra el directorio; no se define contraseña.
+                        </div>
+                        <div v-if="errors.auth_source" class="error">{{ errors.auth_source[0] }}</div>
+                    </div>
                     <div class="field">
                         <label>Nombre</label>
                         <input v-model="formData.display_name" type="text" class="input" maxlength="200"
@@ -122,7 +133,7 @@
                                :readonly="isLdapEdit" />
                         <div v-if="errors.email" class="error">{{ errors.email[0] }}</div>
                     </div>
-                    <template v-if="!editing">
+                    <template v-if="!editing && formData.auth_source === 'local'">
                         <div class="field">
                             <label>Contraseña <span style="color:var(--color-danger);">*</span></label>
                             <input v-model="formData.password" type="password" class="input" autocomplete="new-password" required />
@@ -229,7 +240,7 @@ const formData = reactive({});
 const errors = ref({});
 const saving = ref(false);
 
-const formTitle = computed(() => editing.value ? `Editar — ${editing.value.username}` : 'Nuevo usuario local');
+const formTitle = computed(() => editing.value ? `Editar — ${editing.value.username}` : 'Nuevo usuario');
 const isLdapEdit = computed(() => !!editing.value && editing.value.auth_source === 'ldap');
 
 function resetForm(values) {
@@ -240,7 +251,7 @@ function resetForm(values) {
 
 function openNew() {
     editing.value = null;
-    resetForm({ username: '', display_name: '', email: '', rol: 'consulta', activo: true, password: '', password_confirmation: '' });
+    resetForm({ username: '', display_name: '', email: '', rol: 'consulta', auth_source: 'local', activo: true, password: '', password_confirmation: '' });
     formOpen.value = true;
 }
 
@@ -263,15 +274,19 @@ async function save() {
             await usuariosService.update(editing.value.username, payload);
             toast.success('Usuario actualizado.');
         } else {
-            await usuariosService.create({
+            const payload = {
                 username: formData.username,
                 display_name: formData.display_name,
                 email: formData.email,
                 rol: formData.rol,
+                auth_source: formData.auth_source,
                 activo: formData.activo,
-                password: formData.password,
-                password_confirmation: formData.password_confirmation,
-            });
+            };
+            if (formData.auth_source === 'local') {
+                payload.password = formData.password;
+                payload.password_confirmation = formData.password_confirmation;
+            }
+            await usuariosService.create(payload);
             toast.success('Usuario creado.');
         }
         formOpen.value = false;
@@ -328,12 +343,9 @@ async function saveReset() {
 // ---- Eliminar ----
 const confirmRef = ref(null);
 async function remove(u) {
-    const aviso = u.auth_source === 'ldap'
-        ? ' Si vuelve a iniciar sesión por LDAP se recreará con rol consulta.'
-        : '';
     const ok = await confirmRef.value.show({
         title: 'Eliminar usuario',
-        message: `¿Eliminar al usuario "${u.username}"?${aviso}`,
+        message: `¿Eliminar al usuario "${u.username}"?`,
         confirmText: 'Eliminar',
         danger: true,
     });

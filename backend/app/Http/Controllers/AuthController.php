@@ -65,17 +65,40 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // Crear o actualizar el registro local de roles
-        $user = UserRole::firstOrNew(['username' => $authPayload['username']]);
-        $isNew = !$user->exists;
-        if ($isNew) {
-            $user->rol         = 'consulta';
-            $user->activo      = 1;
-            $user->auth_source = $authMethod === 'ldap' ? 'ldap' : 'local';
+        // El usuario debe existir previamente: se da de alta desde el administrador
+        // de usuarios indicando si es local (base de datos) o LDAP. Ya no se crea
+        // automáticamente en el primer login.
+        $user = UserRole::where('username', $authPayload['username'])->first();
+        if (!$user) {
+            Log::warning('ATLAS AUTH: login rechazado, usuario no registrado', [
+                'username' => $authPayload['username'],
+                'method'   => $authMethod,
+            ]);
+            return response()->json([
+                'error'   => 'user_not_provisioned',
+                'message' => 'Usuario no registrado en el sistema. Contacte al administrador.',
+            ], 403);
         }
-        $user->display_name = $authPayload['display_name'] ?? $user->display_name ?? $authPayload['username'];
-        $user->email        = $authPayload['email'] ?? $user->email;
-        $user->last_login   = now();
+
+        // El método de autenticación debe coincidir con el tipo declarado del usuario.
+        if ($authMethod === 'ldap' && !$user->isLdap()) {
+            Log::warning('ATLAS AUTH: login rechazado, tipo de usuario no coincide', [
+                'username'    => $user->username,
+                'auth_source' => $user->auth_source,
+                'method'      => $authMethod,
+            ]);
+            return response()->json([
+                'error'   => 'auth_source_mismatch',
+                'message' => 'Este usuario no está habilitado para autenticación LDAP.',
+            ], 403);
+        }
+
+        // Para usuarios LDAP, sincronizar nombre y e-mail desde el directorio en cada login.
+        if ($authMethod === 'ldap') {
+            $user->display_name = $authPayload['display_name'] ?? $user->display_name;
+            $user->email        = $authPayload['email'] ?? $user->email;
+        }
+        $user->last_login = now();
         $user->save();
 
         if (!$user->activo) {
@@ -92,7 +115,6 @@ class AuthController extends Controller
         Log::info('ATLAS AUTH: login exitoso', [
             'username' => $user->username,
             'rol'      => $user->rol,
-            'new'      => $isNew,
             'method'   => $authMethod,
         ]);
 

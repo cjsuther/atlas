@@ -60,7 +60,9 @@ class UserRoleController extends Controller
     }
 
     /**
-     * POST /api/usuarios — crear un usuario local (con contraseña en BD).
+     * POST /api/usuarios — crear un usuario local (con contraseña en BD) o LDAP.
+     * El tipo se define con auth_source: 'local' requiere contraseña; 'ldap' se
+     * autentica contra el directorio (sin contraseña en BD).
      */
     public function store(Request $request): JsonResponse
     {
@@ -70,7 +72,8 @@ class UserRoleController extends Controller
             'email'        => ['nullable', 'email', 'max:200'],
             'rol'          => ['required', 'in:admin,operador,consulta'],
             'activo'       => ['sometimes', 'boolean'],
-            'password'     => ['required', 'string', 'min:8', 'confirmed'],
+            'auth_source'  => ['required', 'in:local,ldap'],
+            'password'     => ['exclude_if:auth_source,ldap', 'required', 'string', 'min:8', 'confirmed'],
         ])->validate();
 
         $user = new UserRole();
@@ -79,8 +82,8 @@ class UserRoleController extends Controller
         $user->email        = $data['email'] ?? null;
         $user->rol          = $data['rol'];
         $user->activo       = array_key_exists('activo', $data) ? (bool) $data['activo'] : true;
-        $user->password     = $data['password']; // se hashea por el cast 'hashed'
-        $user->auth_source  = 'local';
+        $user->auth_source  = $data['auth_source'];
+        $user->password     = $data['auth_source'] === 'local' ? $data['password'] : null; // se hashea por el cast 'hashed'
         $user->save();
 
         return response()->json(['data' => $user], 201);
@@ -181,7 +184,7 @@ class UserRoleController extends Controller
         $user->delete();
 
         return response()->json([
-            'message' => 'Usuario eliminado. Si proviene de LDAP, volverá a crearse con rol consulta al iniciar sesión.',
+            'message' => 'Usuario eliminado.',
         ]);
     }
 
