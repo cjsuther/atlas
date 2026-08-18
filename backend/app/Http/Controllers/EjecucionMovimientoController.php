@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\EjecucionMovimientoRequest;
 use App\Models\ContratoEjecucion;
 use App\Models\EjecucionMovimiento;
+use App\Services\AccessScopeService;
 use App\Services\EjecucionMovimientoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,12 +15,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EjecucionMovimientoController extends Controller
 {
-    public function __construct(protected EjecucionMovimientoService $service) {}
+    public function __construct(
+        protected EjecucionMovimientoService $service,
+        protected AccessScopeService $scope,
+    ) {}
 
     /** GET /api/contratos-ejecucion/{id}/movimientos */
     public function indexForContrato(Request $request, int $contratoEjecucionId): JsonResponse
     {
-        if (!ContratoEjecucion::find($contratoEjecucionId)) {
+        if (!$this->contratoAccesible($contratoEjecucionId)) {
             return $this->notFoundContrato();
         }
         return response()->json(
@@ -30,7 +34,7 @@ class EjecucionMovimientoController extends Controller
     /** POST /api/contratos-ejecucion/{id}/movimientos */
     public function storeForContrato(EjecucionMovimientoRequest $request, int $contratoEjecucionId): JsonResponse
     {
-        if (!ContratoEjecucion::find($contratoEjecucionId)) {
+        if (!$this->contratoAccesible($contratoEjecucionId)) {
             return $this->notFoundContrato();
         }
         $m = $this->service->create($contratoEjecucionId, $request->validated(), $request->file('factura'));
@@ -42,14 +46,15 @@ class EjecucionMovimientoController extends Controller
     {
         $withTrashed = (bool) $request->input('mostrar_baja');
         $m = $this->service->find($id, $withTrashed);
-        if (!$m) return $this->notFound();
+        if (!$m || !$this->movimientoAccesible($m)) return $this->notFound();
         return response()->json(['data' => $m]);
     }
 
     /** PUT /api/movimientos/{id} */
     public function update(EjecucionMovimientoRequest $request, int $id): JsonResponse
     {
-        if (!$this->service->find($id)) return $this->notFound();
+        $actual = $this->service->find($id);
+        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
         $m = $this->service->update(
             $id,
             $request->validated(),
@@ -62,6 +67,8 @@ class EjecucionMovimientoController extends Controller
     /** DELETE /api/movimientos/{id} — baja lógica */
     public function destroy(int $id): JsonResponse
     {
+        $actual = $this->service->find($id);
+        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
         if (!$this->service->softDelete($id)) return $this->notFound();
         return response()->json(['message' => 'Movimiento dado de baja.']);
     }
@@ -70,7 +77,7 @@ class EjecucionMovimientoController extends Controller
     public function descargarFactura(int $id): BinaryFileResponse|StreamedResponse|JsonResponse
     {
         $m = $this->service->find($id, true);
-        if (!$m) return $this->notFound();
+        if (!$m || !$this->movimientoAccesible($m)) return $this->notFound();
         $path = $m->getRawOriginal('factura_path');
         if (!$path) {
             return response()->json([
@@ -88,6 +95,21 @@ class EjecucionMovimientoController extends Controller
         return $disk->download($path, $m->factura_original_name ?? basename($path));
     }
 
+    /**
+     * Los movimientos son tan reservados como el contrato al que pertenecen:
+     * fuera del alcance del usuario se responde "no encontrado".
+     */
+    private function contratoAccesible(int $contratoEjecucionId): bool
+    {
+        $contrato = ContratoEjecucion::withTrashed()->find($contratoEjecucionId);
+        return $contrato !== null && $this->scope->puedeVerContrato($contrato);
+    }
+
+    private function movimientoAccesible(EjecucionMovimiento $m): bool
+    {
+        return $this->contratoAccesible((int) $m->contrato_ejecucion_id);
+    }
+
     private function notFound(): JsonResponse
     {
         return response()->json([
@@ -100,7 +122,7 @@ class EjecucionMovimientoController extends Controller
     {
         return response()->json([
             'error'   => 'not_found',
-            'message' => 'Contrato de ejecución no encontrado.',
+            'message' => 'Contrato no encontrado.',
         ], 404);
     }
 }

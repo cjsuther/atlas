@@ -30,7 +30,10 @@
             <div class="user-area">
                 <div class="user-info">
                     <div class="name">{{ auth.user?.display_name || auth.user?.username || '—' }}</div>
-                    <div class="role">{{ auth.user?.rol || '' }}</div>
+                    <div class="role">
+                        {{ auth.rolLabel }}
+                        <template v-if="auth.gerencia"> · {{ auth.gerencia }}</template>
+                    </div>
                 </div>
                 <button class="btn btn-ghost" @click="logout" title="Cerrar sesión">
                     <IconLib name="logout" :size="18" />
@@ -47,7 +50,7 @@
 <script setup>
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useAuthStore } from '@/stores/auth';
+import { ROLES, useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 import { useToast } from '@/composables/useToast';
 import { authService } from '@/services/auth';
@@ -62,34 +65,40 @@ const toast = useToast();
 
 const pageTitle = computed(() => route.meta?.title || '');
 
+const TODOS = [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA];
+
 const NAV_SECTIONS = [
     {
         title: 'Principal',
         items: [
-            { label: 'Panel de Control',     icon: 'dashboard', to: { name: 'panel' }, roles: ['admin','operador','consulta'] },
-            { label: 'Contratos Principales', icon: 'contratos', to: { name: 'contratos-principal' }, roles: ['admin','operador','consulta'] },
-            { label: 'Contratos de Ejecución', icon: 'contratos', to: { name: 'contratos-ejecucion' }, roles: ['admin','operador','consulta'] },
+            { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' }, roles: TODOS },
+            { label: 'Contratos',        icon: 'contratos', to: { name: 'contratos-ejecucion' }, roles: TODOS },
+        ],
+    },
+    {
+        title: 'Estructura',
+        items: [
+            { label: 'Gerencias de Área', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'gerencias-area' } }, roles: TODOS },
+            { label: 'Gerencias',         icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'gerencias' } }, roles: TODOS },
         ],
     },
     {
         title: 'Catálogos',
         items: [
-            { label: 'Tipos Principal',       icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-principal' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Tipos Ejecución',       icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Estados Principal',     icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-principal' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Estados Ejecución',     icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Solicitantes',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Sectores',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: ['admin','operador','consulta'] },
-            { label: 'UTTs',                  icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'utt' } }, roles: ['admin','operador','consulta'] },
-            { label: 'UVTs',                  icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: ['admin','operador','consulta'] },
-            { label: 'Personal',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } }, roles: ['admin','operador','consulta'] },
+            { label: 'Tipos de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
+            { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: TODOS },
+            { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: TODOS },
+            { label: 'Sectores',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
+            { label: 'UTTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'utt' } }, roles: TODOS },
+            { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: TODOS },
+            { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } }, roles: TODOS },
         ],
     },
     {
         title: 'Administración',
         items: [
-            { label: 'Usuarios y Roles', icon: 'users', to: { name: 'usuarios' }, roles: ['admin'] },
-            { label: 'Exportar / Importar', icon: 'database', to: { name: 'export-import' }, roles: ['admin'] },
+            { label: 'Usuarios y Roles',    icon: 'users',    to: { name: 'usuarios' },      roles: [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA] },
+            { label: 'Exportar / Importar', icon: 'database', to: { name: 'export-import' }, roles: [ROLES.ADMIN_SISTEMA] },
         ],
     },
 ];

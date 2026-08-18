@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { useAuthStore } from '@/stores/auth';
+import { ROLES, useAuthStore } from '@/stores/auth';
 
 const routes = [
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { public: true } },
@@ -14,47 +14,35 @@ const routes = [
             { path: 'panel', name: 'panel', component: () => import('@/views/Panel.vue'),
               meta: { title: 'Panel de Control' } },
 
-            // Contratos Principal
-            { path: 'contratos-principal', name: 'contratos-principal',
-              component: () => import('@/views/contratos/PrincipalList.vue'),
-              meta: { title: 'Contratos Principales' } },
-            { path: 'contratos-principal/nuevo', name: 'contratos-principal-nuevo',
-              component: () => import('@/views/contratos/PrincipalForm.vue'),
-              meta: { title: 'Nuevo Contrato Principal', requiresEdit: true } },
-            { path: 'contratos-principal/:id', name: 'contratos-principal-detalle',
-              component: () => import('@/views/contratos/PrincipalDetail.vue'),
-              meta: { title: 'Detalle de Contrato Principal' } },
-            { path: 'contratos-principal/:id/editar', name: 'contratos-principal-editar',
-              component: () => import('@/views/contratos/PrincipalForm.vue'),
-              meta: { title: 'Editar Contrato Principal', requiresEdit: true } },
-
-            // Contratos de Ejecución
-            { path: 'contratos-ejecucion', name: 'contratos-ejecucion',
+            // Contratos (antes "contratos de ejecución"). El endpoint conserva el
+            // nombre histórico; en la interfaz son, simplemente, los contratos.
+            { path: 'contratos', name: 'contratos-ejecucion',
               component: () => import('@/views/contratos/EjecucionList.vue'),
-              meta: { title: 'Contratos de Ejecución' } },
-            { path: 'contratos-ejecucion/nuevo', name: 'contratos-ejecucion-nuevo',
+              meta: { title: 'Contratos' } },
+            { path: 'contratos/nuevo', name: 'contratos-ejecucion-nuevo',
               component: () => import('@/views/contratos/EjecucionForm.vue'),
-              meta: { title: 'Nuevo Contrato de Ejecución', requiresEdit: true } },
-            { path: 'contratos-ejecucion/:id', name: 'contratos-ejecucion-detalle',
+              meta: { title: 'Nuevo Contrato', requiresEdit: true } },
+            { path: 'contratos/:id', name: 'contratos-ejecucion-detalle',
               component: () => import('@/views/contratos/EjecucionDetail.vue'),
-              meta: { title: 'Detalle de Contrato de Ejecución' } },
-            { path: 'contratos-ejecucion/:id/editar', name: 'contratos-ejecucion-editar',
+              meta: { title: 'Detalle de Contrato' } },
+            { path: 'contratos/:id/editar', name: 'contratos-ejecucion-editar',
               component: () => import('@/views/contratos/EjecucionForm.vue'),
-              meta: { title: 'Editar Contrato de Ejecución', requiresEdit: true } },
+              meta: { title: 'Editar Contrato', requiresEdit: true } },
 
-            // Catálogos
+            // Estructura organizativa y catálogos
             { path: 'catalogos/:slug', name: 'catalogo',
               component: () => import('@/views/catalogos/Catalogo.vue') },
 
-            // Usuarios (admin)
+            // Usuarios (administradores de sistema y de gerencia)
             { path: 'usuarios', name: 'usuarios',
               component: () => import('@/views/Usuarios.vue'),
-              meta: { title: 'Usuarios y Roles', requiresRole: ['admin'] } },
+              meta: { title: 'Usuarios y Roles',
+                      requiresRole: [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA] } },
 
-            // Exportar / Importar base de datos (admin)
+            // Exportar / Importar base de datos
             { path: 'export-import', name: 'export-import',
               component: () => import('@/views/admin/ExportImport.vue'),
-              meta: { title: 'Exportar / Importar', requiresRole: ['admin'] } },
+              meta: { title: 'Exportar / Importar', requiresRole: [ROLES.ADMIN_SISTEMA] } },
         ],
     },
 

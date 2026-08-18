@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Gerencia;
 use App\Models\UserRole;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
@@ -11,7 +12,8 @@ class UserUpsertCommand extends Command
     protected $signature = 'atlas:user
                             {username        : Username (login) del usuario}
                             {--password=     : Contraseña en texto plano (se guarda hasheada). Si se omite, se pedirá interactivamente}
-                            {--rol=consulta  : Rol: admin | operador | consulta}
+                            {--rol=operador_gerencia : Rol: admin_sistema | admin_gerencia | operador_gerencia}
+                            {--gerencia=     : ID o nombre de la gerencia (obligatorio salvo para admin_sistema)}
                             {--display=      : Display name (opcional)}
                             {--email=        : Email (opcional)}
                             {--inactivo      : Marcar el usuario como inactivo}
@@ -28,13 +30,24 @@ class UserUpsertCommand extends Command
         }
 
         $rol = (string) $this->option('rol');
-        if (!in_array($rol, ['admin', 'operador', 'consulta'], true)) {
-            $this->error("Rol inválido: {$rol}. Use admin | operador | consulta.");
+        if (!in_array($rol, UserRole::ROLES, true)) {
+            $this->error("Rol inválido: {$rol}. Use " . implode(' | ', UserRole::ROLES) . '.');
             return self::FAILURE;
         }
 
         $user  = UserRole::firstOrNew(['username' => $username]);
         $isNew = !$user->exists;
+
+        // Los roles acotados necesitan gerencia; el administrador de sistema no.
+        if (in_array($rol, UserRole::ROLES_CON_GERENCIA, true)) {
+            $gerenciaId = $this->resolverGerencia($user->gerencia_id);
+            if ($gerenciaId === null) {
+                return self::FAILURE;
+            }
+            $user->gerencia_id = $gerenciaId;
+        } else {
+            $user->gerencia_id = null;
+        }
 
         $user->rol    = $rol;
         $user->activo = $this->option('inactivo') ? 0 : 1;
@@ -75,12 +88,39 @@ class UserUpsertCommand extends Command
 
         $user->save();
 
-        $this->info(($isNew ? 'Creado' : 'Actualizado') . ": {$username} (rol={$user->rol}, activo=" . ($user->activo ? 'sí' : 'no') . ')');
+        $gerencia = $user->gerencia_id ? optional(Gerencia::find($user->gerencia_id))->nombre : '—';
+        $this->info(($isNew ? 'Creado' : 'Actualizado')
+            . ": {$username} (rol={$user->rol}, gerencia={$gerencia}, activo=" . ($user->activo ? 'sí' : 'no') . ')');
 
         if (!$user->password) {
             $this->warn('El usuario no tiene contraseña local — sólo podrá ingresar vía LDAP.');
         }
 
         return self::SUCCESS;
+    }
+
+    /** Resuelve --gerencia por ID o por nombre; devuelve null si no se puede. */
+    private function resolverGerencia(?int $actual): ?int
+    {
+        $valor = $this->option('gerencia');
+
+        if ($valor === null || $valor === '') {
+            if ($actual) {
+                return $actual;
+            }
+            $this->error('Debe indicar --gerencia para los roles acotados a una gerencia.');
+            return null;
+        }
+
+        $gerencia = is_numeric($valor)
+            ? Gerencia::find((int) $valor)
+            : Gerencia::where('nombre', $valor)->first();
+
+        if (!$gerencia) {
+            $this->error("No se encontró la gerencia: {$valor}");
+            return null;
+        }
+
+        return (int) $gerencia->id;
     }
 }

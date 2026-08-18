@@ -6,6 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
+/**
+ * Contrato principal.
+ *
+ * Su gestión fue reemplazada por la estructura Gerencia de Área -> Gerencia:
+ * el modelo se conserva para poder consultar y exportar los contratos
+ * principales ya cargados, pero no tiene ABM ni endpoints propios.
+ */
 class ContratoPrincipal extends Model
 {
     use SoftDeletes;

@@ -3,23 +3,19 @@
 namespace App\Services;
 
 use App\Models\ContratoEjecucion;
-use App\Models\ContratoPrincipal;
+use App\Models\Gerencia;
+use App\Models\HistorialCambio;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ContratoEjecucionService
 {
-    /**
-     * Campos heredados desde el contrato principal cuando se crea/vincula
-     * un contrato de ejecución sin que el usuario los haya completado.
-     */
-    public const HERITABLE_FIELDS = [
-        'gerencia_area', 'gerencia',
-        'solicitante_id', 'resp1_id', 'resp2_id',
-        'utt_id',
-    ];
+    public function __construct(protected AccessScopeService $scope)
+    {
+    }
 
     /** Subquery SQL para sumar movimientos por tipo en esta ejecución. */
     private function sumMovimientosSub(string $tipo)
@@ -38,7 +34,8 @@ class ContratoEjecucionService
         ->with([
             'estado:id,nombre',
             'tipoContrato:id,sigla,nombre',
-            'principal:id,nro_expediente,nombre_proyecto',
+            'gerencia:id,gerencia_area_id,sigla,nombre',
+            'gerencia.gerenciaArea:id,sigla,nombre',
             'solicitante:solicitante_id,razon_social',
             'uvt:uvt_id,siglas,nombre',
             'utt:utt_id,denominacion,nombre,regimen',
@@ -50,14 +47,20 @@ class ContratoEjecucionService
             'sum_gastos'   => $this->sumMovimientosSub('gasto'),
         ]);
 
+        // Recorte obligatorio: nadie ve contratos fuera de su gerencia.
+        $this->scope->aplicarAContratos($q);
+
         if (!empty($filters['estado_id'])) {
             $q->where('estado_id', (int) $filters['estado_id']);
         }
         if (!empty($filters['tipo_contrato_id'])) {
             $q->where('tipo_contrato_id', (int) $filters['tipo_contrato_id']);
         }
-        if (!empty($filters['contrato_principal_id'])) {
-            $q->where('contrato_principal_id', (int) $filters['contrato_principal_id']);
+        if (!empty($filters['gerencia_id'])) {
+            $q->where('gerencia_id', (int) $filters['gerencia_id']);
+        }
+        if (!empty($filters['gerencia_area_id'])) {
+            $q->whereIn('gerencia_id', Gerencia::where('gerencia_area_id', (int) $filters['gerencia_area_id'])->select('id'));
         }
         if (!empty($filters['uvt_id'])) {
             $q->where('uvt_id', (int) $filters['uvt_id']);
@@ -67,9 +70,6 @@ class ContratoEjecucionService
         }
         if (!empty($filters['solicitante_id'])) {
             $q->where('solicitante_id', (int) $filters['solicitante_id']);
-        }
-        if (!empty($filters['gerencia'])) {
-            $q->where('gerencia', 'like', '%' . $filters['gerencia'] . '%');
         }
         if (!empty($filters['moneda'])) {
             $q->where('moneda', $filters['moneda']);
@@ -110,7 +110,7 @@ class ContratoEjecucionService
         $orderBy  = $filters['order_by']  ?? 'id';
         $orderDir = strtolower($filters['order_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         $allowed  = ['id','nombre_proyecto','nro_expediente','fecha_inicio','fecha_vencimiento',
-                     'fecha_finalizacion','estado_id','tipo_contrato_id','created_at'];
+                     'fecha_finalizacion','estado_id','tipo_contrato_id','gerencia_id','created_at'];
         if (!in_array($orderBy, $allowed, true)) $orderBy = 'id';
 
         return $q->orderBy($orderBy, $orderDir);
@@ -127,7 +127,7 @@ class ContratoEjecucionService
         $q = ContratoEjecucion::query()
             ->select('contratos_ejecucion.*')
             ->with([
-                'estado', 'tipoContrato', 'principal', 'solicitante', 'uvt', 'utt',
+                'estado', 'tipoContrato', 'gerencia.gerenciaArea', 'solicitante', 'uvt', 'utt',
                 'resp1', 'resp2',
             ])
             ->addSelect([
@@ -135,12 +135,14 @@ class ContratoEjecucionService
                 'sum_gastos'   => $this->sumMovimientosSub('gasto'),
             ]);
         if ($withTrashed) $q->withTrashed();
+
+        $this->scope->aplicarAContratos($q);
+
         return $q->find($id);
     }
 
     public function create(array $data): ContratoEjecucion
     {
-        $data = $this->applyHeritage($data);
         $c = new ContratoEjecucion();
         $c->fill($data);
         $c->save();
@@ -149,9 +151,8 @@ class ContratoEjecucionService
 
     public function update(int $id, array $data): ?ContratoEjecucion
     {
-        $c = ContratoEjecucion::find($id);
+        $c = $this->findEditable($id);
         if (!$c) return null;
-        $data = $this->applyHeritage($data);
         $c->fill($data);
         $c->save();
         return $c->fresh();
@@ -159,32 +160,55 @@ class ContratoEjecucionService
 
     public function softDelete(int $id): bool
     {
-        $c = ContratoEjecucion::find($id);
+        $c = $this->findEditable($id);
         if (!$c) return false;
         return (bool) $c->delete();
     }
 
     /**
-     * Si hay contrato_principal_id y el campo heredable no fue enviado
-     * (o llegó vacío), lo completa con el valor del principal.
-     * Si el usuario lo envió con valor, respeta su elección.
+     * Transfiere el contrato completo a otra gerencia. Los movimientos de
+     * ejecución acompañan al contrato, porque cuelgan de él.
+     *
+     * Sólo el administrador de sistema puede hacerlo: la transferencia puede
+     * cruzar el límite de la Gerencia de Área.
      */
-    private function applyHeritage(array $data): array
+    public function transferirAGerencia(int $id, int $gerenciaId, ?string $motivo = null): ?ContratoEjecucion
     {
-        $pid = $data['contrato_principal_id'] ?? null;
-        if (!$pid) return $data;
+        $c = ContratoEjecucion::find($id);
+        if (!$c) return null;
 
-        $principal = ContratoPrincipal::find($pid);
-        if (!$principal) return $data;
-
-        foreach (self::HERITABLE_FIELDS as $f) {
-            $sentExplicit = array_key_exists($f, $data)
-                            && $data[$f] !== null
-                            && $data[$f] !== '';
-            if (!$sentExplicit) {
-                $data[$f] = $principal->{$f};
-            }
+        $origen = (int) $c->gerencia_id;
+        if ($origen === $gerenciaId) {
+            return $c;
         }
-        return $data;
+
+        DB::transaction(function () use ($c, $gerenciaId, $motivo) {
+            // El observer de historial ya registra el cambio de gerencia_id; el
+            // motivo se guarda como una entrada adicional para dejarlo asentado.
+            $c->gerencia_id = $gerenciaId;
+            $c->save();
+
+            if ($motivo) {
+                HistorialCambio::create([
+                    'tabla'            => $c->getTable(),
+                    'registro_id'      => (int) $c->getKey(),
+                    'tipo_cambio'      => 'modificacion',
+                    'campo_modificado' => 'transferencia_motivo',
+                    'valor_anterior'   => null,
+                    'valor_nuevo'      => $motivo,
+                    'usuario'          => Auth::user()?->username ?? 'system',
+                ]);
+            }
+        });
+
+        return $c->fresh();
+    }
+
+    /** Busca el contrato exigiendo que esté dentro del alcance del usuario. */
+    private function findEditable(int $id): ?ContratoEjecucion
+    {
+        $c = ContratoEjecucion::find($id);
+        if (!$c) return null;
+        return $this->scope->puedeEditarContrato($c) ? $c : null;
     }
 }

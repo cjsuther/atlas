@@ -2,8 +2,11 @@
     <div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 class="page-title">Contratos de Ejecución</h1>
-                <p class="page-subtitle">Contratos concretos (CP / CIT / Convenio Específico)</p>
+                <h1 class="page-title">Contratos</h1>
+                <p class="page-subtitle">
+                    Contratos por gerencia (CP / CIT / Convenio Específico)
+                    <template v-if="!auth.isAdminSistema && auth.gerencia"> · {{ auth.gerencia }}</template>
+                </p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-secondary" @click="exportar">
@@ -36,6 +39,20 @@
                         <option v-for="t in tipos" :key="t.id" :value="t.id">{{ t.sigla }} — {{ t.nombre }}</option>
                     </select>
                 </div>
+                <div v-if="auth.isAdminSistema || auth.isAdminGerencia" class="field">
+                    <label>Gerencia de Área</label>
+                    <select v-model="filters.gerencia_area_id" class="select" @change="onFilter">
+                        <option value="">Todas</option>
+                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                    </select>
+                </div>
+                <div v-if="auth.isAdminSistema || auth.isAdminGerencia" class="field">
+                    <label>Gerencia</label>
+                    <select v-model="filters.gerencia_id" class="select" @change="onFilter">
+                        <option value="">Todas</option>
+                        <option v-for="g in gerencias" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+                    </select>
+                </div>
                 <div class="field">
                     <label>UVT</label>
                     <select v-model="filters.uvt_id" class="select" @change="onFilter">
@@ -60,7 +77,7 @@
                         <option :value="'1'">Sí</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdmin" class="field">
+                <div v-if="auth.isAdminSistema" class="field">
                     <label>Mostrar dados de baja</label>
                     <select v-model="filters.mostrar_baja" class="select" @change="onFilter">
                         <option :value="''">No</option>
@@ -82,7 +99,7 @@
                         <th>Tipo</th>
                         <th>Proyecto</th>
                         <th>Estado</th>
-                        <th>Principal</th>
+                        <th>Gerencia</th>
                         <th>UVT</th>
                         <th>F. Inicio</th>
                         <th>F. Venc.</th>
@@ -98,10 +115,10 @@
                         <td>{{ r.nombre_proyecto }}</td>
                         <td><span :class="['badge', badgeForEstado(r.estado)]">{{ r.estado?.nombre || '—' }}</span></td>
                         <td>
-                            <router-link v-if="r.principal" :to="{ name: 'contratos-principal-detalle', params: { id: r.principal.id } }">
-                                #{{ r.principal.id }} {{ r.principal.nro_expediente }}
-                            </router-link>
-                            <span v-else>—</span>
+                            <div>{{ r.gerencia?.nombre || '—' }}</div>
+                            <div v-if="r.gerencia?.gerencia_area" style="font-size:11px;color:var(--color-muted);">
+                                {{ r.gerencia.gerencia_area.nombre }}
+                            </div>
                         </td>
                         <td>{{ r.uvt?.siglas || '—' }}</td>
                         <td>{{ fmtDate(r.fecha_inicio) }}</td>
@@ -160,6 +177,8 @@ const filters = reactive({
     search: '',
     estado_id: '',
     tipo_contrato_id: '',
+    gerencia_area_id: '',
+    gerencia_id: '',
     uvt_id: '',
     moneda: '',
     vencidos: '',
@@ -169,6 +188,8 @@ const filters = reactive({
 const estados = ref([]);
 const tipos = ref([]);
 const uvts = ref([]);
+const areas = ref([]);
+const gerencias = ref([]);
 
 const onFilter = debounce(() => { page.value = 1; load(); }, 300);
 
@@ -195,7 +216,7 @@ function goto(p) { page.value = p; load(); }
 async function darBaja(r) {
     const ok = await confirmRef.value.show({
         title: 'Dar de baja',
-        message: `¿Confirma dar de baja el contrato de ejecución #${r.id}? Queda registrado en el historial.`,
+        message: `¿Confirma dar de baja el contrato #${r.id}? Queda registrado en el historial.`,
         confirmText: 'Dar de baja',
         danger: true,
     });
@@ -223,12 +244,15 @@ async function exportar() {
 
 onMounted(async () => {
     try {
-        const [e, t, u] = await Promise.all([
+        const [e, t, u, ga, g] = await Promise.all([
             listAll('estados-ejecucion'),
             listAll('tipos-contrato-ejecucion'),
             listAll('uvt'),
+            listAll('gerencias-area'),
+            listAll('gerencias'),
         ]);
         estados.value = e; tipos.value = t; uvts.value = u;
+        areas.value = ga; gerencias.value = g;
     } catch { /* no-op */ }
     load();
 });

@@ -1,21 +1,34 @@
 <template>
     <div>
-        <h1 class="page-title">{{ isEdit ? 'Editar' : 'Nuevo' }} contrato de ejecución</h1>
-        <p class="page-subtitle">Contrato concreto vinculado a un principal (CP / CIT / Convenio Específico)</p>
+        <h1 class="page-title">{{ isEdit ? 'Editar' : 'Nuevo' }} contrato</h1>
+        <p class="page-subtitle">
+            Todo contrato pertenece a una gerencia, y ésta a una Gerencia de Área
+        </p>
 
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
 
         <form v-else class="card" @submit.prevent="submit">
             <div class="form-grid">
-                <div class="field full">
-                    <label>Contrato principal vinculado *</label>
-                    <select v-model="data.contrato_principal_id" class="select" @change="applyHerencia">
-                        <option :value="null">— Sin vinculación (solo si tipo = AP)</option>
-                        <option v-for="p in principales" :key="p.id" :value="p.id">
-                            #{{ p.id }} · {{ p.nro_expediente }} — {{ p.nombre_proyecto }}
+                <div class="field">
+                    <label>Gerencia de Área</label>
+                    <select v-model="areaSeleccionada" class="select" :disabled="!auth.isAdminSistema">
+                        <option :value="null">— Todas —</option>
+                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                    </select>
+                    <div class="hint">Filtra las gerencias disponibles.</div>
+                </div>
+                <div class="field">
+                    <label>Gerencia *</label>
+                    <select v-model="data.gerencia_id" class="select" required :disabled="!auth.isAdminSistema">
+                        <option :value="null">—</option>
+                        <option v-for="g in gerenciasDisponibles" :key="g.id" :value="g.id">
+                            {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
                         </option>
                     </select>
-                    <div v-if="errors.contrato_principal_id" class="error">{{ errors.contrato_principal_id[0] }}</div>
+                    <div v-if="!auth.isAdminSistema" class="hint">
+                        Sólo puede cargar contratos en su gerencia.
+                    </div>
+                    <div v-if="errors.gerencia_id" class="error">{{ errors.gerencia_id[0] }}</div>
                 </div>
 
                 <div class="field">
@@ -56,17 +69,7 @@
                     <textarea v-model="data.descripcion_objeto" class="textarea" />
                 </div>
 
-                <!-- Heredados desde el principal (con marca visual) -->
-                <div :class="['field', isInherited('gerencia_area') ? 'inherited' : '']">
-                    <label>Gerencia / Área</label>
-                    <input v-model="data.gerencia_area" class="input" />
-                </div>
-                <div :class="['field', isInherited('gerencia') ? 'inherited' : '']">
-                    <label>Gerencia</label>
-                    <input v-model="data.gerencia" class="input" />
-                </div>
-
-                <div :class="['field', isInherited('solicitante_id') ? 'inherited' : '']">
+                <div class="field">
                     <label>Solicitante</label>
                     <select v-model="data.solicitante_id" class="select">
                         <option :value="null">—</option>
@@ -75,7 +78,7 @@
                         </option>
                     </select>
                 </div>
-                <div :class="['field', isInherited('utt_id') ? 'inherited' : '']">
+                <div class="field">
                     <label>UTT</label>
                     <select v-model="data.utt_id" class="select">
                         <option :value="null">—</option>
@@ -95,7 +98,7 @@
                     </select>
                 </div>
 
-                <div :class="['field', isInherited('resp1_id') ? 'inherited' : '']">
+                <div class="field">
                     <label>Responsable 1</label>
                     <select v-model="data.resp1_id" class="select">
                         <option :value="null">—</option>
@@ -104,7 +107,7 @@
                         </option>
                     </select>
                 </div>
-                <div :class="['field', isInherited('resp2_id') ? 'inherited' : '']">
+                <div class="field">
                     <label>Responsable 2</label>
                     <select v-model="data.resp2_id" class="select">
                         <option :value="null">—</option>
@@ -209,8 +212,8 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { contratosEjecucionService } from '@/services/contratosEjecucion';
-import { contratosPrincipalService } from '@/services/contratosPrincipal';
 import { listAll } from '@/services/catalogos';
+import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import ExpedienteInput from '@/components/ExpedienteInput.vue';
@@ -218,14 +221,12 @@ import ExpedienteInput from '@/components/ExpedienteInput.vue';
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
-
-const HERITABLE = ['gerencia_area', 'gerencia', 'solicitante_id', 'resp1_id', 'resp2_id', 'utt_id'];
+const auth = useAuthStore();
 
 const isEdit = computed(() => !!route.params.id);
 const loading = ref(true);
 const saving = ref(false);
 const errors = ref({});
-const inheritedMap = reactive({});  // { campo: true } cuando vino del principal
 
 const data = reactive({
     nro_expediente: '',
@@ -233,9 +234,7 @@ const data = reactive({
     tipo_contrato_id: '',
     nombre_proyecto: '',
     descripcion_objeto: '',
-    contrato_principal_id: null,
-    gerencia_area: '',
-    gerencia: '',
+    gerencia_id: null,
     solicitante_id: null,
     resp1_id: null,
     resp2_id: null,
@@ -263,53 +262,39 @@ const solicitantes = ref([]);
 const utts = ref([]);
 const uvts = ref([]);
 const personal = ref([]);
-const principales = ref([]);
+const areas = ref([]);
+const gerencias = ref([]);
+const areaSeleccionada = ref(null);
 
-function isInherited(field) { return inheritedMap[field] === true; }
+/** La Gerencia de Área es sólo un filtro visual sobre el listado de gerencias. */
+const gerenciasDisponibles = computed(() => {
+    if (!areaSeleccionada.value) return gerencias.value;
+    return gerencias.value.filter(g => String(g.gerencia_area_id) === String(areaSeleccionada.value));
+});
 
-async function applyHerencia() {
-    const pid = data.contrato_principal_id;
-    for (const f of HERITABLE) inheritedMap[f] = false;
-    if (!pid) return;
-    try {
-        const res = await contratosPrincipalService.get(pid);
-        const p = res.data;
-        for (const f of HERITABLE) {
-            // Solo pre-completar si el campo del ejecución está vacío
-            const empty = data[f] === null || data[f] === '' || data[f] === undefined;
-            if (empty) {
-                data[f] = p[f] ?? null;
-                inheritedMap[f] = true;
-            }
-        }
-    } catch { /* no-op */ }
-}
-
-// Si el usuario edita manualmente un campo heredado, quitamos la marca
-for (const f of ['gerencia_area', 'gerencia']) {
-    watch(() => data[f], () => { inheritedMap[f] = false; });
-}
-for (const f of ['solicitante_id', 'resp1_id', 'resp2_id', 'utt_id']) {
-    watch(() => data[f], (_, prev) => {
-        if (inheritedMap[f] && prev !== null && prev !== '') inheritedMap[f] = false;
-    });
-}
+// Al cambiar de Gerencia de Área, se descarta la gerencia si ya no pertenece a ella.
+watch(areaSeleccionada, () => {
+    if (!data.gerencia_id) return;
+    const sigue = gerenciasDisponibles.value.some(g => g.id === data.gerencia_id);
+    if (!sigue) data.gerencia_id = null;
+});
 
 watch(() => data.moneda, (v) => { if (v === 'Peso') data.cotizacion = null; });
 
 async function loadCatalogs() {
-    const [e, t, s, u1, u2, p, pr] = await Promise.all([
+    const [e, t, s, u1, u2, p, ga, g] = await Promise.all([
         listAll('estados-ejecucion'),
         listAll('tipos-contrato-ejecucion'),
         listAll('solicitantes'),
         listAll('utt'),
         listAll('uvt'),
         listAll('personal'),
-        listAll('contratos-principal', { per_page: 500 }),
+        listAll('gerencias-area'),
+        listAll('gerencias'),
     ]);
     estados.value = e; tipos.value = t; solicitantes.value = s;
     utts.value = u1; uvts.value = u2; personal.value = p;
-    principales.value = pr;
+    areas.value = ga; gerencias.value = g;
 }
 
 async function loadContrato() {
@@ -354,11 +339,13 @@ onMounted(async () => {
     try {
         await loadCatalogs();
         await loadContrato();
-        // Si vino ?principal=<id> en la query, pre-vincular y heredar
-        if (!isEdit.value && route.query.principal) {
-            data.contrato_principal_id = Number(route.query.principal);
-            await applyHerencia();
+
+        // Un usuario acotado sólo carga contratos en su propia gerencia.
+        if (!isEdit.value && !auth.isAdminSistema && auth.gerenciaId) {
+            data.gerencia_id = auth.gerenciaId;
         }
+        areaSeleccionada.value = gerencias.value
+            .find(g => g.id === data.gerencia_id)?.gerencia_area_id ?? null;
     } catch (err) {
         toast.error(extractError(err, 'Error al cargar el formulario.'));
     } finally {

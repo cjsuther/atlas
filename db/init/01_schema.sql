@@ -9,6 +9,18 @@
 --   * Se incorpora `historial_cambios` (auditoría obligatoria).
 --   * Se agrega `regimen` a `utt`.
 --   * Toda baja es lógica (`deleted_at`).
+--
+-- Cambios v3 (CAMBIOS SOLICITADOS AL SISTEMA ATLAS):
+--   * Se incorpora la estructura `gerencias_area` -> `gerencias`, que reemplaza
+--     a la gestión de contratos principales.
+--   * `contratos_ejecucion.gerencia_id` es obligatorio (jerarquía completa
+--     Gerencia de Área -> Gerencia -> Contrato -> Movimiento).
+--   * `ejecucion_movimientos` admite acciones además de facturas
+--     (transferencias entre contratos, incentivos y MCH) y contraparte
+--     flexible (cliente, proveedor, contrato o rubro).
+--   * `user_roles` pasa a los roles admin_sistema / admin_gerencia /
+--     operador_gerencia, con alcance por gerencia y preferencia de
+--     agrupación de saldos.
 -- =====================================================================
 
 SET NAMES utf8mb4;
@@ -116,20 +128,76 @@ CREATE TABLE IF NOT EXISTS personal (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
+-- Tabla: gerencias_area
+-- Máximo nivel de la estructura. Reemplaza a la gestión de contratos
+-- principales: la información de saldos no puede salir de la Gerencia de
+-- Área, que es el límite de confidencialidad del sistema.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gerencias_area (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  sigla       VARCHAR(50)  NULL,
+  nombre      VARCHAR(200) NOT NULL,
+  responsable VARCHAR(200) NULL,
+  activo      TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_ga_nombre (nombre),
+  UNIQUE KEY uq_ga_sigla  (sigla)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Tabla: gerencias
+-- Segundo nivel. Cada gerencia pertenece a una Gerencia de Área y cada
+-- contrato pertenece a una gerencia:
+--   Gerencia de Área -> Gerencia -> Contrato -> Movimiento de ejecución
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gerencias (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  gerencia_area_id INT          NOT NULL,
+  sigla            VARCHAR(50)  NULL,
+  nombre           VARCHAR(200) NOT NULL,
+  responsable      VARCHAR(200) NULL,
+  activo           TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_ger_area_nombre (gerencia_area_id, nombre),
+  KEY idx_ger_area (gerencia_area_id),
+  CONSTRAINT fk_ger_area
+    FOREIGN KEY (gerencia_area_id) REFERENCES gerencias_area(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
 -- Tabla: user_roles  (gestión interna de roles, opcionalmente con password)
+--
+-- Roles y alcance:
+--   admin_sistema     : todas las gerencias de área, gerencias y contratos.
+--   admin_gerencia    : su gerencia (ABM de contratos y de operadores de esa
+--                       gerencia); saldos agregados de su Gerencia de Área.
+--   operador_gerencia : su gerencia (ABM de contratos, sin gestión de usuarios).
+-- `gerencia_id` es obligatorio para los roles acotados a una gerencia.
+-- `saldos_agrupacion` es la configuración con la que el usuario ve los saldos
+-- del panel (por Gerencia de Área, por Gerencia o por Contrato).
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_roles (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  username     VARCHAR(200) NOT NULL,
-  display_name VARCHAR(200),
-  email        VARCHAR(200),
-  password     VARCHAR(255) NULL,
-  rol          ENUM('admin','operador','consulta') NOT NULL DEFAULT 'consulta',
-  activo       TINYINT(1) DEFAULT 1,
-  last_login   TIMESTAMP NULL,
-  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_username (username)
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  username          VARCHAR(200) NOT NULL,
+  display_name      VARCHAR(200),
+  email             VARCHAR(200),
+  password          VARCHAR(255) NULL,
+  auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
+  rol               ENUM('admin_sistema','admin_gerencia','operador_gerencia') NOT NULL DEFAULT 'operador_gerencia',
+  gerencia_id       INT NULL,
+  saldos_agrupacion ENUM('gerencia_area','gerencia','contrato') NOT NULL DEFAULT 'gerencia',
+  activo            TINYINT(1) DEFAULT 1,
+  last_login        TIMESTAMP NULL,
+  created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_username (username),
+  KEY idx_ur_gerencia (gerencia_id),
+  CONSTRAINT fk_ur_gerencia
+    FOREIGN KEY (gerencia_id) REFERENCES gerencias(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -201,7 +269,11 @@ CREATE TABLE IF NOT EXISTS contratos_principal (
 
 -- ---------------------------------------------------------------------
 -- Tabla: contratos_ejecucion
--- Contrato concreto. Tipos: CP, CIT, CE. Vinculado a un principal salvo AP.
+-- Contrato concreto. Tipos: CP, CIT, CE.
+-- Pertenece SIEMPRE a una gerencia, y ésta a una Gerencia de Área. El
+-- vínculo con contratos_principal se conserva sólo por trazabilidad
+-- histórica: la gestión de contratos principales fue reemplazada por la
+-- estructura Gerencia de Área -> Gerencia.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   id                          INT AUTO_INCREMENT PRIMARY KEY,
@@ -211,8 +283,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   nombre_proyecto             VARCHAR(500) NOT NULL,
   descripcion_objeto          TEXT         NULL,
   contrato_principal_id       INT          NULL,
-  gerencia_area               VARCHAR(200) NULL,
-  gerencia                    VARCHAR(200) NULL,
+  gerencia_id                 INT          NOT NULL,
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,
@@ -241,6 +312,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   KEY idx_ce_estado           (estado_id),
   KEY idx_ce_tipo             (tipo_contrato_id),
   KEY idx_ce_principal        (contrato_principal_id),
+  KEY idx_ce_gerencia         (gerencia_id),
   KEY idx_ce_uvt              (uvt_id),
   KEY idx_ce_solicitante      (solicitante_id),
   KEY idx_ce_vencimiento      (fecha_vencimiento),
@@ -255,6 +327,9 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   CONSTRAINT fk_ce_principal
     FOREIGN KEY (contrato_principal_id) REFERENCES contratos_principal(id)
     ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_ce_gerencia
+    FOREIGN KEY (gerencia_id) REFERENCES gerencias(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_ce_solic
     FOREIGN KEY (solicitante_id) REFERENCES solicitantes(solicitante_id)
     ON DELETE SET NULL ON UPDATE CASCADE,
@@ -277,14 +352,29 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
 -- ejecución concreta). Reemplaza a los campos monto_ejecutado_* del
 -- contrato de ejecución: los montos ejecutados son ahora la suma de
 -- estos movimientos por tipo.
+--
+-- `accion` distingue el origen del movimiento:
+--   factura       : solicitud / recepción de factura (cliente o proveedor)
+--   transferencia : movimiento de fondos hacia/desde otro contrato
+--   incentivo     : pago de incentivos
+--   mch           : pago de Mayor Carga Horaria
+--
+-- No siempre hay cliente o proveedor: en una transferencia la contraparte es
+-- otro contrato, y en incentivos / MCH suele ser sólo un rubro. `contraparte_tipo`
+-- indica cuál de los cuatro campos de contraparte es el que aplica.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ejecucion_movimientos (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
   contrato_ejecucion_id    INT          NOT NULL,
   tipo                     ENUM('ingreso','gasto') NOT NULL,
+  accion                   ENUM('factura','transferencia','incentivo','mch') NOT NULL DEFAULT 'factura',
   nro_expediente           VARCHAR(100) NOT NULL,
-  proveedor                VARCHAR(300) NULL,          -- gastos
-  cliente                  VARCHAR(300) NULL,          -- ingresos
+  contraparte_tipo         ENUM('cliente','proveedor','contrato','rubro') NULL,
+  proveedor                VARCHAR(300) NULL,          -- gastos por factura
+  cliente                  VARCHAR(300) NULL,          -- ingresos por factura
+  contrato_contraparte_id  INT          NULL,          -- transferencias
+  rubro                    VARCHAR(200) NULL,          -- incentivos / MCH / sin contraparte
+  movimiento_espejo_id     INT          NULL,          -- contrapartida de una transferencia
   moneda                   ENUM('Peso','Dólar') NOT NULL DEFAULT 'Peso',
   monto                    DECIMAL(18,2) NOT NULL,     -- en pesos siempre (calculado si moneda='Dólar')
   monto_dolares            DECIMAL(18,2) NULL,         -- monto original si moneda='Dólar'
@@ -299,11 +389,17 @@ CREATE TABLE IF NOT EXISTS ejecucion_movimientos (
 
   KEY idx_em_contrato      (contrato_ejecucion_id),
   KEY idx_em_tipo          (tipo),
+  KEY idx_em_accion        (accion),
+  KEY idx_em_contraparte   (contrato_contraparte_id),
+  KEY idx_em_espejo        (movimiento_espejo_id),
   KEY idx_em_deleted       (deleted_at),
 
   CONSTRAINT fk_em_contrato
     FOREIGN KEY (contrato_ejecucion_id) REFERENCES contratos_ejecucion(id)
-    ON DELETE CASCADE ON UPDATE CASCADE
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_em_contraparte
+    FOREIGN KEY (contrato_contraparte_id) REFERENCES contratos_ejecucion(id)
+    ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------

@@ -10,17 +10,25 @@
         </summary>
         <div class="collapsible-body">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                <div style="display:flex;gap:6px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button type="button" :class="['btn', 'btn-sm', filter === '' ? 'btn-primary' : 'btn-secondary']"
                             @click="setFilter('')">Todos</button>
                     <button type="button" :class="['btn', 'btn-sm', filter === 'ingreso' ? 'btn-primary' : 'btn-secondary']"
                             @click="setFilter('ingreso')">Ingresos</button>
                     <button type="button" :class="['btn', 'btn-sm', filter === 'gasto' ? 'btn-primary' : 'btn-secondary']"
                             @click="setFilter('gasto')">Gastos</button>
+                    <select v-model="filterAccion" class="select" style="height:30px;padding:2px 8px;font-size:12px;"
+                            @change="load">
+                        <option value="">Todas las acciones</option>
+                        <option v-for="(label, value) in ACCION_LABELS" :key="value" :value="value">{{ label }}</option>
+                    </select>
                 </div>
-                <div v-if="auth.canEdit" style="display:flex;gap:6px;">
-                    <button class="btn btn-primary btn-sm" @click="nuevo('ingreso')">+ Ingreso</button>
-                    <button class="btn btn-secondary btn-sm" @click="nuevo('gasto')">+ Gasto</button>
+                <div v-if="auth.canEdit" style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn btn-primary btn-sm"   @click="nuevo('factura', 'ingreso')">+ Ingreso por factura</button>
+                    <button class="btn btn-secondary btn-sm" @click="nuevo('factura', 'gasto')">+ Gasto por factura</button>
+                    <button class="btn btn-secondary btn-sm" @click="nuevo('transferencia', 'gasto')">+ Transferencia</button>
+                    <button class="btn btn-secondary btn-sm" @click="nuevo('incentivo', 'gasto')">+ Incentivo</button>
+                    <button class="btn btn-secondary btn-sm" @click="nuevo('mch', 'gasto')">+ MCH</button>
                 </div>
             </div>
 
@@ -32,8 +40,9 @@
                     <thead>
                         <tr>
                             <th>Tipo</th>
+                            <th>Acción</th>
                             <th>Expediente</th>
-                            <th>Proveedor / Cliente</th>
+                            <th>Contraparte</th>
                             <th>Objeto</th>
                             <th style="text-align:right;">Monto</th>
                             <th>Factura</th>
@@ -47,8 +56,14 @@
                                     {{ m.tipo }}
                                 </span>
                             </td>
+                            <td>{{ ACCION_LABELS[m.accion] || m.accion }}</td>
                             <td>{{ m.nro_expediente }}</td>
-                            <td>{{ m.tipo === 'gasto' ? m.proveedor : m.cliente }}</td>
+                            <td>
+                                <div>{{ m.contraparte || '—' }}</div>
+                                <div v-if="m.contraparte_tipo" style="font-size:11px;color:var(--color-muted);">
+                                    {{ CONTRAPARTE_LABELS[m.contraparte_tipo] }}
+                                </div>
+                            </td>
                             <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                 :title="m.objeto">{{ m.objeto }}</td>
                             <td style="text-align:right;">
@@ -100,9 +115,24 @@ const emit = defineEmits(['changed']);
 const auth = useAuthStore();
 const toast = useToast();
 
+const ACCION_LABELS = {
+    factura:       'Factura',
+    transferencia: 'Transferencia',
+    incentivo:     'Incentivo',
+    mch:           'MCH',
+};
+
+const CONTRAPARTE_LABELS = {
+    cliente:   'Cliente',
+    proveedor: 'Proveedor',
+    contrato:  'Contrato',
+    rubro:     'Rubro',
+};
+
 const rows = ref([]);
 const loading = ref(false);
 const filter = ref('');
+const filterAccion = ref('');
 const modalRef = ref(null);
 const confirmRef = ref(null);
 
@@ -116,6 +146,7 @@ async function load() {
     try {
         const params = { per_page: 200 };
         if (filter.value) params.tipo = filter.value;
+        if (filterAccion.value) params.accion = filterAccion.value;
         const res = await movimientosService.listForContrato(props.contratoEjecucionId, params);
         rows.value = res.data || [];
     } catch (err) {
@@ -130,8 +161,8 @@ function setFilter(v) {
     load();
 }
 
-function nuevo(tipo) {
-    modalRef.value.show({ tipo });
+function nuevo(accion, tipo) {
+    modalRef.value.show({ accion, tipo });
 }
 function editar(m) {
     modalRef.value.show({ movimiento: m });
@@ -150,7 +181,9 @@ async function descargar(m) {
 async function darBaja(m) {
     const ok = await confirmRef.value.show({
         title: 'Dar de baja',
-        message: `¿Eliminar este ${m.tipo}? Queda registrado en el historial.`,
+        message: m.accion === 'transferencia'
+            ? '¿Eliminar esta transferencia? También se dará de baja la contrapartida en el otro contrato.'
+            : `¿Eliminar este ${m.tipo}? Queda registrado en el historial.`,
         confirmText: 'Eliminar',
         danger: true,
     });

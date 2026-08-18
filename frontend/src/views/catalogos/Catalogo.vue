@@ -5,10 +5,10 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
                 <h1 class="page-title">{{ def.title }}</h1>
-                <p class="page-subtitle">Listado y gestión del catálogo</p>
+                <p class="page-subtitle">{{ def.subtitle || 'Listado y gestión del catálogo' }}</p>
             </div>
             <div>
-                <button v-if="auth.isAdmin" class="btn btn-primary" @click="openNew">
+                <button v-if="auth.canAdminEstructura" class="btn btn-primary" @click="openNew">
                     <IconLib name="plus" /> Nuevo
                 </button>
             </div>
@@ -36,10 +36,10 @@
                             {{ c.render ? c.render(r) : (r[c.key] ?? '—') }}
                         </td>
                         <td class="actions">
-                            <button v-if="auth.isAdmin" @click="openEdit(r)" title="Editar">
+                            <button v-if="auth.canAdminEstructura" @click="openEdit(r)" title="Editar">
                                 <IconLib name="edit" :size="14" />
                             </button>
-                            <button v-if="auth.isAdmin" class="danger" @click="remove(r)" title="Eliminar">
+                            <button v-if="auth.canAdminEstructura" class="danger" @click="remove(r)" title="Eliminar">
                                 <IconLib name="trash" :size="14" />
                             </button>
                         </td>

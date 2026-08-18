@@ -21,8 +21,7 @@ class ContratoEjecucion extends Model
         'nombre_proyecto',
         'descripcion_objeto',
         'contrato_principal_id',
-        'gerencia_area',
-        'gerencia',
+        'gerencia_id',
         'solicitante_id',
         'resp1_id',
         'resp2_id',
@@ -77,6 +76,24 @@ class ContratoEjecucion extends Model
     public function principal()
     {
         return $this->belongsTo(ContratoPrincipal::class, 'contrato_principal_id', 'id');
+    }
+
+    public function gerencia()
+    {
+        return $this->belongsTo(Gerencia::class, 'gerencia_id', 'id');
+    }
+
+    /** Atajo a la Gerencia de Área a través de la gerencia del contrato. */
+    public function gerenciaArea()
+    {
+        return $this->hasOneThrough(
+            GerenciaArea::class,
+            Gerencia::class,
+            'id',
+            'id',
+            'gerencia_id',
+            'gerencia_area_id'
+        );
     }
 
     public function solicitante()

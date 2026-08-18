@@ -54,7 +54,8 @@ const items = ref([]);
 const loading = ref(false);
 let loaded = false;
 
-const canSee = computed(() => auth.hasRole('admin', 'operador'));
+// El backend ya recorta el historial al alcance del usuario.
+const canSee = computed(() => auth.isAuthenticated);
 
 async function loadOnce() {
     if (loaded || loading.value) return;

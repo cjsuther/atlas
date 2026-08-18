@@ -3,7 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\EstadoEjecucion;
-use App\Models\TipoContratoEjecucion;
+use App\Services\AccessScopeService;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -24,11 +24,8 @@ class ContratoEjecucionRequest extends FormRequest
             'nombre_proyecto'            => ['required', 'string', 'max:500'],
             'descripcion_objeto'         => ['nullable', 'string'],
 
-            // Regla 4: contrato_principal_id obligatorio salvo AP — validado en withValidator
-            'contrato_principal_id'      => ['nullable', 'integer', 'exists:contratos_principal,id'],
-
-            'gerencia_area'              => ['nullable', 'string', 'max:200'],
-            'gerencia'                   => ['nullable', 'string', 'max:200'],
+            // Todo contrato pertenece a una gerencia, y ésta a una Gerencia de Área.
+            'gerencia_id'                => ['required', 'integer', 'exists:gerencias,id'],
             'solicitante_id'             => ['nullable', 'integer', 'exists:solicitantes,solicitante_id'],
             'resp1_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
             'resp2_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
@@ -58,6 +55,8 @@ class ContratoEjecucionRequest extends FormRequest
             'nro_expediente.required'           => 'El número de expediente es obligatorio.',
             'nro_expediente.regex'              => 'El expediente debe tener el formato EX-AAAA-NNNN--APN-REPARTICIÓN (ej. EX-2026-1234--APN-GVTYEA#CNEA).',
             'tipo_contrato_id.required'         => 'Debe seleccionar el tipo de contrato.',
+            'gerencia_id.required'              => 'Debe indicar la gerencia a la que pertenece el contrato.',
+            'gerencia_id.exists'                => 'La gerencia indicada no existe.',
             'estado_id.required'                => 'Debe indicar el estado.',
             'fecha_inicio.after_or_equal'       => 'La fecha de inicio debe ser igual o posterior a la fecha de apertura del expediente.',
             'fecha_vencimiento.after_or_equal'  => 'La fecha de vencimiento debe ser igual o posterior a la fecha de inicio.',
@@ -69,17 +68,11 @@ class ContratoEjecucionRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $v) {
-            // Regla 4: contrato_principal_id obligatorio salvo que el tipo sea AP.
-            // En contratos_ejecucion el catálogo no incluye AP (AP es de principal),
-            // por lo que en la práctica SIEMPRE debe haber contrato_principal_id.
-            // Excepción: si en el futuro se crea un tipo "AP" en ejecución, se respeta.
-            $tipoId = $this->input('tipo_contrato_id');
-            $tipo   = $tipoId ? TipoContratoEjecucion::find($tipoId) : null;
-            $esAP   = $tipo && strtoupper($tipo->sigla) === 'AP';
-
-            if (!$esAP && !$this->filled('contrato_principal_id')) {
-                $v->errors()->add('contrato_principal_id',
-                    'Debe vincularse a un contrato principal (excepto si el tipo es AP).');
+            // Un usuario acotado sólo puede imputar contratos a su propia gerencia.
+            $gerenciaId = $this->input('gerencia_id');
+            if ($gerenciaId && !app(AccessScopeService::class)->puedeUsarGerencia((int) $gerenciaId)) {
+                $v->errors()->add('gerencia_id',
+                    'No tiene permisos para cargar contratos en esa gerencia.');
             }
 
             $estadoId = $this->input('estado_id');

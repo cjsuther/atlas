@@ -28,8 +28,8 @@ class ContratosEjecucionExport implements FromQuery, WithHeadings, WithMapping, 
         return [
             'ID', 'Expediente', 'F. Apertura',
             'Tipo', 'Proyecto', 'Descripción',
-            'Contrato Principal',
-            'Gerencia área', 'Gerencia',
+            'Contrato Principal (histórico)',
+            'Gerencia de Área', 'Gerencia',
             'Solicitante', 'Resp. 1', 'Resp. 2',
             'UTT', 'UVT', 'Estado', 'Cliente',
             'F. Inicio', 'F. Vencimiento', 'F. Finalización',
@@ -53,8 +53,8 @@ class ContratosEjecucionExport implements FromQuery, WithHeadings, WithMapping, 
             $r->nombre_proyecto,
             $r->descripcion_objeto,
             $r->principal ? "#{$r->principal->id} — " . $r->principal->nro_expediente : null,
-            $r->gerencia_area,
-            $r->gerencia,
+            optional(optional($r->gerencia)->gerenciaArea)->nombre,
+            optional($r->gerencia)->nombre,
             optional($r->solicitante)->razon_social,
             $r->resp1 ? trim($r->resp1->apellido . ', ' . $r->resp1->nombre) : null,
             $r->resp2 ? trim($r->resp2->apellido . ', ' . $r->resp2->nombre) : null,
@@ -83,7 +83,7 @@ class ContratosEjecucionExport implements FromQuery, WithHeadings, WithMapping, 
 
     public function title(): string
     {
-        return 'Contratos Ejecución';
+        return 'Contratos';
     }
 
     public function styles(Worksheet $sheet): array

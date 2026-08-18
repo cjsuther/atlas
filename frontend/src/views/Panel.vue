@@ -3,7 +3,10 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
                 <h1 class="page-title">Panel de Control</h1>
-                <p class="page-subtitle">Indicadores y distribución de contratos</p>
+                <p class="page-subtitle">
+                    Indicadores, saldos y distribución de contratos
+                    <template v-if="alcance"> · {{ alcance }}</template>
+                </p>
             </div>
             <div>
                 <button class="btn btn-secondary" :disabled="exporting" @click="exportarTodo">
@@ -32,6 +35,20 @@
                         <option value="Euro">Euro</option>
                     </select>
                 </div>
+                <div class="field">
+                    <label>Gerencia de Área</label>
+                    <select v-model="filters.gerencia_area_id" class="select">
+                        <option value="">Todas</option>
+                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Gerencia</label>
+                    <select v-model="filters.gerencia_id" class="select">
+                        <option value="">Todas</option>
+                        <option v-for="g in gerenciasFiltradas" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+                    </select>
+                </div>
             </div>
             <div class="actions">
                 <button class="btn btn-secondary" @click="clearFilters">Limpiar</button>
@@ -39,16 +56,76 @@
             </div>
         </div>
 
-        <!-- Sección A — Indicadores principales -->
-        <h3 style="margin:18px 0 10px;">Indicadores principales</h3>
+        <!-- Saldos: el usuario elige con qué agrupación verlos -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:22px 0 10px;">
+            <h3 style="margin:0;">Saldos</h3>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:13px;color:var(--color-muted);">Ver saldos:</span>
+                <button v-for="a in AGRUPACIONES" :key="a.value"
+                        type="button"
+                        :class="['btn', 'btn-sm', agrupacion === a.value ? 'btn-primary' : 'btn-secondary']"
+                        @click="setAgrupacion(a.value)">
+                    {{ a.label }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" :disabled="guardandoPref"
+                        title="Usar esta agrupación cada vez que ingrese"
+                        @click="guardarPreferencia">
+                    {{ guardandoPref ? 'Guardando…' : 'Fijar como predeterminada' }}
+                </button>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="atlas-table">
+                <thead>
+                    <tr>
+                        <th>{{ tituloColumnaSaldos }}</th>
+                        <th style="text-align:right;">Contratos</th>
+                        <th style="text-align:right;">Presup. ingresos</th>
+                        <th style="text-align:right;">Presup. gastos</th>
+                        <th style="text-align:right;">Ejec. ingresos</th>
+                        <th style="text-align:right;">Ejec. gastos</th>
+                        <th style="text-align:right;">Saldo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="f in saldos?.filas || []" :key="f.clave">
+                        <td>
+                            <div>{{ f.etiqueta }}</div>
+                            <div v-if="f.detalle" style="font-size:11px;color:var(--color-muted);">{{ f.detalle }}</div>
+                        </td>
+                        <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(f.presupuestado_ingresos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(f.presupuestado_gastos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(f.ejecutado_ingresos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(f.ejecutado_gastos) }}</td>
+                        <td style="text-align:right;font-weight:600;"
+                            :style="{ color: f.saldo < 0 ? 'var(--color-danger)' : 'inherit' }">
+                            {{ fmtMoney(f.saldo) }}
+                        </td>
+                    </tr>
+                    <tr v-if="!saldos?.filas?.length">
+                        <td colspan="7" class="empty-state">Sin datos para el filtro aplicado.</td>
+                    </tr>
+                    <tr v-else style="font-weight:600;border-top:2px solid var(--color-border);">
+                        <td>Total ({{ saldos?.moneda_base }})</td>
+                        <td style="text-align:right;">{{ fmtInt(saldos?.totales?.contratos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.presupuestado_ingresos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.presupuestado_gastos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.ejecutado_ingresos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.ejecutado_gastos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.saldo) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Indicadores principales -->
+        <h3 style="margin:24px 0 10px;">Indicadores principales</h3>
         <div class="kpi-grid">
             <div class="kpi-card info">
-                <div class="label">Contratos Principales</div>
-                <div class="value">{{ fmtInt(ind?.totales?.contratos_principal) }}</div>
-            </div>
-            <div class="kpi-card info">
-                <div class="label">Contratos de Ejecución</div>
-                <div class="value">{{ fmtInt(ind?.totales?.contratos_ejecucion) }}</div>
+                <div class="label">Contratos</div>
+                <div class="value">{{ fmtInt(ind?.totales?.contratos) }}</div>
             </div>
             <div class="kpi-card warning">
                 <div class="label">En firma</div>
@@ -88,7 +165,7 @@
             </div>
         </div>
 
-        <!-- Sección C — Indicadores calculados -->
+        <!-- Indicadores calculados -->
         <h3 style="margin:24px 0 10px;">Indicadores calculados</h3>
         <div class="kpi-grid">
             <div class="kpi-card info">
@@ -100,12 +177,8 @@
                 <div class="value">{{ calc?.dias_ejecucion_promedio ?? '—' }}</div>
             </div>
             <div class="kpi-card success">
-                <div class="label">% Finalizados en término (Principal)</div>
-                <div class="value">{{ pctOrDash(calc?.porcentaje_finalizados_en_termino_principal) }}</div>
-            </div>
-            <div class="kpi-card success">
-                <div class="label">% Finalizados en término (Ejecución)</div>
-                <div class="value">{{ pctOrDash(calc?.porcentaje_finalizados_en_termino_ejecucion) }}</div>
+                <div class="label">% Finalizados en término</div>
+                <div class="value">{{ pctOrDash(calc?.porcentaje_finalizados_en_termino) }}</div>
             </div>
             <div class="kpi-card danger">
                 <div class="label">% Vencidos sin cierre</div>
@@ -117,81 +190,87 @@
             </div>
         </div>
 
-        <!-- Sección B — Distribución -->
+        <!-- Distribución -->
         <h3 style="margin:24px 0 10px;">Distribución</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por UVT — Principal</h4>
-                <BarChart :rows="rowsPorUvtPrincipal" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Gerencia de Área</h4>
+                <BarChart :rows="rowsPorArea" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por UVT — Ejecución</h4>
-                <BarChart :rows="rowsPorUvtEjecucion" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Gerencia</h4>
+                <BarChart :rows="rowsPorGerencia" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Gerencia — Principal</h4>
-                <BarChart :rows="rowsPorGerenciaPrincipal" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por UVT</h4>
+                <BarChart :rows="rowsPorUvt" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Tipo — Principal</h4>
-                <BarChart :rows="rowsPorTipoPrincipal" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Tipo</h4>
+                <BarChart :rows="rowsPorTipo" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Tipo — Ejecución</h4>
-                <BarChart :rows="rowsPorTipoEjecucion" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Estado</h4>
+                <BarChart :rows="rowsPorEstado" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Estado — Principal</h4>
-                <BarChart :rows="rowsPorEstadoPrincipal" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Moneda</h4>
+                <BarChart :rows="rowsPorMoneda" />
             </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Estado — Ejecución</h4>
-                <BarChart :rows="rowsPorEstadoEjecucion" />
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Moneda — Principal</h4>
-                <BarChart :rows="rowsPorMonedaPrincipal" />
-            </div>
+        </div>
+
+        <!-- Movimientos de ejecución por acción -->
+        <h3 style="margin:24px 0 10px;">Ejecución por acción</h3>
+        <div class="table-wrapper">
+            <table class="atlas-table">
+                <thead>
+                    <tr>
+                        <th>Acción</th>
+                        <th>Tipo</th>
+                        <th style="text-align:right;">Movimientos</th>
+                        <th style="text-align:right;">Total (ARS)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(m, i) in acciones?.movimientos || []" :key="i">
+                        <td>{{ ACCION_LABELS[m.accion] || m.accion }}</td>
+                        <td>
+                            <span :class="['badge', m.tipo === 'ingreso' ? 'badge-success' : 'badge-warning']">
+                                {{ m.tipo }}
+                            </span>
+                        </td>
+                        <td style="text-align:right;">{{ fmtInt(m.cantidad) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(m.total) }}</td>
+                    </tr>
+                    <tr v-if="!acciones?.movimientos?.length">
+                        <td colspan="4" class="empty-state">Sin movimientos cargados.</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Vencimientos -->
         <h3 style="margin:24px 0 10px;">Próximos vencimientos</h3>
         <div class="kpi-grid">
             <div class="kpi-card danger">
-                <div class="label">Vencidos · Principal</div>
-                <div class="value">{{ fmtInt(venc?.vencidos?.principal) }}</div>
-            </div>
-            <div class="kpi-card danger">
-                <div class="label">Vencidos · Ejecución</div>
-                <div class="value">{{ fmtInt(venc?.vencidos?.ejecucion) }}</div>
+                <div class="label">Vencidos</div>
+                <div class="value">{{ fmtInt(venc?.vencidos) }}</div>
             </div>
             <div class="kpi-card warning">
-                <div class="label">≤ 30 días · Principal</div>
-                <div class="value">{{ fmtInt(venc?.dias_30?.principal) }}</div>
-            </div>
-            <div class="kpi-card warning">
-                <div class="label">≤ 30 días · Ejecución</div>
-                <div class="value">{{ fmtInt(venc?.dias_30?.ejecucion) }}</div>
+                <div class="label">≤ 30 días</div>
+                <div class="value">{{ fmtInt(venc?.dias_30) }}</div>
             </div>
             <div class="kpi-card info">
-                <div class="label">31–60 días · Principal</div>
-                <div class="value">{{ fmtInt(venc?.dias_60?.principal) }}</div>
-            </div>
-            <div class="kpi-card info">
-                <div class="label">31–60 días · Ejecución</div>
-                <div class="value">{{ fmtInt(venc?.dias_60?.ejecucion) }}</div>
+                <div class="label">31–60 días</div>
+                <div class="value">{{ fmtInt(venc?.dias_60) }}</div>
             </div>
             <div class="kpi-card">
-                <div class="label">61–90 días · Principal</div>
-                <div class="value">{{ fmtInt(venc?.dias_90?.principal) }}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="label">61–90 días · Ejecución</div>
-                <div class="value">{{ fmtInt(venc?.dias_90?.ejecucion) }}</div>
+                <div class="label">61–90 días</div>
+                <div class="value">{{ fmtInt(venc?.dias_90) }}</div>
             </div>
         </div>
 
-        <!-- Sección D — Rankings -->
+        <!-- Rankings -->
         <h3 style="margin:24px 0 10px;">Rankings</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
             <div class="card">
@@ -200,7 +279,12 @@
                     <thead><tr><th>Gerencia</th><th style="text-align:right;">Cantidad</th></tr></thead>
                     <tbody>
                         <tr v-for="(r, i) in ranks?.gerencias_por_cantidad || []" :key="i">
-                            <td>{{ r.gerencia || '—' }}</td>
+                            <td>
+                                <div>{{ r.gerencia || '—' }}</div>
+                                <div v-if="r.gerencia_area" style="font-size:11px;color:var(--color-muted);">
+                                    {{ r.gerencia_area }}
+                                </div>
+                            </td>
                             <td style="text-align:right;">{{ fmtInt(r.cantidad) }}</td>
                         </tr>
                         <tr v-if="!ranks?.gerencias_por_cantidad?.length">
@@ -255,32 +339,70 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { panelService } from '@/services/panel';
+import { authService } from '@/services/auth';
 import { exportFullService } from '@/services/exportFull';
+import { listAll } from '@/services/catalogos';
+import { AGRUPACIONES_SALDO as AGRUPACIONES, useAuthStore } from '@/stores/auth';
 import { fmtInt, fmtMoney } from '@/composables/useFormat';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import BarChart from '@/components/BarChart.vue';
 import IconLib from '@/components/IconLib.vue';
 
+const ACCION_LABELS = {
+    factura:       'Factura',
+    transferencia: 'Transferencia entre contratos',
+    incentivo:     'Incentivos',
+    mch:           'MCH (Mayor Carga Horaria)',
+};
+
 const toast = useToast();
+const auth = useAuthStore();
 
 const filters = reactive({
     desde: '',
     hasta: '',
     moneda_base: 'Peso',
+    gerencia_area_id: '',
+    gerencia_id: '',
 });
+
+// Agrupación con la que se muestran los saldos; arranca en la preferencia del usuario.
+const agrupacion = ref(auth.saldosAgrupacion);
 
 const ind = ref(null);
 const calc = ref(null);
+const saldos = ref(null);
 const dUvt = ref(null);
 const dGer = ref(null);
 const dTipo = ref(null);
 const dEstado = ref(null);
 const dMoneda = ref(null);
+const acciones = ref(null);
 const venc = ref(null);
 const ranks = ref(null);
+const areas = ref([]);
+const gerencias = ref([]);
 const loading = ref(false);
 const exporting = ref(false);
+const guardandoPref = ref(false);
+
+const alcance = computed(() => {
+    if (auth.isAdminSistema) return 'Todas las gerencias';
+    if (auth.isAdminGerencia) return auth.gerenciaArea ? `Gerencia de Área ${auth.gerenciaArea}` : auth.gerencia;
+    return auth.gerencia || '';
+});
+
+const tituloColumnaSaldos = computed(() => ({
+    gerencia_area: 'Gerencia de Área',
+    gerencia:      'Gerencia',
+    contrato:      'Contrato',
+}[agrupacion.value] || 'Gerencia'));
+
+const gerenciasFiltradas = computed(() => {
+    if (!filters.gerencia_area_id) return gerencias.value;
+    return gerencias.value.filter(g => String(g.gerencia_area_id) === String(filters.gerencia_area_id));
+});
 
 async function exportarTodo() {
     exporting.value = true;
@@ -296,30 +418,58 @@ async function exportarTodo() {
 
 function paramsClean() {
     const p = {};
-    if (filters.desde) p.desde = filters.desde;
-    if (filters.hasta) p.hasta = filters.hasta;
-    if (filters.moneda_base) p.moneda_base = filters.moneda_base;
+    for (const [k, v] of Object.entries(filters)) {
+        if (v !== '' && v !== null && v !== undefined) p[k] = v;
+    }
     return p;
+}
+
+async function setAgrupacion(valor) {
+    agrupacion.value = valor;
+    await loadSaldos();
+}
+
+async function guardarPreferencia() {
+    guardandoPref.value = true;
+    try {
+        const r = await authService.savePreferencias({ saldos_agrupacion: agrupacion.value });
+        if (r?.user) auth.setUser(r.user);
+        toast.success('Preferencia de saldos guardada.');
+    } catch (err) {
+        toast.error(extractError(err, 'No se pudo guardar la preferencia.'));
+    } finally {
+        guardandoPref.value = false;
+    }
+}
+
+async function loadSaldos() {
+    try {
+        saldos.value = await panelService.saldos({ ...paramsClean(), agrupacion: agrupacion.value });
+    } catch (err) {
+        toast.error(extractError(err, 'No se pudieron cargar los saldos.'));
+    }
 }
 
 async function loadAll() {
     loading.value = true;
     try {
         const p = paramsClean();
-        const [a, b, c, d, e, f, g, h, i] = await Promise.all([
+        const [a, b, c, d, e, f, g, h, i, j] = await Promise.all([
             panelService.indicadores(p),
             panelService.calculados(p),
+            panelService.saldos({ ...p, agrupacion: agrupacion.value }),
             panelService.porUvt(p),
             panelService.porGerencia(p),
             panelService.porTipo(p),
             panelService.porEstado(p),
             panelService.porMoneda(p),
+            panelService.porAccion(p),
             panelService.vencimientos(p),
-            panelService.rankings(p),
         ]);
-        ind.value = a; calc.value = b; dUvt.value = c; dGer.value = d;
-        dTipo.value = e; dEstado.value = f; dMoneda.value = g;
-        venc.value = h; ranks.value = i;
+        ind.value = a; calc.value = b; saldos.value = c; dUvt.value = d;
+        dGer.value = e; dTipo.value = f; dEstado.value = g; dMoneda.value = h;
+        acciones.value = i; venc.value = j;
+        ranks.value = await panelService.rankings(p);
     } catch (err) {
         toast.error(extractError(err, 'No se pudieron cargar los indicadores.'));
     } finally {
@@ -329,6 +479,7 @@ async function loadAll() {
 
 function clearFilters() {
     filters.desde = ''; filters.hasta = ''; filters.moneda_base = 'Peso';
+    filters.gerencia_area_id = ''; filters.gerencia_id = '';
     loadAll();
 }
 
@@ -337,14 +488,18 @@ function pctOrDash(v) {
     return `${v}%`;
 }
 
-const rowsPorUvtPrincipal  = computed(() => (dUvt.value?.contratos_principal || []).map(r => ({ label: r.siglas || '—', value: r.cantidad })));
-const rowsPorUvtEjecucion  = computed(() => (dUvt.value?.contratos_ejecucion || []).map(r => ({ label: r.siglas || '—', value: r.cantidad })));
-const rowsPorGerenciaPrincipal = computed(() => (dGer.value?.contratos_principal || []).map(r => ({ label: r.gerencia || '—', value: Number(r.cantidad) })));
-const rowsPorTipoPrincipal = computed(() => (dTipo.value?.contratos_principal || []).map(r => ({ label: r.sigla || '—', value: r.cantidad })));
-const rowsPorTipoEjecucion = computed(() => (dTipo.value?.contratos_ejecucion || []).map(r => ({ label: r.sigla || '—', value: r.cantidad })));
-const rowsPorEstadoPrincipal = computed(() => (dEstado.value?.contratos_principal || []).map(r => ({ label: r.nombre || '—', value: r.cantidad })));
-const rowsPorEstadoEjecucion = computed(() => (dEstado.value?.contratos_ejecucion || []).map(r => ({ label: r.nombre || '—', value: r.cantidad })));
-const rowsPorMonedaPrincipal = computed(() => (dMoneda.value?.contratos_principal || []).map(r => ({ label: r.moneda || '—', value: Number(r.cantidad) })));
+const rowsPorUvt      = computed(() => (dUvt.value?.contratos || []).map(r => ({ label: r.siglas || '—', value: r.cantidad })));
+const rowsPorGerencia = computed(() => (dGer.value?.gerencias || []).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
+const rowsPorArea     = computed(() => (dGer.value?.gerencias_area || []).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
+const rowsPorTipo     = computed(() => (dTipo.value?.contratos || []).map(r => ({ label: r.sigla || '—', value: r.cantidad })));
+const rowsPorEstado   = computed(() => (dEstado.value?.contratos || []).map(r => ({ label: r.nombre || '—', value: r.cantidad })));
+const rowsPorMoneda   = computed(() => (dMoneda.value?.contratos || []).map(r => ({ label: r.moneda || '—', value: Number(r.cantidad) })));
 
-onMounted(loadAll);
+onMounted(async () => {
+    try {
+        const [a, g] = await Promise.all([listAll('gerencias-area'), listAll('gerencias')]);
+        areas.value = a; gerencias.value = g;
+    } catch { /* no-op */ }
+    loadAll();
+});
 </script>

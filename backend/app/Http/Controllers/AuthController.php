@@ -153,17 +153,46 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * PUT /api/auth/preferencias
+     *
+     * Configuración de visualización del usuario. Por ahora, con qué
+     * agrupación quiere ver los saldos del panel: por Gerencia de Área, por
+     * Gerencia o por Contrato.
+     */
+    public function preferencias(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'saldos_agrupacion' => ['required', 'in:' . implode(',', UserRole::AGRUPACIONES_SALDO)],
+        ], [
+            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Gerencia o Contrato.',
+        ]);
+
+        $user = $request->user();
+        $user->saldos_agrupacion = $data['saldos_agrupacion'];
+        $user->save();
+
+        return response()->json(['user' => $this->userPayload($user)]);
+    }
+
     private function userPayload(UserRole $user): array
     {
+        $user->loadMissing('gerencia.gerenciaArea');
+
         return [
-            'id'           => $user->id,
-            'username'     => $user->username,
-            'display_name' => $user->display_name,
-            'email'        => $user->email,
-            'rol'          => $user->rol,
-            'auth_source'  => $user->auth_source,
-            'activo'       => (bool) $user->activo,
-            'last_login'   => optional($user->last_login)->toIso8601String(),
+            'id'                => $user->id,
+            'username'          => $user->username,
+            'display_name'      => $user->display_name,
+            'email'             => $user->email,
+            'rol'               => $user->rol,
+            'auth_source'       => $user->auth_source,
+            'gerencia_id'       => $user->gerencia_id,
+            'gerencia'          => optional($user->gerencia)->nombre,
+            'gerencia_area_id'  => optional($user->gerencia)->gerencia_area_id,
+            'gerencia_area'     => optional(optional($user->gerencia)->gerenciaArea)->nombre,
+            'saldos_agrupacion' => $user->saldos_agrupacion,
+            'activo'            => (bool) $user->activo,
+            'last_login'        => optional($user->last_login)->toIso8601String(),
         ];
     }
 }

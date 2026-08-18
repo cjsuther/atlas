@@ -12,11 +12,9 @@
                     </h1>
                     <p class="page-subtitle">
                         #{{ c.id }} · {{ c.nro_expediente }} · {{ c.tipo_contrato?.sigla }}
-                        <span v-if="c.principal">
-                            · vinculado a
-                            <router-link :to="{ name: 'contratos-principal-detalle', params: { id: c.principal.id } }">
-                                Principal #{{ c.principal.id }} ({{ c.principal.nro_expediente }})
-                            </router-link>
+                        <span v-if="c.gerencia">
+                            · {{ c.gerencia.nombre }}
+                            <template v-if="c.gerencia.gerencia_area"> ({{ c.gerencia.gerencia_area.nombre }})</template>
                         </span>
                     </p>
                 </div>
@@ -26,6 +24,10 @@
                                  class="btn btn-primary">
                         <IconLib name="edit" /> Editar
                     </router-link>
+                    <button v-if="auth.isAdminSistema && !c.deleted_at" class="btn btn-secondary"
+                            @click="abrirTransferencia">
+                        Transferir a otra gerencia
+                    </button>
                     <router-link :to="{ name: 'contratos-ejecucion' }" class="btn btn-secondary">Volver</router-link>
                 </div>
             </div>
@@ -38,7 +40,6 @@
                         <Field label="F. Apertura" :value="fmtDate(c.fecha_apertura_expediente)" />
                         <Field label="Tipo" :value="c.tipo_contrato?.sigla + ' — ' + c.tipo_contrato?.nombre" />
                         <Field label="Estado" :value="c.estado?.nombre" />
-                        <Field label="Contrato Principal" :value="c.principal ? `#${c.principal.id} — ${c.principal.nombre_proyecto}` : '—'" />
                         <Field label="UTT" :value="c.utt ? `${c.utt.denominacion} — ${c.utt.nombre}` : '—'" />
                     </div>
                 </div>
@@ -46,8 +47,8 @@
                 <div class="detail-section">
                     <h4>Áreas y responsables</h4>
                     <div class="detail-grid">
-                        <Field label="Gerencia" :value="c.gerencia" />
-                        <Field label="Gerencia / Área" :value="c.gerencia_area" />
+                        <Field label="Gerencia de Área" :value="c.gerencia?.gerencia_area?.nombre" />
+                        <Field label="Gerencia" :value="c.gerencia?.nombre" />
                         <Field label="Solicitante" :value="c.solicitante?.razon_social" />
                         <Field label="UVT" :value="c.uvt ? `${c.uvt.siglas} — ${c.uvt.nombre}` : '—'" />
                         <Field label="Resp. 1" :value="responsable(c.resp1)" />
@@ -89,20 +90,56 @@
 
             <MovimientosPanel :contrato-ejecucion-id="c.id" @changed="refrescar" />
             <HistorialPanel tabla="contratos_ejecucion" :id="c.id" />
+
+            <!-- Transferencia completa del contrato a otra gerencia -->
+            <BaseModal v-model="transferOpen" title="Transferir contrato a otra gerencia">
+                <form @submit.prevent="transferir">
+                    <p style="margin-top:0;font-size:13px;color:var(--color-muted);">
+                        El contrato y todos sus movimientos de ejecución pasan a la gerencia de destino.
+                        El cambio queda asentado en el historial.
+                    </p>
+                    <div class="form-grid">
+                        <div class="field" style="grid-column:1 / -1;">
+                            <label>Gerencia de destino <span style="color:var(--color-danger);">*</span></label>
+                            <select v-model="transferData.gerencia_id" class="select" required>
+                                <option :value="null">—</option>
+                                <option v-for="g in gerenciasDestino" :key="g.id" :value="g.id">
+                                    {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
+                                </option>
+                            </select>
+                            <div v-if="transferErrors.gerencia_id" class="error">{{ transferErrors.gerencia_id[0] }}</div>
+                        </div>
+                        <div class="field" style="grid-column:1 / -1;">
+                            <label>Motivo</label>
+                            <textarea v-model="transferData.motivo" class="textarea" maxlength="500"
+                                      placeholder="Ej.: reorganización de estructura, baja de la gerencia anterior…" />
+                        </div>
+                    </div>
+                </form>
+                <template #footer>
+                    <button type="button" class="btn btn-secondary" @click="transferOpen = false">Cancelar</button>
+                    <button type="button" class="btn btn-primary" :disabled="transfiriendo || !transferData.gerencia_id"
+                            @click="transferir">
+                        {{ transfiriendo ? 'Transfiriendo…' : 'Transferir' }}
+                    </button>
+                </template>
+            </BaseModal>
         </div>
     </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { contratosEjecucionService } from '@/services/contratosEjecucion';
+import { listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtDate, fmtMoney, badgeForEstado } from '@/composables/useFormat';
 import IconLib from '@/components/IconLib.vue';
 import HistorialPanel from '@/components/HistorialPanel.vue';
+import BaseModal from '@/components/BaseModal.vue';
 import MovimientosPanel from '@/components/MovimientosPanel.vue';
 import Field from '@/components/DetailField.vue';
 
@@ -123,6 +160,48 @@ async function refrescar() {
         const r = await contratosEjecucionService.get(route.params.id, { mostrar_baja: '1' });
         c.value = r.data;
     } catch { /* no-op */ }
+}
+
+// ---- Transferencia a otra gerencia (sólo administrador de sistema) ----
+const transferOpen = ref(false);
+const transfiriendo = ref(false);
+const transferErrors = ref({});
+const transferData = reactive({ gerencia_id: null, motivo: '' });
+const gerencias = ref([]);
+
+const gerenciasDestino = computed(() =>
+    gerencias.value.filter(g => g.id !== c.value?.gerencia_id));
+
+async function abrirTransferencia() {
+    transferData.gerencia_id = null;
+    transferData.motivo = '';
+    transferErrors.value = {};
+    if (!gerencias.value.length) {
+        try { gerencias.value = await listAll('gerencias'); } catch { /* no-op */ }
+    }
+    transferOpen.value = true;
+}
+
+async function transferir() {
+    transferErrors.value = {};
+    transfiriendo.value = true;
+    try {
+        await contratosEjecucionService.transferir(route.params.id, {
+            gerencia_id: transferData.gerencia_id,
+            motivo: transferData.motivo || undefined,
+        });
+        toast.success('Contrato transferido.');
+        transferOpen.value = false;
+        await refrescar();
+    } catch (err) {
+        if (err?.response?.status === 422 && err.response.data?.errors) {
+            transferErrors.value = err.response.data.errors;
+        } else {
+            toast.error(extractError(err, 'No se pudo transferir el contrato.'));
+        }
+    } finally {
+        transfiriendo.value = false;
+    }
 }
 
 onMounted(async () => {

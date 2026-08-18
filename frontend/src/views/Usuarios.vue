@@ -23,9 +23,14 @@
                     <label>Rol</label>
                     <select v-model="state.rol" class="select" @change="reload">
                         <option value="">Todos</option>
-                        <option value="admin">admin</option>
-                        <option value="operador">operador</option>
-                        <option value="consulta">consulta</option>
+                        <option v-for="r in rolesAsignables" :key="r" :value="r">{{ ROL_LABELS[r] }}</option>
+                    </select>
+                </div>
+                <div v-if="auth.isAdminSistema" class="field">
+                    <label>Gerencia</label>
+                    <select v-model="state.gerencia_id" class="select" @change="reload">
+                        <option value="">Todas</option>
+                        <option v-for="g in gerencias" :key="g.id" :value="g.id">{{ g.nombre }}</option>
                     </select>
                 </div>
                 <div class="field">
@@ -58,6 +63,7 @@
                         <th>Nombre</th>
                         <th>E-mail</th>
                         <th>Rol</th>
+                        <th>Gerencia</th>
                         <th>Origen</th>
                         <th>Activo</th>
                         <th>Último login</th>
@@ -69,7 +75,8 @@
                         <td>{{ u.username }}</td>
                         <td>{{ u.display_name || '—' }}</td>
                         <td>{{ u.email || '—' }}</td>
-                        <td><span class="badge" :class="rolBadge(u.rol)">{{ u.rol }}</span></td>
+                        <td><span class="badge" :class="rolBadge(u.rol)">{{ ROL_LABELS[u.rol] || u.rol }}</span></td>
+                        <td>{{ u.gerencia?.nombre || '—' }}</td>
                         <td><span class="badge" :class="u.auth_source === 'local' ? 'badge-success' : 'badge-info'">{{ u.auth_source === 'local' ? 'Local' : 'LDAP' }}</span></td>
                         <td><span class="badge" :class="u.activo ? 'badge-success' : 'badge-default'">{{ u.activo ? 'Sí' : 'No' }}</span></td>
                         <td>{{ fmtDateTime(u.last_login) }}</td>
@@ -103,11 +110,23 @@
                     <div class="field">
                         <label>Rol <span style="color:var(--color-danger);">*</span></label>
                         <select v-model="formData.rol" class="select" required>
-                            <option value="admin">admin</option>
-                            <option value="operador">operador</option>
-                            <option value="consulta">consulta</option>
+                            <option v-for="r in rolesAsignables" :key="r" :value="r">{{ ROL_LABELS[r] }}</option>
                         </select>
                         <div v-if="errors.rol" class="error">{{ errors.rol[0] }}</div>
+                    </div>
+                    <div class="field" v-if="requiereGerencia">
+                        <label>Gerencia <span style="color:var(--color-danger);">*</span></label>
+                        <select v-if="auth.isAdminSistema" v-model="formData.gerencia_id" class="select" required>
+                            <option :value="null">—</option>
+                            <option v-for="g in gerencias" :key="g.id" :value="g.id">
+                                {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
+                            </option>
+                        </select>
+                        <input v-else class="input" :value="auth.gerencia || '—'" readonly />
+                        <div v-if="!auth.isAdminSistema" class="hint">
+                            Sólo puede dar de alta usuarios en su propia gerencia.
+                        </div>
+                        <div v-if="errors.gerencia_id" class="error">{{ errors.gerencia_id[0] }}</div>
                     </div>
                     <div class="field" v-if="!editing">
                         <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
@@ -190,6 +209,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { usuariosService } from '@/services/usuarios';
+import { listAll } from '@/services/catalogos';
+import { ROLES, ROL_LABELS, useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { debounce, fmtDateTime } from '@/composables/useFormat';
@@ -199,16 +220,26 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import IconLib from '@/components/IconLib.vue';
 
 const toast = useToast();
-const state = reactive({ search: '', rol: '', auth_source: '', activo: '', page: 1, per_page: 20 });
+const auth = useAuthStore();
+const state = reactive({ search: '', rol: '', gerencia_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
 const rows = ref([]);
 const total = ref(0);
+const gerencias = ref([]);
 const loading = ref(false);
 
 const onSearch = debounce(() => { state.page = 1; load(); }, 300);
 
+/**
+ * El administrador de sistema asigna cualquier rol; el de gerencia sólo puede
+ * dar de alta operadores, y siempre en su propia gerencia.
+ */
+const rolesAsignables = computed(() => auth.isAdminSistema
+    ? [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA]
+    : [ROLES.OPERADOR_GERENCIA]);
+
 function rolBadge(rol) {
-    if (rol === 'admin') return 'badge-warning';
-    if (rol === 'operador') return 'badge-info';
+    if (rol === ROLES.ADMIN_SISTEMA) return 'badge-warning';
+    if (rol === ROLES.ADMIN_GERENCIA) return 'badge-info';
     return 'badge-default';
 }
 
@@ -218,6 +249,7 @@ async function load() {
         const params = { page: state.page, per_page: state.per_page };
         if (state.search) params.search = state.search;
         if (state.rol) params.rol = state.rol;
+        if (state.gerencia_id) params.gerencia_id = state.gerencia_id;
         if (state.auth_source) params.auth_source = state.auth_source;
         if (state.activo !== '') params.activo = state.activo;
         const res = await usuariosService.list(params);
@@ -242,6 +274,8 @@ const saving = ref(false);
 
 const formTitle = computed(() => editing.value ? `Editar — ${editing.value.username}` : 'Nuevo usuario');
 const isLdapEdit = computed(() => !!editing.value && editing.value.auth_source === 'ldap');
+/** El administrador de sistema no está acotado a ninguna gerencia. */
+const requiereGerencia = computed(() => formData.rol !== ROLES.ADMIN_SISTEMA);
 
 function resetForm(values) {
     Object.keys(formData).forEach(k => delete formData[k]);
@@ -251,13 +285,26 @@ function resetForm(values) {
 
 function openNew() {
     editing.value = null;
-    resetForm({ username: '', display_name: '', email: '', rol: 'consulta', auth_source: 'local', activo: true, password: '', password_confirmation: '' });
+    resetForm({
+        username: '', display_name: '', email: '',
+        rol: ROLES.OPERADOR_GERENCIA,
+        gerencia_id: auth.isAdminSistema ? null : auth.gerenciaId,
+        auth_source: 'local', activo: true,
+        password: '', password_confirmation: '',
+    });
     formOpen.value = true;
 }
 
 function openEdit(u) {
     editing.value = u;
-    resetForm({ username: u.username, display_name: u.display_name || '', email: u.email || '', rol: u.rol, activo: !!u.activo });
+    resetForm({
+        username: u.username,
+        display_name: u.display_name || '',
+        email: u.email || '',
+        rol: u.rol,
+        gerencia_id: u.gerencia_id ?? null,
+        activo: !!u.activo,
+    });
     formOpen.value = true;
 }
 
@@ -267,6 +314,7 @@ async function save() {
     try {
         if (editing.value) {
             const payload = { rol: formData.rol, activo: formData.activo };
+            if (requiereGerencia.value) payload.gerencia_id = formData.gerencia_id;
             if (!isLdapEdit.value) {
                 payload.display_name = formData.display_name;
                 payload.email = formData.email;
@@ -282,6 +330,7 @@ async function save() {
                 auth_source: formData.auth_source,
                 activo: formData.activo,
             };
+            if (requiereGerencia.value) payload.gerencia_id = formData.gerencia_id;
             if (formData.auth_source === 'local') {
                 payload.password = formData.password;
                 payload.password_confirmation = formData.password_confirmation;
@@ -359,7 +408,12 @@ async function remove(u) {
     }
 }
 
-onMounted(load);
+onMounted(async () => {
+    if (auth.isAdminSistema) {
+        try { gerencias.value = await listAll('gerencias'); } catch { /* no-op */ }
+    }
+    load();
+});
 </script>
 
 <style scoped>

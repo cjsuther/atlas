@@ -2,13 +2,25 @@
     <BaseModal v-model="open" :title="title" size="large">
         <form @submit.prevent="submit">
             <div class="form-grid">
-                <!-- Tipo -->
+                <!-- Acción: qué originó el movimiento -->
+                <div class="field">
+                    <label>Acción *</label>
+                    <select v-model="data.accion" class="select" :disabled="isEdit" required>
+                        <option v-for="a in ACCIONES" :key="a.value" :value="a.value">{{ a.label }}</option>
+                    </select>
+                    <div class="hint">{{ ayudaAccion }}</div>
+                    <div v-if="errors.accion" class="error">{{ errors.accion[0] }}</div>
+                </div>
+
+                <!-- Tipo: signo del movimiento -->
                 <div class="field">
                     <label>Tipo *</label>
-                    <select v-model="data.tipo" class="select" :disabled="isEdit" required>
+                    <select v-model="data.tipo" class="select" :disabled="isEdit || tipoFijo" required>
                         <option value="ingreso">Ingreso</option>
                         <option value="gasto">Gasto</option>
                     </select>
+                    <div v-if="tipoFijo" class="hint">Los incentivos y la MCH se registran siempre como gasto.</div>
+                    <div v-if="errors.tipo" class="error">{{ errors.tipo[0] }}</div>
                 </div>
 
                 <!-- Expediente (mismo componente que en contratos) -->
@@ -18,16 +30,35 @@
                     <div v-if="errors.nro_expediente" class="error">{{ errors.nro_expediente[0] }}</div>
                 </div>
 
-                <!-- Cliente o Proveedor según tipo -->
-                <div v-if="data.tipo === 'gasto'" class="field">
+                <!-- Contraparte: depende de la acción. No siempre hay cliente o
+                     proveedor; a veces es otro contrato y a veces sólo un rubro. -->
+                <div v-if="contraparte === 'proveedor'" class="field">
                     <label>Proveedor *</label>
                     <input v-model="data.proveedor" class="input" required maxlength="300" />
                     <div v-if="errors.proveedor" class="error">{{ errors.proveedor[0] }}</div>
                 </div>
-                <div v-else class="field">
+                <div v-else-if="contraparte === 'cliente'" class="field">
                     <label>Cliente *</label>
                     <input v-model="data.cliente" class="input" required maxlength="300" />
                     <div v-if="errors.cliente" class="error">{{ errors.cliente[0] }}</div>
+                </div>
+                <div v-else-if="contraparte === 'contrato'" class="field">
+                    <label>Contrato contraparte *</label>
+                    <select v-model="data.contrato_contraparte_id" class="select" required>
+                        <option :value="null">—</option>
+                        <option v-for="c in contratosDestino" :key="c.id" :value="c.id">
+                            #{{ c.id }} · {{ c.nro_expediente }} — {{ c.nombre_proyecto }}
+                        </option>
+                    </select>
+                    <div class="hint">
+                        Se registra automáticamente la contrapartida en el otro contrato.
+                    </div>
+                    <div v-if="errors.contrato_contraparte_id" class="error">{{ errors.contrato_contraparte_id[0] }}</div>
+                </div>
+                <div v-else class="field">
+                    <label>Rubro *</label>
+                    <input v-model="data.rubro" class="input" required maxlength="200" />
+                    <div v-if="errors.rubro" class="error">{{ errors.rubro[0] }}</div>
                 </div>
 
                 <!-- Moneda -->
@@ -46,7 +77,6 @@
                         <input v-model.number="data.monto" type="number" step="0.01" min="0" class="input" required />
                         <div v-if="errors.monto" class="error">{{ errors.monto[0] }}</div>
                     </div>
-                    <div class="field"><!-- spacer --></div>
                 </template>
                 <template v-else>
                     <div class="field">
@@ -71,8 +101,8 @@
                     <div v-if="errors.objeto" class="error">{{ errors.objeto[0] }}</div>
                 </div>
 
-                <!-- Factura (solo ingresos) -->
-                <div v-if="data.tipo === 'ingreso'" class="field full">
+                <!-- Factura (sólo ingresos por factura) -->
+                <div v-if="admiteFactura" class="field full">
                     <label>Factura (opcional) · PDF / JPG / PNG, máx. 10 MB</label>
                     <div v-if="currentFactura && !eliminarFactura && !archivo"
                          style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
@@ -103,11 +133,31 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
 import { movimientosService } from '@/services/movimientos';
+import { contratosEjecucionService } from '@/services/contratosEjecucion';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtMoney } from '@/composables/useFormat';
 import BaseModal from './BaseModal.vue';
 import ExpedienteInput from './ExpedienteInput.vue';
+
+/**
+ * Acciones que pueden originar un movimiento de ejecución. Además de las
+ * facturas hay transferencias hacia otro contrato (de la misma o de otra
+ * gerencia) y pagos de incentivos o MCH (Mayor Carga Horaria).
+ */
+const ACCIONES = [
+    { value: 'factura',       label: 'Factura' },
+    { value: 'transferencia', label: 'Transferencia a otro contrato' },
+    { value: 'incentivo',     label: 'Pago de incentivos' },
+    { value: 'mch',           label: 'MCH (Mayor Carga Horaria)' },
+];
+
+const AYUDAS = {
+    factura:       'Solicitud o recepción de factura: la contraparte es el cliente o el proveedor.',
+    transferencia: 'Movimiento de fondos hacia o desde otro contrato.',
+    incentivo:     'Pago de incentivos imputado a un rubro.',
+    mch:           'Pago de Mayor Carga Horaria imputado a un rubro.',
+};
 
 const props = defineProps({
     contratoEjecucionId: { type: [Number, String], default: null },
@@ -121,23 +171,45 @@ const archivo = ref(null);
 const eliminarFactura = ref(false);
 const editingId = ref(null);
 const currentFactura = ref(null);
+const contratos = ref([]);
 
-const data = reactive({
+const VACIO = {
     tipo: 'ingreso',
+    accion: 'factura',
     nro_expediente: '',
     proveedor: '',
     cliente: '',
+    contrato_contraparte_id: null,
+    rubro: '',
     moneda: 'Peso',
     monto: null,
     monto_dolares: null,
     cotizacion: null,
     objeto: '',
-});
+};
+
+const data = reactive({ ...VACIO });
 
 const isEdit = computed(() => !!editingId.value);
-const title = computed(() => isEdit.value
-    ? `Editar ${data.tipo === 'gasto' ? 'gasto' : 'ingreso'}`
-    : `Nuevo ${data.tipo === 'gasto' ? 'gasto' : 'ingreso'}`);
+const ayudaAccion = computed(() => AYUDAS[data.accion] || '');
+/** Los incentivos y la MCH son siempre gastos. */
+const tipoFijo = computed(() => data.accion === 'incentivo' || data.accion === 'mch');
+const admiteFactura = computed(() => data.accion === 'factura' && data.tipo === 'ingreso');
+
+/** Campo de contraparte que corresponde a la acción y el tipo elegidos. */
+const contraparte = computed(() => {
+    if (data.accion === 'transferencia') return 'contrato';
+    if (data.accion === 'incentivo' || data.accion === 'mch') return 'rubro';
+    return data.tipo === 'ingreso' ? 'cliente' : 'proveedor';
+});
+
+const contratosDestino = computed(() =>
+    contratos.value.filter(c => String(c.id) !== String(props.contratoEjecucionId)));
+
+const title = computed(() => {
+    const accion = ACCIONES.find(a => a.value === data.accion)?.label || 'Movimiento';
+    return `${isEdit.value ? 'Editar' : 'Nuevo'} — ${accion}`;
+});
 
 const montoPesosCalc = computed(() => {
     const usd = Number(data.monto_dolares) || 0;
@@ -147,11 +219,21 @@ const montoPesosCalc = computed(() => {
 
 const toast = useToast();
 
-watch(() => data.tipo, (t) => {
-    // Al cambiar tipo, limpiar el campo que no aplica
-    if (t === 'gasto') data.cliente = '';
-    if (t === 'ingreso') data.proveedor = '';
+watch(() => data.accion, async (a) => {
+    if (a === 'incentivo' || a === 'mch') data.tipo = 'gasto';
+    if (a === 'transferencia' && !contratos.value.length) {
+        await cargarContratos();
+    }
 });
+
+// Al cambiar la contraparte se limpian los campos que dejaron de aplicar.
+watch(contraparte, (actual) => {
+    if (actual !== 'cliente')   data.cliente = '';
+    if (actual !== 'proveedor') data.proveedor = '';
+    if (actual !== 'rubro')     data.rubro = '';
+    if (actual !== 'contrato')  data.contrato_contraparte_id = null;
+});
+
 watch(() => data.moneda, (m) => {
     if (m === 'Peso') {
         data.monto_dolares = null;
@@ -161,32 +243,34 @@ watch(() => data.moneda, (m) => {
     }
 });
 
+async function cargarContratos() {
+    try {
+        const res = await contratosEjecucionService.list({ per_page: 200 });
+        contratos.value = res.data || [];
+    } catch (err) {
+        toast.error(extractError(err, 'No se pudieron cargar los contratos.'));
+    }
+}
+
 function reset(initial = {}) {
-    Object.assign(data, {
-        tipo: 'ingreso',
-        nro_expediente: '',
-        proveedor: '',
-        cliente: '',
-        moneda: 'Peso',
-        monto: null,
-        monto_dolares: null,
-        cotizacion: null,
-        objeto: '',
-    }, initial);
+    Object.assign(data, VACIO, initial);
     archivo.value = null;
     eliminarFactura.value = false;
     errors.value = {};
 }
 
-function show({ movimiento = null, tipo = 'ingreso' } = {}) {
+async function show({ movimiento = null, accion = 'factura', tipo = 'ingreso' } = {}) {
     if (movimiento) {
         editingId.value = movimiento.id;
         currentFactura.value = movimiento.has_factura ? (movimiento.factura_original_name || 'factura adjunta') : null;
         reset({
             tipo: movimiento.tipo,
+            accion: movimiento.accion || 'factura',
             nro_expediente: movimiento.nro_expediente,
             proveedor: movimiento.proveedor || '',
             cliente: movimiento.cliente || '',
+            contrato_contraparte_id: movimiento.contrato_contraparte_id ?? null,
+            rubro: movimiento.rubro || '',
             moneda: movimiento.moneda,
             monto: movimiento.monto != null ? Number(movimiento.monto) : null,
             monto_dolares: movimiento.monto_dolares != null ? Number(movimiento.monto_dolares) : null,
@@ -196,8 +280,13 @@ function show({ movimiento = null, tipo = 'ingreso' } = {}) {
     } else {
         editingId.value = null;
         currentFactura.value = null;
-        reset({ tipo });
+        reset({ accion, tipo: (accion === 'incentivo' || accion === 'mch') ? 'gasto' : tipo });
     }
+
+    if (data.accion === 'transferencia' && !contratos.value.length) {
+        await cargarContratos();
+    }
+
     open.value = true;
 }
 
@@ -245,3 +334,7 @@ async function submit() {
     }
 }
 </script>
+
+<style scoped>
+.hint { font-size: 12px; color: var(--color-muted, #888); margin-top: 4px; }
+</style>

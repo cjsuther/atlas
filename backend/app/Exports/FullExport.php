@@ -8,6 +8,8 @@ use App\Models\ContratoPrincipal;
 use App\Models\EjecucionMovimiento;
 use App\Models\EstadoEjecucion;
 use App\Models\EstadoPrincipal;
+use App\Models\Gerencia;
+use App\Models\GerenciaArea;
 use App\Models\HistorialCambio;
 use App\Models\Personal;
 use App\Models\Sector;
@@ -33,6 +35,8 @@ class FullExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
+            $this->gerenciasArea(),
+            $this->gerencias(),
             $this->tiposPrincipal(),
             $this->tiposEjecucion(),
             $this->estadosPrincipal(),
@@ -48,6 +52,39 @@ class FullExport implements WithMultipleSheets
             $this->movimientos(),
             $this->historial(),
         ];
+    }
+
+    // ---------- Estructura organizativa -------------------------------
+
+    private function gerenciasArea(): TableSheet
+    {
+        return new TableSheet(
+            'Gerencias de Area',
+            fn () => GerenciaArea::query()->withCount('gerencias')->orderBy('id'),
+            ['ID', 'Sigla', 'Nombre', 'Responsable', 'Activa', 'Gerencias'],
+            fn ($r) => [
+                $r->id, $r->sigla, $r->nombre, $r->responsable,
+                $r->activo ? 'Sí' : 'No', $r->gerencias_count,
+            ],
+        );
+    }
+
+    private function gerencias(): TableSheet
+    {
+        return new TableSheet(
+            'Gerencias',
+            fn () => Gerencia::query()
+                ->with('gerenciaArea:id,sigla,nombre')
+                ->withCount('contratos')
+                ->orderBy('id'),
+            ['ID', 'Gerencia de Área', 'Sigla', 'Nombre', 'Responsable', 'Activa', 'Contratos'],
+            fn ($r) => [
+                $r->id,
+                optional($r->gerenciaArea)->nombre,
+                $r->sigla, $r->nombre, $r->responsable,
+                $r->activo ? 'Sí' : 'No', $r->contratos_count,
+            ],
+        );
     }
 
     // ---------- Catálogos ---------------------------------------------
@@ -155,10 +192,12 @@ class FullExport implements WithMultipleSheets
     {
         return new TableSheet(
             'Usuarios',
-            UserRole::query()->orderBy('username'),
-            ['ID', 'Username', 'Nombre', 'Email', 'Rol', 'Activo', 'Último login'],
+            fn () => UserRole::query()->with('gerencia:id,nombre')->orderBy('username'),
+            ['ID', 'Username', 'Nombre', 'Email', 'Rol', 'Gerencia', 'Agrupación de saldos', 'Activo', 'Último login'],
             fn ($r) => [
                 $r->id, $r->username, $r->display_name, $r->email, $r->rol,
+                optional($r->gerencia)->nombre,
+                $r->saldos_agrupacion,
                 $r->activo ? 'Sí' : 'No',
                 optional($r->last_login)?->format('d/m/Y H:i'),
             ],
@@ -241,6 +280,8 @@ class FullExport implements WithMultipleSheets
                     'estado:id,nombre',
                     'tipoContrato:id,sigla,nombre',
                     'principal:id,nro_expediente,nombre_proyecto',
+                    'gerencia:id,gerencia_area_id,sigla,nombre',
+                    'gerencia.gerenciaArea:id,sigla,nombre',
                     'solicitante:solicitante_id,razon_social',
                     'uvt:uvt_id,siglas,nombre',
                     'utt:utt_id,denominacion,nombre,regimen',
@@ -251,8 +292,8 @@ class FullExport implements WithMultipleSheets
             [
                 'ID', 'Expediente', 'F. Apertura',
                 'Tipo', 'Proyecto', 'Descripción',
-                'Contrato Principal',
-                'Gerencia área', 'Gerencia',
+                'Contrato Principal (histórico)',
+                'Gerencia de Área', 'Gerencia',
                 'Solicitante', 'Resp. 1', 'Resp. 2',
                 'UTT', 'UVT', 'Estado', 'Cliente',
                 'F. Inicio', 'F. Vencimiento', 'F. Finalización',
@@ -272,8 +313,8 @@ class FullExport implements WithMultipleSheets
                 $r->nombre_proyecto,
                 $r->descripcion_objeto,
                 $r->principal ? "#{$r->principal->id} — " . $r->principal->nro_expediente : null,
-                $r->gerencia_area,
-                $r->gerencia,
+                optional(optional($r->gerencia)->gerenciaArea)->nombre,
+                optional($r->gerencia)->nombre,
                 optional($r->solicitante)->razon_social,
                 $r->resp1 ? trim($r->resp1->apellido . ', ' . $r->resp1->nombre) : null,
                 $r->resp2 ? trim($r->resp2->apellido . ', ' . $r->resp2->nombre) : null,
@@ -306,11 +347,15 @@ class FullExport implements WithMultipleSheets
         return new TableSheet(
             'Movimientos',
             fn () => EjecucionMovimiento::query()
-                ->with(['contratoEjecucion:id,nro_expediente'])
+                ->with([
+                    'contratoEjecucion:id,nro_expediente',
+                    'contratoContraparte:id,nro_expediente',
+                ])
                 ->orderBy('id'),
             [
-                'ID', 'Contrato Ejec. (expediente)', 'Tipo', 'Expediente',
-                'Proveedor', 'Cliente', 'Moneda',
+                'ID', 'Contrato (expediente)', 'Tipo', 'Acción', 'Expediente',
+                'Contraparte (tipo)', 'Contraparte',
+                'Proveedor', 'Cliente', 'Contrato contraparte', 'Rubro', 'Moneda',
                 'Monto (ARS)', 'Monto (USD)', 'Cotización',
                 'Objeto', 'Tiene factura', 'Nombre factura',
                 'Creado',
@@ -319,9 +364,14 @@ class FullExport implements WithMultipleSheets
                 $r->id,
                 optional($r->contratoEjecucion)->nro_expediente,
                 $r->tipo,
+                $r->accion,
                 $r->nro_expediente,
+                $r->contraparte_tipo,
+                $r->contraparte,
                 $r->proveedor,
                 $r->cliente,
+                optional($r->contratoContraparte)->nro_expediente,
+                $r->rubro,
                 $r->moneda,
                 $r->monto,
                 $r->monto_dolares,

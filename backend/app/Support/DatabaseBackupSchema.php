@@ -28,6 +28,8 @@ class DatabaseBackupSchema
             ['table' => 'solicitantes',            'pk' => 'solicitante_id', 'exclude' => []],
             ['table' => 'utt',                     'pk' => 'utt_id',         'exclude' => []],
             ['table' => 'uvt',                     'pk' => 'uvt_id',         'exclude' => []],
+            ['table' => 'gerencias_area',          'pk' => 'id',             'exclude' => []],
+            ['table' => 'gerencias',               'pk' => 'id',             'exclude' => []],
             ['table' => 'user_roles',              'pk' => 'id',             'exclude' => ['password']],
             ['table' => 'sector',                  'pk' => 'sector_id',      'exclude' => []],
             ['table' => 'personal',                'pk' => 'legajo',         'exclude' => []],
