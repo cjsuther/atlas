@@ -199,8 +199,10 @@ class PanelService
                     'clave'    => 'c-' . $c->id,
                     'tipo'     => 'contrato',
                     'id'       => (int) $c->id,
-                    'etiqueta' => "#{$c->id} — {$c->nro_expediente}",
-                    'detalle'  => $c->nombre_proyecto,
+                    // El proyecto es cómo se conoce al contrato; el expediente
+                    // queda debajo para poder identificarlo sin ambigüedad.
+                    'etiqueta' => $c->nombre_proyecto ?: $c->nro_expediente,
+                    'detalle'  => "#{$c->id} — {$c->nro_expediente}",
                 ] + $importes;
             }
         }
