@@ -33,13 +33,13 @@
             </div>
 
             <div class="tabs">
-                <button type="button" :class="['tab', { activa: tab === 'ejecucion' }]"
-                        @click="tab = 'ejecucion'">
-                    Ejecución e historial
-                </button>
                 <button type="button" :class="['tab', { activa: tab === 'detalle' }]"
                         @click="tab = 'detalle'">
                     Detalle
+                </button>
+                <button type="button" :class="['tab', { activa: tab === 'ejecucion' }]"
+                        @click="tab = 'ejecucion'">
+                    Ejecución e historial
                 </button>
             </div>
 
@@ -163,8 +163,8 @@ const toast = useToast();
 const c = ref(null);
 const loading = ref(true);
 
-// La ejecución es lo que más se consulta, así que abre primero.
-const tab = ref('ejecucion');
+// El detalle es la primera solapa, así que es la que abre.
+const tab = ref('detalle');
 
 function responsable(p) {
     if (!p) return '—';
