@@ -30,7 +30,6 @@ class ContratoEjecucionRequest extends FormRequest
             'solicitante_id'             => ['nullable', 'integer', 'exists:solicitantes,solicitante_id'],
             'resp1_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
             'resp2_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
-            'utt_id'                     => ['nullable', 'integer', 'exists:utt,utt_id'],
             'observaciones'              => ['nullable', 'string'],
             'uvt_id'                     => ['nullable', 'integer', 'exists:uvt,uvt_id'],
             'cliente'                    => ['nullable', 'string', 'max:300'],

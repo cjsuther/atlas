@@ -78,15 +78,6 @@
                         </option>
                     </select>
                 </div>
-                <div class="field">
-                    <label>UTT</label>
-                    <select v-model="data.utt_id" class="select">
-                        <option :value="null">—</option>
-                        <option v-for="u in utts" :key="u.utt_id" :value="u.utt_id">
-                            {{ u.denominacion }} — {{ u.nombre }}
-                        </option>
-                    </select>
-                </div>
 
                 <div class="field">
                     <label>UVT</label>
@@ -234,7 +225,6 @@ const data = reactive({
     solicitante_id: null,
     resp1_id: null,
     resp2_id: null,
-    utt_id: null,
     estado_id: '',
     observaciones: '',
     uvt_id: null,
@@ -254,7 +244,6 @@ const data = reactive({
 const estados = ref([]);
 const tipos = ref([]);
 const solicitantes = ref([]);
-const utts = ref([]);
 const uvts = ref([]);
 const personal = ref([]);
 const sectores = ref([]);
@@ -281,18 +270,16 @@ watch(areaSeleccionada, () => {
 watch(() => data.moneda, (v) => { if (v === 'Peso') data.cotizacion = null; });
 
 async function loadCatalogs() {
-    const [e, t, s, u1, u2, p, sec] = await Promise.all([
+    const [e, t, s, u, p, sec] = await Promise.all([
         listAll('estados-ejecucion'),
         listAll('tipos-contrato-ejecucion'),
         listAll('solicitantes'),
-        listAll('utt'),
         listAll('uvt'),
         listAll('personal'),
         listAll('sectores'),
     ]);
     estados.value = e; tipos.value = t; solicitantes.value = s;
-    utts.value = u1; uvts.value = u2; personal.value = p;
-    sectores.value = sec;
+    uvts.value = u; personal.value = p; sectores.value = sec;
 }
 
 async function loadContrato() {

@@ -26,7 +26,6 @@ class DatabaseBackupSchema
             ['table' => 'estado_principal',        'pk' => 'id',             'exclude' => []],
             ['table' => 'estado_ejecucion',        'pk' => 'id',             'exclude' => []],
             ['table' => 'solicitantes',            'pk' => 'solicitante_id', 'exclude' => []],
-            ['table' => 'utt',                     'pk' => 'utt_id',         'exclude' => []],
             ['table' => 'uvt',                     'pk' => 'uvt_id',         'exclude' => []],
             ['table' => 'sector',                  'pk' => 'sector_id',      'exclude' => []],
             ['table' => 'user_roles',              'pk' => 'id',             'exclude' => ['password']],

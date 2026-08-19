@@ -442,7 +442,7 @@ class PanelService
             'moneda_base' => $filters['moneda_base'] ?? 'Peso',
             'contratos'   => collect(array_values($porUvt))
                 ->map(fn ($r) => $this->cerrarFila($r))
-                ->sortByDesc('cantidad')->values(),
+                ->sortByDesc('saldo')->values(),
         ];
     }
 
@@ -476,9 +476,9 @@ class PanelService
         return [
             'moneda_base'    => $filters['moneda_base'] ?? 'Peso',
             'sectores'       => collect(array_values($porSector))
-                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('cantidad')->values(),
+                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('saldo')->values(),
             'gerencias_area' => collect(array_values($porArea))
-                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('cantidad')->values(),
+                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('saldo')->values(),
         ];
     }
 

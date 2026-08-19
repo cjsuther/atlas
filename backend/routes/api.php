@@ -13,7 +13,6 @@ use App\Http\Controllers\SectorController;
 use App\Http\Controllers\SolicitanteController;
 use App\Http\Controllers\TipoContratoEjecucionController;
 use App\Http\Controllers\UserRoleController;
-use App\Http\Controllers\UttController;
 use App\Http\Controllers\UvtController;
 use Illuminate\Support\Facades\Route;
 
@@ -127,7 +126,6 @@ Route::middleware('auth:sanctum')->group(function () {
         'estados-ejecucion'        => EstadoEjecucionController::class,
         'solicitantes'             => SolicitanteController::class,
         'sectores'                 => SectorController::class,
-        'utt'                      => UttController::class,
         'uvt'                      => UvtController::class,
         'personal'                 => PersonalController::class,
     ] as $slug => $controller) {

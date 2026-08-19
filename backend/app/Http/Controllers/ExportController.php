@@ -8,10 +8,13 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExportController extends Controller
 {
-    /** GET /api/export/excel — descarga todas las tablas en un único Excel multi-solapa. */
-    public function full(): BinaryFileResponse
+    /**
+     * GET /api/export/excel — descarga en un único Excel multi-solapa lo que el
+     * usuario puede ver. El recorte por Gerencia de Área lo aplica FullExport.
+     */
+    public function full(FullExport $export): BinaryFileResponse
     {
         $filename = 'atlas-export-' . now()->format('Ymd-His') . '.xlsx';
-        return Excel::download(new FullExport(), $filename);
+        return Excel::download($export, $filename);
     }
 }

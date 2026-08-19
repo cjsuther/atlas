@@ -202,28 +202,28 @@
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por Gerencia de Área
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · contratos y saldo
+                        · saldo y cantidad de contratos
                     </span>
                 </h4>
-                <BarChart :rows="rowsPorArea" />
+                <BarChart :rows="rowsPorArea" money />
             </div>
             <div class="card">
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por Subsector
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · contratos y saldo
+                        · saldo y cantidad de contratos
                     </span>
                 </h4>
-                <BarChart :rows="rowsPorSector" />
+                <BarChart :rows="rowsPorSector" money />
             </div>
             <div class="card">
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por UVT
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · contratos y saldo
+                        · saldo y cantidad de contratos
                     </span>
                 </h4>
-                <BarChart :rows="rowsPorUvt" />
+                <BarChart :rows="rowsPorUvt" money />
             </div>
         </div>
 
@@ -471,13 +471,15 @@ function pctOrDash(v) {
     return `${v}%`;
 }
 
-/** Cada fila de la distribución muestra la cantidad y, al lado, el saldo. */
+/**
+ * La barra se dimensiona por el saldo, que es lo que interesa comparar entre
+ * gerencias; la cantidad de contratos acompaña al costado.
+ */
 function conImporte(filas, etiqueta) {
     return (filas || []).map(r => ({
         label: etiqueta(r) || '—',
-        value: Number(r.cantidad) || 0,
-        extra: fmtMoney(r.saldo),
-        extraNegativo: Number(r.saldo) < 0,
+        value: Number(r.saldo) || 0,
+        extra: `${fmtInt(r.cantidad)} contr.`,
     }));
 }
 

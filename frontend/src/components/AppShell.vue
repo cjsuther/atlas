@@ -87,7 +87,6 @@ const NAV_SECTIONS = [
             { label: 'Tipos de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
             { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: TODOS },
             { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: TODOS },
-            { label: 'UTTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'utt' } }, roles: TODOS },
             { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: TODOS },
             { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } }, roles: TODOS },
         ],

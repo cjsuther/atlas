@@ -44,7 +44,6 @@
                         <Field label="F. Apertura" :value="fmtDate(c.fecha_apertura_expediente)" />
                         <Field label="Tipo" :value="c.tipo_contrato?.sigla + ' — ' + c.tipo_contrato?.nombre" />
                         <Field label="Estado" :value="c.estado?.nombre" />
-                        <Field label="UTT" :value="c.utt ? `${c.utt.denominacion} — ${c.utt.nombre}` : '—'" />
                     </div>
                 </div>
 

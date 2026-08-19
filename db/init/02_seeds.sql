@@ -47,20 +47,6 @@ INSERT INTO estado_ejecucion (id, nombre, descripcion) VALUES
 ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), descripcion = VALUES(descripcion);
 
 -- ---------------------------------------------------------------------
--- UTTs (con régimen)
--- ---------------------------------------------------------------------
-INSERT INTO utt (denominacion, nombre, regimen) VALUES
-  ('CAE',       'Centro Atómico Ezeiza',                                            'ambos'),
-  ('CAC',       'Centro Atómico Constituyentes',                                    'ambos'),
-  ('CAB',       'Centro Atómico Bariloche',                                         'ambos'),
-  ('UPESN',     'Unidad de Proyectos Especiales de Suministros Nucleares',          '160'),
-  ('CNEA-NASA', 'Convenio CNEA-NA S.A.',                                            '317'),
-  ('PNGRR',     'Programa Nacional de Gestión de Residuos Radioactivos',            '160'),
-  ('PIECA II',  'Proyecto Ingeniería de Elementos Combustibles para Atucha II',     '160'),
-  ('RRR ANSTO', 'RRR ANSTO',                                                        '317')
-ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), regimen = VALUES(regimen);
-
--- ---------------------------------------------------------------------
 -- UVTs
 -- ---------------------------------------------------------------------
 INSERT INTO uvt (siglas, nombre) VALUES

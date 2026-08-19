@@ -78,27 +78,6 @@ export const ENTITY_DEFS = {
             { name: 'ubicacion',      label: 'Ubicación',   type: 'text', max: 200 },
         ],
     },
-    'utt': {
-        title: 'UTTs',
-        endpoint: 'utt',
-        keyField: 'utt_id',
-        columns: [
-            { key: 'utt_id',       label: 'ID' },
-            { key: 'denominacion', label: 'Sigla' },
-            { key: 'nombre',       label: 'Nombre' },
-            { key: 'regimen',      label: 'Régimen' },
-        ],
-        formFields: [
-            { name: 'denominacion', label: 'Sigla',   type: 'text', required: true, max: 50 },
-            { name: 'nombre',       label: 'Nombre',  type: 'text', required: true, max: 300 },
-            { name: 'regimen',      label: 'Régimen', type: 'select', options: [
-                { value: '',      label: '—' },
-                { value: '160',   label: '160' },
-                { value: '317',   label: '317' },
-                { value: 'ambos', label: 'Ambos' },
-            ] },
-        ],
-    },
     'uvt': {
         title: 'UVTs',
         endpoint: 'uvt',

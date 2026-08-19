@@ -575,8 +575,8 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
 .bar-chart { display: flex; flex-direction: column; gap: 6px; }
 .bar-chart .row {
     display: grid;
-    /* La cuarta columna es opcional: sólo aparece si la fila trae importe. */
-    grid-template-columns: minmax(140px, 28%) 1fr 70px auto;
+    /* La cuarta columna es opcional: sólo aparece si la fila trae un dato extra. */
+    grid-template-columns: minmax(140px, 28%) 1fr auto auto;
     gap: 10px;
     align-items: center;
     font-size: 13px;
@@ -599,10 +599,15 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
     transition: width 0.25s;
 }
 .bar-chart .row .count {
+    min-width: 70px;
     text-align: right;
     font-weight: 600;
     color: var(--color-primary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
+/* Un importe ocupa bastante más que un conteo. */
+.bar-chart.money .row .count { min-width: 140px; }
 
 /* Backdrop drawer mobile */
 .sidebar-backdrop {

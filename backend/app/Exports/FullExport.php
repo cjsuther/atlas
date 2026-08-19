@@ -15,14 +15,19 @@ use App\Models\Solicitante;
 use App\Models\TipoContratoEjecucion;
 use App\Models\TipoContratoPrincipal;
 use App\Models\UserRole;
-use App\Models\Utt;
 use App\Models\Uvt;
+use App\Services\AccessScopeService;
 use App\Support\SectorTree;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 /**
- * Export consolidado de todas las tablas del sistema.
+ * Export consolidado de las tablas del sistema.
  * Cada tabla se exporta como una solapa separada del mismo archivo.
+ *
+ * El archivo respeta el alcance de quien lo pide: un usuario de gerencia se
+ * lleva únicamente los contratos de su Gerencia de Área, sus movimientos y su
+ * historial. La información reservada no sale de la Gerencia de Área tampoco
+ * por esta vía.
  *
  * Convenciones:
  *   - Se omiten registros con deleted_at (baja lógica).
@@ -31,24 +36,55 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
  */
 class FullExport implements WithMultipleSheets
 {
+    public function __construct(
+        protected AccessScopeService $scope,
+        protected SectorTree $arbol,
+    ) {
+    }
+
     public function sheets(): array
     {
-        return [
-            $this->tiposPrincipal(),
+        $hojas = [
             $this->tiposEjecucion(),
-            $this->estadosPrincipal(),
             $this->estadosEjecucion(),
             $this->solicitantes(),
             $this->sectores(),
-            $this->utts(),
             $this->uvts(),
             $this->personal(),
-            $this->usuarios(),
-            $this->contratosPrincipal(),
-            $this->contratosEjecucion(),
-            $this->movimientos(),
-            $this->historial(),
         ];
+
+        // Los usuarios sólo los ve quien puede administrarlos, y acotados a su
+        // propio alcance.
+        if ($this->scope->usuario()?->puedeAdministrarUsuarios()) {
+            $hojas[] = $this->usuarios();
+        }
+
+        // Los contratos principales son un módulo retirado: quedan para el
+        // administrador de sistema, que es el único sin recorte.
+        if ($this->scope->usuario()?->isAdminSistema()) {
+            $hojas[] = $this->tiposPrincipal();
+            $hojas[] = $this->estadosPrincipal();
+            $hojas[] = $this->contratosPrincipal();
+        }
+
+        $hojas[] = $this->contratosEjecucion();
+        $hojas[] = $this->movimientos();
+        $hojas[] = $this->historial();
+
+        return $hojas;
+    }
+
+    /**
+     * Ids de los contratos que el usuario puede ver. Se calcula una sola vez
+     * porque lo usan las solapas de movimientos e historial.
+     *
+     * @return array<int>
+     */
+    private function contratosVisibles(): array
+    {
+        return $this->scope
+            ->aplicarAContratos(ContratoEjecucion::query())
+            ->pluck('id')->all();
     }
 
     // ---------- Catálogos ---------------------------------------------
@@ -110,7 +146,11 @@ class FullExport implements WithMultipleSheets
     {
         return new TableSheet(
             'Sectores',
-            fn () => Sector::query()->with('dependencia:sector_id,nombre')->orderBy('sector_id'),
+            function () {
+                $q = Sector::query()->with('dependencia:sector_id,nombre')->orderBy('sector_id');
+                $rama = $this->scope->sectoresVisibles();
+                return $rama === null ? $q : $q->whereIn('sector_id', $rama ?: [0]);
+            },
             ['ID', 'Nombre', 'Depende de', 'Gerencia de Área', 'Responsable', 'Web', 'Ubicación'],
             fn ($r) => [
                 $r->sector_id, $r->nombre,
@@ -118,16 +158,6 @@ class FullExport implements WithMultipleSheets
                 $r->es_gerencia_area ? 'Sí (es una)' : app(SectorTree::class)->nombre($r->gerenciaAreaId()),
                 $r->responsable, $r->web, $r->ubicacion,
             ],
-        );
-    }
-
-    private function utts(): TableSheet
-    {
-        return new TableSheet(
-            'UTT',
-            Utt::query()->orderBy('utt_id'),
-            ['ID', 'Sigla', 'Nombre', 'Régimen'],
-            fn ($r) => [$r->utt_id, $r->denominacion, $r->nombre, $r->regimen],
         );
     }
 
@@ -158,7 +188,14 @@ class FullExport implements WithMultipleSheets
     {
         return new TableSheet(
             'Usuarios',
-            fn () => UserRole::query()->with('gerenciaArea:sector_id,nombre')->orderBy('username'),
+            function () {
+                $q = UserRole::query()->with('gerenciaArea:sector_id,nombre')->orderBy('username');
+                $usuario = $this->scope->usuario();
+                if ($usuario && !$usuario->isAdminSistema()) {
+                    $q->where('sector_id', $usuario->sector_id);
+                }
+                return $q;
+            },
             ['ID', 'Username', 'Nombre', 'Email', 'Rol', 'Gerencia de Área', 'Agrupación de saldos', 'Activo', 'Último login'],
             fn ($r) => [
                 $r->id, $r->username, $r->display_name, $r->email, $r->rol,
@@ -182,7 +219,6 @@ class FullExport implements WithMultipleSheets
                     'tipoContrato:id,sigla,nombre',
                     'solicitante:solicitante_id,razon_social',
                     'uvt:uvt_id,siglas,nombre',
-                    'utt:utt_id,denominacion,nombre,regimen',
                     'resp1:legajo,apellido,nombre',
                     'resp2:legajo,apellido,nombre',
                 ])
@@ -192,7 +228,7 @@ class FullExport implements WithMultipleSheets
                 'Tipo', 'Proyecto', 'Descripción',
                 'Gerencia área', 'Gerencia',
                 'Solicitante', 'Resp. 1', 'Resp. 2',
-                'UTT', 'UVT', 'Estado', 'Cliente',
+                'UVT', 'Estado', 'Cliente',
                 'F. Inicio', 'F. Vencimiento', 'F. Finalización',
                 'Duración (m)', 'Atraso (m)',
                 'Acta finalización', 'Prórroga', 'Renov. autom.',
@@ -214,7 +250,6 @@ class FullExport implements WithMultipleSheets
                 optional($r->solicitante)->razon_social,
                 $r->resp1 ? trim($r->resp1->apellido . ', ' . $r->resp1->nombre) : null,
                 $r->resp2 ? trim($r->resp2->apellido . ', ' . $r->resp2->nombre) : null,
-                optional($r->utt)->denominacion,
                 optional($r->uvt)->siglas,
                 optional($r->estado)->nombre,
                 $r->cliente,
@@ -241,7 +276,7 @@ class FullExport implements WithMultipleSheets
     {
         return new TableSheet(
             'Contratos Ejecucion',
-            fn () => ContratoEjecucion::query()
+            fn () => $this->scope->aplicarAContratos(ContratoEjecucion::query())
                 ->with([
                     'estado:id,nombre',
                     'tipoContrato:id,sigla,nombre',
@@ -250,7 +285,6 @@ class FullExport implements WithMultipleSheets
                     'sector.dependencia:sector_id,nombre',
                     'solicitante:solicitante_id,razon_social',
                     'uvt:uvt_id,siglas,nombre',
-                    'utt:utt_id,denominacion,nombre,regimen',
                     'resp1:legajo,apellido,nombre',
                     'resp2:legajo,apellido,nombre',
                 ])
@@ -261,7 +295,7 @@ class FullExport implements WithMultipleSheets
                 'Contrato Principal (histórico)',
                 'Gerencia de Área', 'Sector',
                 'Solicitante', 'Resp. 1', 'Resp. 2',
-                'UTT', 'UVT', 'Estado', 'Cliente',
+                'UVT', 'Estado', 'Cliente',
                 'F. Inicio', 'F. Vencimiento', 'F. Finalización',
                 'Duración (m)', 'Atraso (m)',
                 'Acta finalización', 'Prórroga', 'Renov. autom.',
@@ -284,7 +318,6 @@ class FullExport implements WithMultipleSheets
                 optional($r->solicitante)->razon_social,
                 $r->resp1 ? trim($r->resp1->apellido . ', ' . $r->resp1->nombre) : null,
                 $r->resp2 ? trim($r->resp2->apellido . ', ' . $r->resp2->nombre) : null,
-                optional($r->utt)->denominacion,
                 optional($r->uvt)->siglas,
                 optional($r->estado)->nombre,
                 $r->cliente,
@@ -313,6 +346,7 @@ class FullExport implements WithMultipleSheets
         return new TableSheet(
             'Movimientos',
             fn () => EjecucionMovimiento::query()
+                ->whereIn('contrato_ejecucion_id', $this->contratosVisibles())
                 ->with([
                     'contratoEjecucion:id,nro_expediente',
                     'contratoContraparte:id,nro_expediente',
@@ -354,7 +388,24 @@ class FullExport implements WithMultipleSheets
     {
         return new TableSheet(
             'Historial',
-            HistorialCambio::query()->orderBy('fecha', 'desc'),
+            function () {
+                $q = HistorialCambio::query()->orderBy('fecha', 'desc');
+                if ($this->scope->usuario()?->veTodo()) {
+                    return $q;
+                }
+                // El historial es tan reservado como el contrato al que
+                // pertenece: se limita a los que el usuario puede ver.
+                $contratos = $this->contratosVisibles() ?: [0];
+                return $q->where(function ($w) use ($contratos) {
+                    $w->where(function ($x) use ($contratos) {
+                        $x->where('tabla', 'contratos_ejecucion')->whereIn('registro_id', $contratos);
+                    })->orWhere(function ($x) use ($contratos) {
+                        $x->where('tabla', 'ejecucion_movimientos')
+                          ->whereIn('registro_id', EjecucionMovimiento::withTrashed()
+                              ->whereIn('contrato_ejecucion_id', $contratos)->select('id'));
+                    });
+                });
+            },
             ['ID', 'Tabla', 'Registro ID', 'Tipo cambio', 'Campo',
              'Valor anterior', 'Valor nuevo', 'Usuario', 'Fecha'],
             fn ($r) => [

@@ -33,7 +33,6 @@ class ContratoPrincipal extends Model
         'solicitante_id',
         'resp1_id',
         'resp2_id',
-        'utt_id',
         'estado_id',
         'observaciones',
         'uvt_id',
@@ -85,11 +84,6 @@ class ContratoPrincipal extends Model
     public function uvt()
     {
         return $this->belongsTo(Uvt::class, 'uvt_id', 'uvt_id');
-    }
-
-    public function utt()
-    {
-        return $this->belongsTo(Utt::class, 'utt_id', 'utt_id');
     }
 
     public function resp1()

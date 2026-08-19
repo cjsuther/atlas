@@ -40,7 +40,6 @@ class ContratoEjecucionService
             'sector.dependencia:sector_id,nombre',
             'solicitante:solicitante_id,razon_social',
             'uvt:uvt_id,siglas,nombre',
-            'utt:utt_id,denominacion,nombre,regimen',
             'resp1:legajo,apellido,nombre',
             'resp2:legajo,apellido,nombre',
         ])
@@ -68,9 +67,6 @@ class ContratoEjecucionService
         }
         if (!empty($filters['uvt_id'])) {
             $q->where('uvt_id', (int) $filters['uvt_id']);
-        }
-        if (!empty($filters['utt_id'])) {
-            $q->where('utt_id', (int) $filters['utt_id']);
         }
         if (!empty($filters['solicitante_id'])) {
             $q->where('solicitante_id', (int) $filters['solicitante_id']);
@@ -131,7 +127,7 @@ class ContratoEjecucionService
         $q = ContratoEjecucion::query()
             ->select('contratos_ejecucion.*')
             ->with([
-                'estado', 'tipoContrato', 'sector.dependencia', 'solicitante', 'uvt', 'utt',
+                'estado', 'tipoContrato', 'sector.dependencia', 'solicitante', 'uvt',
                 'resp1', 'resp2',
             ])
             ->addSelect([

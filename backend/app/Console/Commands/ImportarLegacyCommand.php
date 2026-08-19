@@ -34,7 +34,6 @@ class ImportarLegacyCommand extends Command
         'estado_principal'        => 'id',
         'estado_ejecucion'        => 'id',
         'solicitantes'            => 'solicitante_id',
-        'utt'                     => 'utt_id',
         'uvt'                     => 'uvt_id',
         'sector'                  => 'sector_id',
         'personal'                => 'legajo',

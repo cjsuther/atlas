@@ -7,7 +7,6 @@
 --   * Se separa la tabla `contratos` en `contratos_principal` y `contratos_ejecucion`.
 --   * Se separan tipos y estados en tablas distintas para principal y ejecución.
 --   * Se incorpora `historial_cambios` (auditoría obligatoria).
---   * Se agrega `regimen` a `utt`.
 --   * Toda baja es lógica (`deleted_at`).
 --
 -- Cambios v3 (CAMBIOS SOLICITADOS AL SISTEMA ATLAS):
@@ -101,17 +100,6 @@ CREATE TABLE IF NOT EXISTS sector (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
--- Tabla: utt (con régimen 160/317/ambos)
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS utt (
-  utt_id       INT AUTO_INCREMENT PRIMARY KEY,
-  denominacion VARCHAR(50)  NOT NULL,
-  nombre       VARCHAR(300) NOT NULL,
-  regimen      VARCHAR(20)  NULL,    -- '160', '317', 'ambos'
-  UNIQUE KEY uq_denom (denominacion)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------------------------------------------------------------------
 -- Tabla: uvt
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS uvt (
@@ -188,7 +176,6 @@ CREATE TABLE IF NOT EXISTS contratos_principal (
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,
-  utt_id                      INT          NULL,
   estado_id                   INT          NOT NULL,
   observaciones               TEXT         NULL,
   uvt_id                      INT          NULL,
@@ -227,9 +214,6 @@ CREATE TABLE IF NOT EXISTS contratos_principal (
   CONSTRAINT fk_cp_uvt
     FOREIGN KEY (uvt_id) REFERENCES uvt(uvt_id)
     ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT fk_cp_utt
-    FOREIGN KEY (utt_id) REFERENCES utt(utt_id)
-    ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_cp_resp1
     FOREIGN KEY (resp1_id) REFERENCES personal(legajo)
     ON DELETE SET NULL ON UPDATE CASCADE,
@@ -258,7 +242,6 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,
-  utt_id                      INT          NULL,
   estado_id                   INT          NOT NULL,
   observaciones               TEXT         NULL,
   uvt_id                      INT          NULL,
@@ -305,9 +288,6 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_ce_uvt
     FOREIGN KEY (uvt_id) REFERENCES uvt(uvt_id)
-    ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT fk_ce_utt
-    FOREIGN KEY (utt_id) REFERENCES utt(utt_id)
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_ce_resp1
     FOREIGN KEY (resp1_id) REFERENCES personal(legajo)
