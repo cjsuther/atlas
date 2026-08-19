@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -21,8 +22,7 @@ class ContratoEjecucion extends Model
         'nombre_proyecto',
         'descripcion_objeto',
         'contrato_principal_id',
-        'gerencia_id',
-        'sector_detalle',
+        'sector_id',
         'solicitante_id',
         'resp1_id',
         'resp2_id',
@@ -59,6 +59,7 @@ class ContratoEjecucion extends Model
     protected $appends = [
         'duracion_meses', 'atraso_meses',
         'monto_ejecutado_ingresos', 'monto_ejecutado_gastos',
+        'gerencia_area',
     ];
 
     // ----------------------------------------------------------------------
@@ -79,22 +80,10 @@ class ContratoEjecucion extends Model
         return $this->belongsTo(ContratoPrincipal::class, 'contrato_principal_id', 'id');
     }
 
-    public function gerencia()
+    /** Sector del que cuelga el contrato: normalmente un subsector. */
+    public function sector()
     {
-        return $this->belongsTo(Gerencia::class, 'gerencia_id', 'id');
-    }
-
-    /** Atajo a la Gerencia de Área a través de la gerencia del contrato. */
-    public function gerenciaArea()
-    {
-        return $this->hasOneThrough(
-            GerenciaArea::class,
-            Gerencia::class,
-            'id',
-            'id',
-            'gerencia_id',
-            'gerencia_area_id'
-        );
+        return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
     }
 
     public function solicitante()
@@ -130,6 +119,29 @@ class ContratoEjecucion extends Model
     // ----------------------------------------------------------------------
     // Campos calculados
     // ----------------------------------------------------------------------
+
+    /**
+     * Gerencia de Área del contrato: el ancestro raíz de su sector. Se expone
+     * como atributo porque toda la lectura del sistema —alcance, panel,
+     * exportaciones— se apoya en ella.
+     *
+     * @return array{sector_id: int, nombre: string}|null
+     */
+    public function getGerenciaAreaAttribute(): ?array
+    {
+        if ($this->sector_id === null) {
+            return null;
+        }
+
+        $arbol = app(SectorTree::class);
+        $raiz  = $arbol->raizDe((int) $this->sector_id);
+        if ($raiz === null) {
+            return null;
+        }
+
+        return ['sector_id' => $raiz, 'nombre' => (string) $arbol->nombre($raiz)];
+    }
+
     public function getDuracionMesesAttribute(): ?float
     {
         if (!$this->fecha_inicio || !$this->fecha_vencimiento) return null;

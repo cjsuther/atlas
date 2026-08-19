@@ -6,8 +6,8 @@ const USER_KEY  = 'atlas_user';
 /**
  * Roles y alcance (ver backend/app/Models/UserRole.php):
  *   admin_sistema     : todas las gerencias de área, gerencias y contratos.
- *   admin_gerencia    : contratos y usuarios operadores de su gerencia.
- *   operador_gerencia : contratos de su gerencia.
+ *   admin_gerencia    : contratos y operadores de su Gerencia de Área.
+ *   operador_gerencia : contratos de su Gerencia de Área.
  */
 export const ROLES = {
     ADMIN_SISTEMA:     'admin_sistema',
@@ -23,7 +23,7 @@ export const ROL_LABELS = {
 
 export const AGRUPACIONES_SALDO = [
     { value: 'gerencia_area', label: 'Por Gerencia de Área' },
-    { value: 'gerencia',      label: 'Por Gerencia' },
+    { value: 'subsector',     label: 'Por Subsector' },
     { value: 'contrato',      label: 'Por Contrato' },
 ];
 
@@ -48,11 +48,10 @@ export const useAuthStore = defineStore('auth', {
         canAdminUsuarios: (s) => s.user?.rol === ROLES.ADMIN_SISTEMA
                               || s.user?.rol === ROLES.ADMIN_GERENCIA,
 
-        gerenciaId:   (s) => s.user?.gerencia_id ?? null,
-        gerencia:     (s) => s.user?.gerencia ?? null,
+        sectorId:     (s) => s.user?.sector_id ?? null,
         gerenciaArea: (s) => s.user?.gerencia_area ?? null,
         rolLabel:     (s) => ROL_LABELS[s.user?.rol] ?? (s.user?.rol || ''),
-        saldosAgrupacion: (s) => s.user?.saldos_agrupacion || 'gerencia',
+        saldosAgrupacion: (s) => s.user?.saldos_agrupacion || 'gerencia_area',
 
         hasRole: (s) => (...roles) => roles.includes(s.user?.rol),
     },

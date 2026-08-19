@@ -39,14 +39,16 @@
                     <label>Gerencia de Área</label>
                     <select v-model="filters.gerencia_area_id" class="select">
                         <option value="">Todas</option>
-                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
                     </select>
                 </div>
                 <div class="field">
-                    <label>Gerencia</label>
-                    <select v-model="filters.gerencia_id" class="select">
-                        <option value="">Todas</option>
-                        <option v-for="g in gerenciasFiltradas" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+                    <label>Subsector</label>
+                    <select v-model="filters.sector_id" class="select">
+                        <option value="">Todos</option>
+                        <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
+                            {{ g.nombre }}
+                        </option>
                     </select>
                 </div>
             </div>
@@ -89,10 +91,16 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="f in saldos?.filas || []" :key="f.clave">
+                    <tr v-for="f in saldos?.filas || []" :key="f.clave"
+                        :class="['saldo-row', `nivel-${f.nivel}`]">
                         <td>
-                            <div>{{ f.etiqueta }}</div>
-                            <div v-if="f.detalle" style="font-size:11px;color:var(--color-muted);">{{ f.detalle }}</div>
+                            <div :style="{ paddingLeft: `${f.nivel * 20}px` }">
+                                <span v-if="f.nivel > 0" class="rama">└</span>
+                                <span :class="{ raiz: f.nivel === 0 }">{{ f.etiqueta }}</span>
+                            </div>
+                            <div v-if="f.detalle"
+                                 :style="{ paddingLeft: `${f.nivel * 20 + (f.nivel > 0 ? 14 : 0)}px` }"
+                                 style="font-size:11px;color:var(--color-muted);">{{ f.detalle }}</div>
                         </td>
                         <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.presupuestado_ingresos) }}</td>
@@ -198,8 +206,8 @@
                 <BarChart :rows="rowsPorArea" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Gerencia</h4>
-                <BarChart :rows="rowsPorGerencia" />
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Subsector</h4>
+                <BarChart :rows="rowsPorSector" />
             </div>
             <div class="card">
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">Por UVT</h4>
@@ -274,20 +282,15 @@
         <h3 style="margin:24px 0 10px;">Rankings</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Gerencias con más contratos</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Gerencias de Área con más contratos</h4>
                 <table class="atlas-table">
-                    <thead><tr><th>Gerencia</th><th style="text-align:right;">Cantidad</th></tr></thead>
+                    <thead><tr><th>Gerencia de Área</th><th style="text-align:right;">Cantidad</th></tr></thead>
                     <tbody>
-                        <tr v-for="(r, i) in ranks?.gerencias_por_cantidad || []" :key="i">
-                            <td>
-                                <div>{{ r.gerencia || '—' }}</div>
-                                <div v-if="r.gerencia_area" style="font-size:11px;color:var(--color-muted);">
-                                    {{ r.gerencia_area }}
-                                </div>
-                            </td>
+                        <tr v-for="(r, i) in ranks?.gerencias_area_por_cantidad || []" :key="i">
+                            <td>{{ r.gerencia_area || '—' }}</td>
                             <td style="text-align:right;">{{ fmtInt(r.cantidad) }}</td>
                         </tr>
-                        <tr v-if="!ranks?.gerencias_por_cantidad?.length">
+                        <tr v-if="!ranks?.gerencias_area_por_cantidad?.length">
                             <td colspan="2" class="empty-state">Sin datos.</td>
                         </tr>
                     </tbody>
@@ -364,7 +367,7 @@ const filters = reactive({
     hasta: '',
     moneda_base: 'Peso',
     gerencia_area_id: '',
-    gerencia_id: '',
+    sector_id: '',
 });
 
 // Agrupación con la que se muestran los saldos; arranca en la preferencia del usuario.
@@ -381,27 +384,29 @@ const dMoneda = ref(null);
 const acciones = ref(null);
 const venc = ref(null);
 const ranks = ref(null);
-const areas = ref([]);
-const gerencias = ref([]);
+const sectores = ref([]);
 const loading = ref(false);
 const exporting = ref(false);
 const guardandoPref = ref(false);
 
 const alcance = computed(() => {
-    if (auth.isAdminSistema) return 'Todas las gerencias';
-    if (auth.isAdminGerencia) return auth.gerenciaArea ? `Gerencia de Área ${auth.gerenciaArea}` : auth.gerencia;
-    return auth.gerencia || '';
+    if (auth.isAdminSistema) return 'Todas las Gerencias de Área';
+    return auth.gerenciaArea ? `Gerencia de Área ${auth.gerenciaArea}` : '';
 });
+
+/** Los sectores sin dependencia son las Gerencias de Área. */
+const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
 
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
-    gerencia:      'Gerencia',
-    contrato:      'Contrato',
-}[agrupacion.value] || 'Gerencia'));
+    subsector:     'Gerencia de Área / Subsector',
+    contrato:      'Gerencia de Área / Subsector / Contrato',
+}[agrupacion.value] || 'Gerencia de Área'));
 
-const gerenciasFiltradas = computed(() => {
-    if (!filters.gerencia_area_id) return gerencias.value;
-    return gerencias.value.filter(g => String(g.gerencia_area_id) === String(filters.gerencia_area_id));
+const subsectoresFiltrados = computed(() => {
+    const hijos = sectores.value.filter(s => s.dependencia_id !== null);
+    if (!filters.gerencia_area_id) return hijos;
+    return hijos.filter(s => String(s.dependencia_id) === String(filters.gerencia_area_id));
 });
 
 async function exportarTodo() {
@@ -479,7 +484,7 @@ async function loadAll() {
 
 function clearFilters() {
     filters.desde = ''; filters.hasta = ''; filters.moneda_base = 'Peso';
-    filters.gerencia_area_id = ''; filters.gerencia_id = '';
+    filters.gerencia_area_id = ''; filters.sector_id = '';
     loadAll();
 }
 
@@ -489,7 +494,7 @@ function pctOrDash(v) {
 }
 
 const rowsPorUvt      = computed(() => (dUvt.value?.contratos || []).map(r => ({ label: r.siglas || '—', value: r.cantidad })));
-const rowsPorGerencia = computed(() => (dGer.value?.gerencias || []).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
+const rowsPorSector = computed(() => (dGer.value?.sectores || []).slice(0, 15).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
 const rowsPorArea     = computed(() => (dGer.value?.gerencias_area || []).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
 const rowsPorTipo     = computed(() => (dTipo.value?.contratos || []).map(r => ({ label: r.sigla || '—', value: r.cantidad })));
 const rowsPorEstado   = computed(() => (dEstado.value?.contratos || []).map(r => ({ label: r.nombre || '—', value: r.cantidad })));
@@ -497,9 +502,14 @@ const rowsPorMoneda   = computed(() => (dMoneda.value?.contratos || []).map(r =>
 
 onMounted(async () => {
     try {
-        const [a, g] = await Promise.all([listAll('gerencias-area'), listAll('gerencias')]);
-        areas.value = a; gerencias.value = g;
+        sectores.value = await listAll('sectores');
     } catch { /* no-op */ }
     loadAll();
 });
 </script>
+
+<style scoped>
+.saldo-row.nivel-0 { background: var(--color-surface-alt, rgba(0, 0, 0, 0.03)); font-weight: 600; }
+.saldo-row .raiz { font-weight: 600; }
+.saldo-row .rama { color: var(--color-muted, #888); margin-right: 4px; }
+</style>

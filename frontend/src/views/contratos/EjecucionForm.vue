@@ -10,31 +10,25 @@
         <form v-else class="card" @submit.prevent="submit">
             <div class="form-grid">
                 <div class="field">
-                    <label>Gerencia de Área</label>
-                    <select v-model="areaSeleccionada" class="select" :disabled="!auth.isAdminSistema">
-                        <option :value="null">— Todas —</option>
-                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
-                    </select>
-                    <div class="hint">Filtra las gerencias disponibles.</div>
-                </div>
-                <div class="field">
-                    <label>Gerencia *</label>
-                    <select v-model="data.gerencia_id" class="select" required :disabled="!auth.isAdminSistema">
+                    <label>Gerencia de Área *</label>
+                    <select v-model="areaSeleccionada" class="select" :disabled="!auth.isAdminSistema" required>
                         <option :value="null">—</option>
-                        <option v-for="g in gerenciasDisponibles" :key="g.id" :value="g.id">
-                            {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
-                        </option>
+                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
                     </select>
                     <div v-if="!auth.isAdminSistema" class="hint">
-                        Sólo puede cargar contratos en su gerencia.
+                        Sólo puede cargar contratos en su Gerencia de Área.
                     </div>
-                    <div v-if="errors.gerencia_id" class="error">{{ errors.gerencia_id[0] }}</div>
                 </div>
                 <div class="field">
-                    <label>Departamento / Laboratorio</label>
-                    <input v-model="data.sector_detalle" class="input" maxlength="200" />
-                    <div class="hint">Detalle dentro de la gerencia (opcional).</div>
-                    <div v-if="errors.sector_detalle" class="error">{{ errors.sector_detalle[0] }}</div>
+                    <label>Sector *</label>
+                    <select v-model="data.sector_id" class="select" required :disabled="!areaSeleccionada">
+                        <option :value="null">—</option>
+                        <option v-for="g in sectoresDisponibles" :key="g.sector_id" :value="g.sector_id">
+                            {{ g.nombre }}<template v-if="g.sector_id === areaSeleccionada"> (la Gerencia de Área)</template>
+                        </option>
+                    </select>
+                    <div class="hint">Subsector al que se imputa el contrato.</div>
+                    <div v-if="errors.sector_id" class="error">{{ errors.sector_id[0] }}</div>
                 </div>
 
                 <div class="field">
@@ -240,8 +234,7 @@ const data = reactive({
     tipo_contrato_id: '',
     nombre_proyecto: '',
     descripcion_objeto: '',
-    gerencia_id: null,
-    sector_detalle: '',
+    sector_id: null,
     solicitante_id: null,
     resp1_id: null,
     resp2_id: null,
@@ -269,39 +262,42 @@ const solicitantes = ref([]);
 const utts = ref([]);
 const uvts = ref([]);
 const personal = ref([]);
-const areas = ref([]);
-const gerencias = ref([]);
+const sectores = ref([]);
 const areaSeleccionada = ref(null);
 
-/** La Gerencia de Área es sólo un filtro visual sobre el listado de gerencias. */
-const gerenciasDisponibles = computed(() => {
-    if (!areaSeleccionada.value) return gerencias.value;
-    return gerencias.value.filter(g => String(g.gerencia_area_id) === String(areaSeleccionada.value));
+/** Los sectores sin dependencia son las Gerencias de Área. */
+const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
+
+/** La Gerencia de Área elegida, más sus subsectores. */
+const sectoresDisponibles = computed(() => {
+    if (!areaSeleccionada.value) return [];
+    return sectores.value.filter(s =>
+        s.sector_id === areaSeleccionada.value
+        || String(s.dependencia_id) === String(areaSeleccionada.value));
 });
 
-// Al cambiar de Gerencia de Área, se descarta la gerencia si ya no pertenece a ella.
+// Al cambiar de Gerencia de Área, se descarta el sector si ya no pertenece a ella.
 watch(areaSeleccionada, () => {
-    if (!data.gerencia_id) return;
-    const sigue = gerenciasDisponibles.value.some(g => g.id === data.gerencia_id);
-    if (!sigue) data.gerencia_id = null;
+    if (!data.sector_id) return;
+    const sigue = sectoresDisponibles.value.some(s => s.sector_id === data.sector_id);
+    if (!sigue) data.sector_id = null;
 });
 
 watch(() => data.moneda, (v) => { if (v === 'Peso') data.cotizacion = null; });
 
 async function loadCatalogs() {
-    const [e, t, s, u1, u2, p, ga, g] = await Promise.all([
+    const [e, t, s, u1, u2, p, sec] = await Promise.all([
         listAll('estados-ejecucion'),
         listAll('tipos-contrato-ejecucion'),
         listAll('solicitantes'),
         listAll('utt'),
         listAll('uvt'),
         listAll('personal'),
-        listAll('gerencias-area'),
-        listAll('gerencias'),
+        listAll('sectores'),
     ]);
     estados.value = e; tipos.value = t; solicitantes.value = s;
     utts.value = u1; uvts.value = u2; personal.value = p;
-    areas.value = ga; gerencias.value = g;
+    sectores.value = sec;
 }
 
 async function loadContrato() {
@@ -347,12 +343,15 @@ onMounted(async () => {
         await loadCatalogs();
         await loadContrato();
 
-        // Un usuario acotado sólo carga contratos en su propia gerencia.
-        if (!isEdit.value && !auth.isAdminSistema && auth.gerenciaId) {
-            data.gerencia_id = auth.gerenciaId;
+        // Un usuario acotado sólo carga contratos en su propia Gerencia de Área.
+        if (!isEdit.value && !auth.isAdminSistema && auth.sectorId) {
+            areaSeleccionada.value = auth.sectorId;
+        } else {
+            const sector = sectores.value.find(s => s.sector_id === data.sector_id);
+            areaSeleccionada.value = sector
+                ? (sector.dependencia_id ?? sector.sector_id)
+                : null;
         }
-        areaSeleccionada.value = gerencias.value
-            .find(g => g.id === data.gerencia_id)?.gerencia_area_id ?? null;
     } catch (err) {
         toast.error(extractError(err, 'Error al cargar el formulario.'));
     } finally {

@@ -4,8 +4,8 @@
             <div>
                 <h1 class="page-title">Contratos</h1>
                 <p class="page-subtitle">
-                    Contratos por gerencia (CP / CIT / Convenio Específico)
-                    <template v-if="!auth.isAdminSistema && auth.gerencia"> · {{ auth.gerencia }}</template>
+                    Contratos por Gerencia de Área y sector
+                    <template v-if="!auth.isAdminSistema && auth.gerenciaArea"> · {{ auth.gerenciaArea }}</template>
                 </p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -39,18 +39,20 @@
                         <option v-for="t in tipos" :key="t.id" :value="t.id">{{ t.sigla }} — {{ t.nombre }}</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdminSistema || auth.isAdminGerencia" class="field">
+                <div v-if="auth.isAdminSistema" class="field">
                     <label>Gerencia de Área</label>
                     <select v-model="filters.gerencia_area_id" class="select" @change="onFilter">
                         <option value="">Todas</option>
-                        <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdminSistema || auth.isAdminGerencia" class="field">
-                    <label>Gerencia</label>
-                    <select v-model="filters.gerencia_id" class="select" @change="onFilter">
-                        <option value="">Todas</option>
-                        <option v-for="g in gerencias" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+                <div class="field">
+                    <label>Sector</label>
+                    <select v-model="filters.sector_id" class="select" @change="onFilter">
+                        <option value="">Todos</option>
+                        <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
+                            {{ g.nombre }}
+                        </option>
                     </select>
                 </div>
                 <div class="field">
@@ -99,7 +101,7 @@
                         <th>Tipo</th>
                         <th>Proyecto</th>
                         <th>Estado</th>
-                        <th>Gerencia</th>
+                        <th>Sector</th>
                         <th>UVT</th>
                         <th>F. Inicio</th>
                         <th>F. Venc.</th>
@@ -115,9 +117,9 @@
                         <td>{{ r.nombre_proyecto }}</td>
                         <td><span :class="['badge', badgeForEstado(r.estado)]">{{ r.estado?.nombre || '—' }}</span></td>
                         <td>
-                            <div>{{ r.gerencia?.nombre || '—' }}</div>
-                            <div v-if="r.gerencia?.gerencia_area" style="font-size:11px;color:var(--color-muted);">
-                                {{ r.gerencia.gerencia_area.nombre }}
+                            <div>{{ r.sector?.nombre || '—' }}</div>
+                            <div v-if="r.gerencia_area" style="font-size:11px;color:var(--color-muted);">
+                                {{ r.gerencia_area.nombre }}
                             </div>
                         </td>
                         <td>{{ r.uvt?.siglas || '—' }}</td>
@@ -152,7 +154,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { contratosEjecucionService } from '@/services/contratosEjecucion';
 import { listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
@@ -178,7 +180,7 @@ const filters = reactive({
     estado_id: '',
     tipo_contrato_id: '',
     gerencia_area_id: '',
-    gerencia_id: '',
+    sector_id: '',
     uvt_id: '',
     moneda: '',
     vencidos: '',
@@ -188,8 +190,16 @@ const filters = reactive({
 const estados = ref([]);
 const tipos = ref([]);
 const uvts = ref([]);
-const areas = ref([]);
-const gerencias = ref([]);
+const sectores = ref([]);
+
+/** Los sectores sin dependencia son las Gerencias de Área. */
+const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
+
+const subsectoresFiltrados = computed(() => {
+    const hijos = sectores.value.filter(s => s.dependencia_id !== null);
+    if (!filters.gerencia_area_id) return hijos;
+    return hijos.filter(s => String(s.dependencia_id) === String(filters.gerencia_area_id));
+});
 
 const onFilter = debounce(() => { page.value = 1; load(); }, 300);
 
@@ -244,15 +254,14 @@ async function exportar() {
 
 onMounted(async () => {
     try {
-        const [e, t, u, ga, g] = await Promise.all([
+        const [e, t, u, sec] = await Promise.all([
             listAll('estados-ejecucion'),
             listAll('tipos-contrato-ejecucion'),
             listAll('uvt'),
-            listAll('gerencias-area'),
-            listAll('gerencias'),
+            listAll('sectores'),
         ]);
         estados.value = e; tipos.value = t; uvts.value = u;
-        areas.value = ga; gerencias.value = g;
+        sectores.value = sec;
     } catch { /* no-op */ }
     load();
 });

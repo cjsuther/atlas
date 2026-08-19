@@ -2,8 +2,9 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Gerencia;
+use App\Models\Sector;
 use App\Models\UserRole;
+use App\Support\SectorTree;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
 
@@ -13,7 +14,7 @@ class UserUpsertCommand extends Command
                             {username        : Username (login) del usuario}
                             {--password=     : Contraseña en texto plano (se guarda hasheada). Si se omite, se pedirá interactivamente}
                             {--rol=operador_gerencia : Rol: admin_sistema | admin_gerencia | operador_gerencia}
-                            {--gerencia=     : ID o nombre de la gerencia (obligatorio salvo para admin_sistema)}
+                            {--gerencia=     : ID o nombre de la Gerencia de Área (obligatorio salvo para admin_sistema)}
                             {--display=      : Display name (opcional)}
                             {--email=        : Email (opcional)}
                             {--inactivo      : Marcar el usuario como inactivo}
@@ -38,15 +39,15 @@ class UserUpsertCommand extends Command
         $user  = UserRole::firstOrNew(['username' => $username]);
         $isNew = !$user->exists;
 
-        // Los roles acotados necesitan gerencia; el administrador de sistema no.
+        // Los roles acotados necesitan Gerencia de Área; el de sistema no.
         if (in_array($rol, UserRole::ROLES_CON_GERENCIA, true)) {
-            $gerenciaId = $this->resolverGerencia($user->gerencia_id);
-            if ($gerenciaId === null) {
+            $sectorId = $this->resolverGerenciaArea($user->sector_id);
+            if ($sectorId === null) {
                 return self::FAILURE;
             }
-            $user->gerencia_id = $gerenciaId;
+            $user->sector_id = $sectorId;
         } else {
-            $user->gerencia_id = null;
+            $user->sector_id = null;
         }
 
         $user->rol    = $rol;
@@ -88,7 +89,7 @@ class UserUpsertCommand extends Command
 
         $user->save();
 
-        $gerencia = $user->gerencia_id ? optional(Gerencia::find($user->gerencia_id))->nombre : '—';
+        $gerencia = $user->sector_id ? optional(Sector::find($user->sector_id))->nombre : '—';
         $this->info(($isNew ? 'Creado' : 'Actualizado')
             . ": {$username} (rol={$user->rol}, gerencia={$gerencia}, activo=" . ($user->activo ? 'sí' : 'no') . ')');
 
@@ -99,8 +100,11 @@ class UserUpsertCommand extends Command
         return self::SUCCESS;
     }
 
-    /** Resuelve --gerencia por ID o por nombre; devuelve null si no se puede. */
-    private function resolverGerencia(?int $actual): ?int
+    /**
+     * Resuelve --gerencia por ID o por nombre. Debe ser una Gerencia de Área,
+     * es decir un sector sin dependencia. Devuelve null si no se puede.
+     */
+    private function resolverGerenciaArea(?int $actual): ?int
     {
         $valor = $this->option('gerencia');
 
@@ -108,19 +112,40 @@ class UserUpsertCommand extends Command
             if ($actual) {
                 return $actual;
             }
-            $this->error('Debe indicar --gerencia para los roles acotados a una gerencia.');
+            $this->error('Debe indicar --gerencia para los roles acotados a una Gerencia de Área.');
+            $this->listarGerenciasArea();
             return null;
         }
 
-        $gerencia = is_numeric($valor)
-            ? Gerencia::find((int) $valor)
-            : Gerencia::where('nombre', $valor)->first();
+        $sector = is_numeric($valor)
+            ? Sector::find((int) $valor)
+            : Sector::where('nombre', $valor)->first();
 
-        if (!$gerencia) {
-            $this->error("No se encontró la gerencia: {$valor}");
+        if (!$sector) {
+            $this->error("No se encontró el sector: {$valor}");
+            $this->listarGerenciasArea();
             return null;
         }
 
-        return (int) $gerencia->id;
+        if ($sector->dependencia_id !== null) {
+            $this->error("'{$sector->nombre}' es un subsector; el usuario debe asociarse a una Gerencia de Área.");
+            $this->listarGerenciasArea();
+            return null;
+        }
+
+        return (int) $sector->sector_id;
+    }
+
+    private function listarGerenciasArea(): void
+    {
+        $raices = Sector::gerenciasArea()->orderBy('nombre')->get(['sector_id', 'nombre']);
+        if ($raices->isEmpty()) {
+            $this->warn('No hay Gerencias de Área cargadas en la tabla `sector`.');
+            return;
+        }
+        $this->line('Gerencias de Área disponibles:');
+        foreach ($raices as $r) {
+            $this->line("  [{$r->sector_id}] {$r->nombre}");
+        }
     }
 }

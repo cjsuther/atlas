@@ -22,7 +22,7 @@ class EnsureAdminCommand extends Command
 
         $user = UserRole::firstOrNew(['username' => $username]);
         $user->rol = UserRole::ROL_ADMIN_SISTEMA;
-        $user->gerencia_id = null; // el administrador de sistema no está acotado a una gerencia
+        $user->sector_id = null; // el administrador de sistema no está acotado a una Gerencia de Área
         $user->activo = 1;
         if (!$user->display_name) {
             $user->display_name = $username;

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ContratoEjecucion;
 use App\Models\HistorialCambio;
+use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -13,21 +14,23 @@ use Illuminate\Support\Facades\DB;
  * Indicadores y agrupamientos del Panel de Control.
  *
  * Todo lo que devuelve este servicio está recortado al alcance del usuario:
- * los saldos y registros de una gerencia no se ven desde otra.
+ * los saldos y registros de una Gerencia de Área no se ven desde otra.
  *
  * Filtros comunes:
  *   - desde, hasta      : recortan por created_at del contrato
  *   - moneda_base       : 'Peso' por defecto, para conversión de montos
- *   - gerencia_id       : acota a una gerencia dentro del alcance
- *   - gerencia_area_id  : acota a una Gerencia de Área dentro del alcance
+ *   - sector_id         : acota a un sector dentro del alcance
+ *   - gerencia_area_id  : acota a una Gerencia de Área (y sus subsectores)
  */
 class PanelService
 {
     /** Agrupaciones admitidas para la vista de saldos. */
-    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'contrato'];
+    public const AGRUPACIONES = ['gerencia_area', 'subsector', 'contrato'];
 
-    public function __construct(protected AccessScopeService $scope)
-    {
+    public function __construct(
+        protected AccessScopeService $scope,
+        protected SectorTree $arbol,
+    ) {
     }
 
     /** Aplica filtros comunes (rango de fechas) sobre cualquier query. */
@@ -44,12 +47,11 @@ class PanelService
         $q = $this->applyDateRange(ContratoEjecucion::query(), $filters);
         $this->scope->aplicarASaldos($q);
 
-        if (!empty($filters['gerencia_id'])) {
-            $q->where('gerencia_id', (int) $filters['gerencia_id']);
+        if (!empty($filters['sector_id'])) {
+            $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['sector_id']) ?: [0]);
         }
         if (!empty($filters['gerencia_area_id'])) {
-            $q->whereIn('gerencia_id', DB::table('gerencias')
-                ->where('gerencia_area_id', (int) $filters['gerencia_area_id'])->select('id'));
+            $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['gerencia_area_id']) ?: [0]);
         }
 
         return $q;
@@ -147,15 +149,18 @@ class PanelService
     /** ---------------- Saldos configurables ---------------- */
 
     /**
-     * Saldos agrupados según lo que el usuario quiera ver: por Gerencia de
-     * Área, por Gerencia o por Contrato. La agrupación llega en los filtros;
-     * el llamador resuelve el valor por defecto desde la preferencia del usuario.
+     * Saldos jerarquizados según lo que el usuario quiera ver: por Gerencia de
+     * Área, abriendo además sus subsectores, o bajando hasta el contrato.
+     *
+     * Los importes de cada fila incluyen los de toda su rama: una Gerencia de
+     * Área suma lo de todos sus subsectores. Así los totales cierran en
+     * cualquier nivel al que se mire.
      */
     public function saldos(array $filters): array
     {
         $agrupacion = in_array($filters['agrupacion'] ?? null, self::AGRUPACIONES, true)
             ? $filters['agrupacion']
-            : 'gerencia';
+            : 'gerencia_area';
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
 
         $contratos = $this->ejecucionQuery($filters)
@@ -163,93 +168,182 @@ class PanelService
                 'contratos_ejecucion.id',
                 'contratos_ejecucion.nro_expediente',
                 'contratos_ejecucion.nombre_proyecto',
-                'contratos_ejecucion.gerencia_id',
+                'contratos_ejecucion.sector_id',
                 'contratos_ejecucion.moneda',
                 'contratos_ejecucion.cotizacion',
                 'contratos_ejecucion.monto_presupuestado_ingresos',
                 'contratos_ejecucion.monto_presupuestado_gastos',
             )
-            ->with('gerencia:id,gerencia_area_id,sigla,nombre', 'gerencia.gerenciaArea:id,sigla,nombre')
             ->get();
 
         $sumas = $this->sumasPorContrato($contratos->pluck('id')->all());
 
-        $filas = [];
+        // 1) Importes propios de cada sector y, si hace falta, de cada contrato.
+        $porSector   = [];
+        $porContrato = [];
         foreach ($contratos as $c) {
-            [$clave, $etiqueta, $subEtiqueta] = $this->claveDeAgrupacion($agrupacion, $c);
+            $sectorId = (int) $c->sector_id;
+            $factor   = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
 
-            if (!isset($filas[$clave])) {
-                $filas[$clave] = [
-                    'clave'                  => $clave,
-                    'etiqueta'               => $etiqueta,
-                    'detalle'                => $subEtiqueta,
-                    'contratos'              => 0,
-                    'presupuestado_ingresos' => 0.0,
-                    'presupuestado_gastos'   => 0.0,
-                    'ejecutado_ingresos'     => 0.0,
-                    'ejecutado_gastos'       => 0.0,
-                ];
+            $importes = [
+                'contratos'              => 1,
+                'presupuestado_ingresos' => ((float) ($c->monto_presupuestado_ingresos ?? 0)) * $factor,
+                'presupuestado_gastos'   => ((float) ($c->monto_presupuestado_gastos   ?? 0)) * $factor,
+                // Los movimientos ya están expresados en pesos.
+                'ejecutado_ingresos'     => (float) ($sumas[$c->id]['ingreso'] ?? 0),
+                'ejecutado_gastos'       => (float) ($sumas[$c->id]['gasto']   ?? 0),
+            ];
+
+            $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, $importes);
+
+            if ($agrupacion === 'contrato') {
+                $porContrato[$sectorId][] = [
+                    'clave'    => 'c-' . $c->id,
+                    'tipo'     => 'contrato',
+                    'id'       => (int) $c->id,
+                    'etiqueta' => "#{$c->id} — {$c->nro_expediente}",
+                    'detalle'  => $c->nombre_proyecto,
+                ] + $importes;
             }
-
-            $factor = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
-
-            $filas[$clave]['contratos']++;
-            $filas[$clave]['presupuestado_ingresos'] += ((float) ($c->monto_presupuestado_ingresos ?? 0)) * $factor;
-            $filas[$clave]['presupuestado_gastos']   += ((float) ($c->monto_presupuestado_gastos ?? 0)) * $factor;
-            // Los movimientos ya están expresados en pesos.
-            $filas[$clave]['ejecutado_ingresos'] += (float) ($sumas[$c->id]['ingreso'] ?? 0);
-            $filas[$clave]['ejecutado_gastos']   += (float) ($sumas[$c->id]['gasto']   ?? 0);
         }
 
-        $rows = collect(array_values($filas))->map(function ($f) {
-            $f['presupuestado_ingresos'] = round($f['presupuestado_ingresos'], 2);
-            $f['presupuestado_gastos']   = round($f['presupuestado_gastos'], 2);
-            $f['ejecutado_ingresos']     = round($f['ejecutado_ingresos'], 2);
-            $f['ejecutado_gastos']       = round($f['ejecutado_gastos'], 2);
-            $f['saldo']                  = round($f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2);
-            $f['disponible_ingresos']    = round($f['presupuestado_ingresos'] - $f['ejecutado_ingresos'], 2);
-            $f['disponible_gastos']      = round($f['presupuestado_gastos'] - $f['ejecutado_gastos'], 2);
-            return $f;
-        })->sortBy('etiqueta')->values();
+        // 2) Cada sector acumula además lo de sus descendientes.
+        $ramas = [];
+        foreach (array_keys($porSector) as $sectorId) {
+            $raiz = $this->arbol->raizDe($sectorId) ?? $sectorId;
+            $ramas[$raiz] = true;
+        }
+
+        $filas = [];
+        foreach (array_keys($ramas) as $raiz) {
+            $this->emitirRama($raiz, 0, null, $agrupacion, $porSector, $porContrato, $filas, true);
+        }
+
+        $rows = collect($filas)->map(fn ($f) => $this->redondear($f))->values();
+
+        // Los totales se toman sólo del nivel superior: sumar todos los niveles
+        // contaría dos veces lo que ya está acumulado en la Gerencia de Área.
+        $raices = $rows->where('nivel', 0);
 
         return [
             'agrupacion'  => $agrupacion,
             'moneda_base' => $monedaBase,
             'filas'       => $rows,
             'totales'     => [
-                'contratos'              => (int) $rows->sum('contratos'),
-                'presupuestado_ingresos' => round($rows->sum('presupuestado_ingresos'), 2),
-                'presupuestado_gastos'   => round($rows->sum('presupuestado_gastos'), 2),
-                'ejecutado_ingresos'     => round($rows->sum('ejecutado_ingresos'), 2),
-                'ejecutado_gastos'       => round($rows->sum('ejecutado_gastos'), 2),
-                'saldo'                  => round($rows->sum('saldo'), 2),
+                'contratos'              => (int) $raices->sum('contratos'),
+                'presupuestado_ingresos' => round($raices->sum('presupuestado_ingresos'), 2),
+                'presupuestado_gastos'   => round($raices->sum('presupuestado_gastos'), 2),
+                'ejecutado_ingresos'     => round($raices->sum('ejecutado_ingresos'), 2),
+                'ejecutado_gastos'       => round($raices->sum('ejecutado_gastos'), 2),
+                'saldo'                  => round($raices->sum('saldo'), 2),
             ],
         ];
     }
 
-    /** @return array{0:string,1:string,2:?string} clave, etiqueta y detalle de la fila */
-    private function claveDeAgrupacion(string $agrupacion, ContratoEjecucion $c): array
-    {
-        $gerencia = $c->gerencia;
-        $area     = $gerencia?->gerenciaArea;
+    /**
+     * Emite la fila de un sector con los importes de toda su rama y, según la
+     * agrupación pedida, sigue bajando por sus subsectores y contratos.
+     *
+     * Con la agrupación por Gerencia de Área igual se recorre la rama completa,
+     * pero sólo se emite la fila de la raíz: los subsectores se suman sin
+     * mostrarse.
+     *
+     * @param  array<int, array<string, float|int>>        $porSector
+     * @param  array<int, array<int, array<string, mixed>>> $porContrato
+     * @param  array<int, array<string, mixed>>            $filas
+     * @return array<string, float|int> importes acumulados de la rama
+     */
+    private function emitirRama(
+        int $sectorId,
+        int $nivel,
+        ?string $padre,
+        string $agrupacion,
+        array $porSector,
+        array $porContrato,
+        array &$filas,
+        bool $emitir,
+    ): array {
+        $clave    = 's-' . $sectorId;
+        $esRaiz   = $this->arbol->raizDe($sectorId) === $sectorId;
+        $posicion = null;
 
-        return match ($agrupacion) {
-            'gerencia_area' => [
-                'ga-' . ($area->id ?? 0),
-                $area->nombre ?? 'Sin Gerencia de Área',
-                $area->sigla ?? null,
-            ],
-            'contrato' => [
-                'c-' . $c->id,
-                "#{$c->id} — {$c->nro_expediente}",
-                $c->nombre_proyecto,
-            ],
-            default => [
-                'g-' . ($gerencia->id ?? 0),
-                $gerencia->nombre ?? 'Sin gerencia',
-                $area->nombre ?? null,
-            ],
-        };
+        if ($emitir) {
+            // Se reserva el lugar de la fila: sus importes se completan después
+            // de recorrer la rama, para que incluyan lo de los subsectores.
+            $posicion = count($filas);
+            $filas[$posicion] = [
+                'clave'       => $clave,
+                'tipo'        => $esRaiz ? 'gerencia_area' : 'subsector',
+                'id'          => $sectorId,
+                'etiqueta'    => $this->arbol->nombre($sectorId) ?? "Sector #{$sectorId}",
+                'detalle'     => $esRaiz ? 'Gerencia de Área' : $this->arbol->nombre($this->arbol->padre($sectorId)),
+                'nivel'       => $nivel,
+                'padre_clave' => $padre,
+            ];
+        }
+
+        $acumulado = $this->acumular(null, $porSector[$sectorId] ?? []);
+
+        // Los subsectores sólo se muestran si la agrupación baja de nivel.
+        $emitirHijos = $agrupacion !== 'gerencia_area';
+        foreach ($this->arbol->hijosDe($sectorId) as $hijo) {
+            $deHijo = $this->emitirRama(
+                $hijo,
+                $nivel + 1,
+                $clave,
+                $agrupacion,
+                $porSector,
+                $porContrato,
+                $filas,
+                $emitirHijos,
+            );
+            $acumulado = $this->acumular($acumulado, $deHijo);
+        }
+
+        if ($emitir && $agrupacion === 'contrato') {
+            foreach ($porContrato[$sectorId] ?? [] as $contrato) {
+                $filas[] = $contrato + ['nivel' => $nivel + 1, 'padre_clave' => $clave];
+            }
+        }
+
+        if ($posicion !== null) {
+            $filas[$posicion] += $acumulado;
+        }
+
+        return $acumulado;
+    }
+
+    /**
+     * Suma dos juegos de importes.
+     *
+     * @param  array<string, float|int>|null  $base
+     * @param  array<string, float|int>       $extra
+     * @return array<string, float|int>
+     */
+    private function acumular(?array $base, array $extra): array
+    {
+        $campos = ['contratos', 'presupuestado_ingresos', 'presupuestado_gastos',
+                   'ejecutado_ingresos', 'ejecutado_gastos'];
+
+        $out = [];
+        foreach ($campos as $campo) {
+            $out[$campo] = ($base[$campo] ?? 0) + ($extra[$campo] ?? 0);
+        }
+        return $out;
+    }
+
+    /** @param array<string, mixed> $f @return array<string, mixed> */
+    private function redondear(array $f): array
+    {
+        foreach (['presupuestado_ingresos', 'presupuestado_gastos',
+                  'ejecutado_ingresos', 'ejecutado_gastos'] as $campo) {
+            $f[$campo] = round((float) ($f[$campo] ?? 0), 2);
+        }
+        $f['contratos']           = (int) ($f['contratos'] ?? 0);
+        $f['saldo']               = round($f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2);
+        $f['disponible_ingresos'] = round($f['presupuestado_ingresos'] - $f['ejecutado_ingresos'], 2);
+        $f['disponible_gastos']   = round($f['presupuestado_gastos'] - $f['ejecutado_gastos'], 2);
+        return $f;
     }
 
     /**
@@ -295,33 +389,41 @@ class PanelService
         ];
     }
 
+    /**
+     * Distribución de contratos por sector y por Gerencia de Área. La segunda
+     * acumula la de todos los subsectores de cada rama.
+     */
     public function porGerencia(array $filters): array
     {
-        $porGerencia = $this->ejecucionQuery($filters)
-            ->select('gerencia_id', DB::raw('COUNT(*) as cantidad'))
-            ->groupBy('gerencia_id')
-            ->with('gerencia:id,gerencia_area_id,sigla,nombre', 'gerencia.gerenciaArea:id,sigla,nombre')
+        $porSector = $this->ejecucionQuery($filters)
+            ->select('sector_id', DB::raw('COUNT(*) as cantidad'))
+            ->groupBy('sector_id')
             ->get();
 
         $porArea = [];
-        foreach ($porGerencia as $r) {
-            $area = optional($r->gerencia)->gerenciaArea;
-            $key  = $area->id ?? 0;
-            $porArea[$key] ??= [
-                'gerencia_area_id' => $area->id ?? null,
-                'nombre'           => $area->nombre ?? 'Sin Gerencia de Área',
+        $sectores = [];
+        foreach ($porSector as $r) {
+            $sectorId = (int) $r->sector_id;
+            $cantidad = (int) $r->cantidad;
+            $raiz     = $this->arbol->raizDe($sectorId) ?? $sectorId;
+
+            $sectores[] = [
+                'sector_id'     => $sectorId,
+                'nombre'        => $this->arbol->nombre($sectorId) ?? "Sector #{$sectorId}",
+                'gerencia_area' => $this->arbol->nombre($raiz),
+                'cantidad'      => $cantidad,
+            ];
+
+            $porArea[$raiz] ??= [
+                'gerencia_area_id' => $raiz,
+                'nombre'           => $this->arbol->nombre($raiz) ?? "Sector #{$raiz}",
                 'cantidad'         => 0,
             ];
-            $porArea[$key]['cantidad'] += (int) $r->cantidad;
+            $porArea[$raiz]['cantidad'] += $cantidad;
         }
 
         return [
-            'gerencias' => $porGerencia->map(fn ($r) => [
-                'gerencia_id'  => $r->gerencia_id,
-                'nombre'       => optional($r->gerencia)->nombre ?? 'Sin gerencia',
-                'gerencia_area'=> optional(optional($r->gerencia)->gerenciaArea)->nombre,
-                'cantidad'     => (int) $r->cantidad,
-            ])->values(),
+            'sectores'       => collect($sectores)->sortByDesc('cantidad')->values(),
             'gerencias_area' => collect(array_values($porArea))->sortByDesc('cantidad')->values(),
         ];
     }
@@ -418,19 +520,19 @@ class PanelService
     {
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
 
-        $rankGerencia = $this->ejecucionQuery($filters)
-            ->select('gerencia_id', DB::raw('COUNT(*) as cantidad'))
-            ->groupBy('gerencia_id')
-            ->with('gerencia:id,gerencia_area_id,nombre', 'gerencia.gerenciaArea:id,nombre')
-            ->orderByDesc('cantidad')
-            ->limit(20)
-            ->get()
-            ->map(fn ($r) => [
-                'gerencia_id'   => $r->gerencia_id,
-                'gerencia'      => optional($r->gerencia)->nombre ?? 'Sin gerencia',
-                'gerencia_area' => optional(optional($r->gerencia)->gerenciaArea)->nombre,
-                'cantidad'      => (int) $r->cantidad,
-            ]);
+        $porArea = [];
+        foreach ($this->ejecucionQuery($filters)
+                    ->select('sector_id', DB::raw('COUNT(*) as cantidad'))
+                    ->groupBy('sector_id')->get() as $r) {
+            $raiz = $this->arbol->raizDe((int) $r->sector_id) ?? (int) $r->sector_id;
+            $porArea[$raiz] ??= [
+                'gerencia_area_id' => $raiz,
+                'gerencia_area'    => $this->arbol->nombre($raiz) ?? "Sector #{$raiz}",
+                'cantidad'         => 0,
+            ];
+            $porArea[$raiz]['cantidad'] += (int) $r->cantidad;
+        }
+        $rankGerencia = collect(array_values($porArea))->sortByDesc('cantidad')->take(20)->values();
 
         $rankUvtCantidad = $this->ejecucionQuery($filters)
             ->select('uvt_id', DB::raw('COUNT(*) as cantidad'))
@@ -447,7 +549,7 @@ class PanelService
             ]);
 
         return [
-            'gerencias_por_cantidad' => $rankGerencia,
+            'gerencias_area_por_cantidad' => $rankGerencia,
             'uvt_por_cantidad'       => $rankUvtCantidad,
             'uvt_por_monto'          => $this->montoPorUvt($filters, $monedaBase),
             'moneda_base'            => $monedaBase,

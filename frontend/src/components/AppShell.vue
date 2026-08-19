@@ -32,7 +32,7 @@
                     <div class="name">{{ auth.user?.display_name || auth.user?.username || '—' }}</div>
                     <div class="role">
                         {{ auth.rolLabel }}
-                        <template v-if="auth.gerencia"> · {{ auth.gerencia }}</template>
+                        <template v-if="auth.gerenciaArea"> · {{ auth.gerenciaArea }}</template>
                     </div>
                 </div>
                 <button class="btn btn-ghost" @click="logout" title="Cerrar sesión">
@@ -78,8 +78,7 @@ const NAV_SECTIONS = [
     {
         title: 'Estructura',
         items: [
-            { label: 'Gerencias de Área', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'gerencias-area' } }, roles: TODOS },
-            { label: 'Gerencias',         icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'gerencias' } }, roles: TODOS },
+            { label: 'Sectores y Gerencias', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
         ],
     },
     {
@@ -88,7 +87,6 @@ const NAV_SECTIONS = [
             { label: 'Tipos de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
             { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: TODOS },
             { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: TODOS },
-            { label: 'Sectores',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
             { label: 'UTTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'utt' } }, roles: TODOS },
             { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: TODOS },
             { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } }, roles: TODOS },

@@ -9,12 +9,15 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * Usuario del sistema, con rol y alcance.
  *
- *   admin_sistema     : ve y administra todas las gerencias de área, gerencias
- *                       y contratos, y crea/modifica usuarios de cualquier rol.
- *   admin_gerencia    : administra los contratos de su gerencia y los usuarios
- *                       operadores de esa gerencia; ve los saldos agregados de
- *                       su Gerencia de Área.
- *   operador_gerencia : administra los contratos de su gerencia y ve sus saldos.
+ * El alcance se define por `sector_id`, que apunta a una Gerencia de Área (un
+ * sector sin dependencia). El usuario ve los contratos de todos los subsectores
+ * que cuelgan de ella.
+ *
+ *   admin_sistema     : ve y administra todas las Gerencias de Área y sus
+ *                       contratos, y crea/modifica usuarios de cualquier rol.
+ *   admin_gerencia    : administra los contratos de su Gerencia de Área y los
+ *                       usuarios operadores de esa Gerencia de Área.
+ *   operador_gerencia : administra los contratos de su Gerencia de Área.
  */
 class UserRole extends Authenticatable
 {
@@ -30,13 +33,13 @@ class UserRole extends Authenticatable
         self::ROL_OPERADOR_GERENCIA,
     ];
 
-    /** Roles que sólo operan dentro de su propia gerencia. */
+    /** Roles que sólo operan dentro de su propia Gerencia de Área. */
     public const ROLES_CON_GERENCIA = [
         self::ROL_ADMIN_GERENCIA,
         self::ROL_OPERADOR_GERENCIA,
     ];
 
-    public const AGRUPACIONES_SALDO = ['gerencia_area', 'gerencia', 'contrato'];
+    public const AGRUPACIONES_SALDO = ['gerencia_area', 'subsector', 'contrato'];
 
     protected $table = 'user_roles';
 
@@ -47,7 +50,7 @@ class UserRole extends Authenticatable
         'password',
         'auth_source',
         'rol',
-        'gerencia_id',
+        'sector_id',
         'saldos_agrupacion',
         'activo',
         'last_login',
@@ -63,9 +66,10 @@ class UserRole extends Authenticatable
         'password',
     ];
 
-    public function gerencia()
+    /** Gerencia de Área a la que está asociado el usuario (un sector raíz). */
+    public function gerenciaArea()
     {
-        return $this->belongsTo(Gerencia::class, 'gerencia_id', 'id');
+        return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
     }
 
     public function hasLocalPassword(): bool

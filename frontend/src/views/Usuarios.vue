@@ -27,10 +27,10 @@
                     </select>
                 </div>
                 <div v-if="auth.isAdminSistema" class="field">
-                    <label>Gerencia</label>
-                    <select v-model="state.gerencia_id" class="select" @change="reload">
+                    <label>Gerencia de Área</label>
+                    <select v-model="state.sector_id" class="select" @change="reload">
                         <option value="">Todas</option>
-                        <option v-for="g in gerencias" :key="g.id" :value="g.id">{{ g.nombre }}</option>
+                        <option v-for="g in areas" :key="g.sector_id" :value="g.sector_id">{{ g.nombre }}</option>
                     </select>
                 </div>
                 <div class="field">
@@ -63,7 +63,7 @@
                         <th>Nombre</th>
                         <th>E-mail</th>
                         <th>Rol</th>
-                        <th>Gerencia</th>
+                        <th>Gerencia de Área</th>
                         <th>Origen</th>
                         <th>Activo</th>
                         <th>Último login</th>
@@ -76,7 +76,7 @@
                         <td>{{ u.display_name || '—' }}</td>
                         <td>{{ u.email || '—' }}</td>
                         <td><span class="badge" :class="rolBadge(u.rol)">{{ ROL_LABELS[u.rol] || u.rol }}</span></td>
-                        <td>{{ u.gerencia?.nombre || '—' }}</td>
+                        <td>{{ u.gerencia_area?.nombre || '—' }}</td>
                         <td><span class="badge" :class="u.auth_source === 'local' ? 'badge-success' : 'badge-info'">{{ u.auth_source === 'local' ? 'Local' : 'LDAP' }}</span></td>
                         <td><span class="badge" :class="u.activo ? 'badge-success' : 'badge-default'">{{ u.activo ? 'Sí' : 'No' }}</span></td>
                         <td>{{ fmtDateTime(u.last_login) }}</td>
@@ -115,18 +115,18 @@
                         <div v-if="errors.rol" class="error">{{ errors.rol[0] }}</div>
                     </div>
                     <div class="field" v-if="requiereGerencia">
-                        <label>Gerencia <span style="color:var(--color-danger);">*</span></label>
-                        <select v-if="auth.isAdminSistema" v-model="formData.gerencia_id" class="select" required>
+                        <label>Gerencia de Área <span style="color:var(--color-danger);">*</span></label>
+                        <select v-if="auth.isAdminSistema" v-model="formData.sector_id" class="select" required>
                             <option :value="null">—</option>
-                            <option v-for="g in gerencias" :key="g.id" :value="g.id">
-                                {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
-                            </option>
+                            <option v-for="g in areas" :key="g.sector_id" :value="g.sector_id">{{ g.nombre }}</option>
                         </select>
-                        <input v-else class="input" :value="auth.gerencia || '—'" readonly />
-                        <div v-if="!auth.isAdminSistema" class="hint">
-                            Sólo puede dar de alta usuarios en su propia gerencia.
+                        <input v-else class="input" :value="auth.gerenciaArea || '—'" readonly />
+                        <div class="hint">
+                            {{ auth.isAdminSistema
+                                ? 'El usuario ve los contratos de todos los subsectores de esta Gerencia de Área.'
+                                : 'Sólo puede dar de alta usuarios en su propia Gerencia de Área.' }}
                         </div>
-                        <div v-if="errors.gerencia_id" class="error">{{ errors.gerencia_id[0] }}</div>
+                        <div v-if="errors.sector_id" class="error">{{ errors.sector_id[0] }}</div>
                     </div>
                     <div class="field" v-if="!editing">
                         <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
@@ -221,10 +221,13 @@ import IconLib from '@/components/IconLib.vue';
 
 const toast = useToast();
 const auth = useAuthStore();
-const state = reactive({ search: '', rol: '', gerencia_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
+const state = reactive({ search: '', rol: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
 const rows = ref([]);
 const total = ref(0);
-const gerencias = ref([]);
+const sectores = ref([]);
+
+/** Los usuarios se asocian a una Gerencia de Área: un sector sin dependencia. */
+const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
 const loading = ref(false);
 
 const onSearch = debounce(() => { state.page = 1; load(); }, 300);
@@ -249,7 +252,7 @@ async function load() {
         const params = { page: state.page, per_page: state.per_page };
         if (state.search) params.search = state.search;
         if (state.rol) params.rol = state.rol;
-        if (state.gerencia_id) params.gerencia_id = state.gerencia_id;
+        if (state.sector_id) params.sector_id = state.sector_id;
         if (state.auth_source) params.auth_source = state.auth_source;
         if (state.activo !== '') params.activo = state.activo;
         const res = await usuariosService.list(params);
@@ -288,7 +291,7 @@ function openNew() {
     resetForm({
         username: '', display_name: '', email: '',
         rol: ROLES.OPERADOR_GERENCIA,
-        gerencia_id: auth.isAdminSistema ? null : auth.gerenciaId,
+        sector_id: auth.isAdminSistema ? null : auth.sectorId,
         auth_source: 'local', activo: true,
         password: '', password_confirmation: '',
     });
@@ -302,7 +305,7 @@ function openEdit(u) {
         display_name: u.display_name || '',
         email: u.email || '',
         rol: u.rol,
-        gerencia_id: u.gerencia_id ?? null,
+        sector_id: u.sector_id ?? null,
         activo: !!u.activo,
     });
     formOpen.value = true;
@@ -314,7 +317,7 @@ async function save() {
     try {
         if (editing.value) {
             const payload = { rol: formData.rol, activo: formData.activo };
-            if (requiereGerencia.value) payload.gerencia_id = formData.gerencia_id;
+            if (requiereGerencia.value) payload.sector_id = formData.sector_id;
             if (!isLdapEdit.value) {
                 payload.display_name = formData.display_name;
                 payload.email = formData.email;
@@ -330,7 +333,7 @@ async function save() {
                 auth_source: formData.auth_source,
                 activo: formData.activo,
             };
-            if (requiereGerencia.value) payload.gerencia_id = formData.gerencia_id;
+            if (requiereGerencia.value) payload.sector_id = formData.sector_id;
             if (formData.auth_source === 'local') {
                 payload.password = formData.password;
                 payload.password_confirmation = formData.password_confirmation;
@@ -410,7 +413,7 @@ async function remove(u) {
 
 onMounted(async () => {
     if (auth.isAdminSistema) {
-        try { gerencias.value = await listAll('gerencias'); } catch { /* no-op */ }
+        try { sectores.value = await listAll('sectores'); } catch { /* no-op */ }
     }
     load();
 });

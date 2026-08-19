@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\UserRole;
 use App\Services\AccessScopeService;
+use App\Support\SectorTree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -12,19 +13,22 @@ use Illuminate\Validation\Rule;
 /**
  * Administración de usuarios.
  *
- *   admin_sistema  : crea y modifica usuarios de cualquier rol y gerencia.
- *   admin_gerencia : crea y modifica operadores de su propia gerencia.
+ *   admin_sistema  : crea y modifica usuarios de cualquier rol y Gerencia de Área.
+ *   admin_gerencia : crea y modifica operadores de su propia Gerencia de Área.
  */
 class UserRoleController extends Controller
 {
-    public function __construct(protected AccessScopeService $scope) {}
+    public function __construct(
+        protected AccessScopeService $scope,
+        protected SectorTree $arbol,
+    ) {}
 
     /**
      * GET /api/usuarios — listado paginado con búsqueda y filtros.
      */
     public function index(Request $request): JsonResponse
     {
-        $q = UserRole::query()->with('gerencia:id,gerencia_area_id,sigla,nombre');
+        $q = UserRole::query()->with('gerenciaArea:sector_id,nombre');
 
         $this->limitarAGerencia($q, $request);
 
@@ -41,8 +45,8 @@ class UserRoleController extends Controller
             $q->where('rol', $rol);
         }
 
-        if ($gerenciaId = $request->query('gerencia_id')) {
-            $q->where('gerencia_id', (int) $gerenciaId);
+        if ($sectorId = $request->query('sector_id')) {
+            $q->where('sector_id', (int) $sectorId);
         }
 
         if (($activo = $request->query('activo')) !== null && $activo !== '') {
@@ -71,7 +75,7 @@ class UserRoleController extends Controller
         if (!$user) {
             return $this->notFound();
         }
-        return response()->json(['data' => $user->load('gerencia:id,gerencia_area_id,sigla,nombre')]);
+        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')]);
     }
 
     /**
@@ -88,15 +92,15 @@ class UserRoleController extends Controller
             'display_name' => ['nullable', 'string', 'max:200'],
             'email'        => ['nullable', 'email', 'max:200'],
             'rol'          => ['required', Rule::in($rolesAsignables)],
-            'gerencia_id'  => ['nullable', 'integer', 'exists:gerencias,id'],
+            'sector_id'    => ['nullable', 'integer', 'exists:sector,sector_id'],
             'activo'       => ['sometimes', 'boolean'],
             'auth_source'  => ['required', 'in:local,ldap'],
             'password'     => ['exclude_if:auth_source,ldap', 'required', 'string', 'min:8', 'confirmed'],
         ], $this->mensajes())->validate();
 
-        $gerenciaId = $this->resolverGerencia($request, $data['rol'], $data['gerencia_id'] ?? null);
-        if ($gerenciaId instanceof JsonResponse) {
-            return $gerenciaId;
+        $sectorId = $this->resolverGerenciaArea($request, $data['rol'], $data['sector_id'] ?? null);
+        if ($sectorId instanceof JsonResponse) {
+            return $sectorId;
         }
 
         $user = new UserRole();
@@ -104,13 +108,13 @@ class UserRoleController extends Controller
         $user->display_name = $data['display_name'] ?? $data['username'];
         $user->email        = $data['email'] ?? null;
         $user->rol          = $data['rol'];
-        $user->gerencia_id  = $gerenciaId;
+        $user->sector_id    = $sectorId;
         $user->activo       = array_key_exists('activo', $data) ? (bool) $data['activo'] : true;
         $user->auth_source  = $data['auth_source'];
         $user->password     = $data['auth_source'] === 'local' ? $data['password'] : null; // se hashea por el cast 'hashed'
         $user->save();
 
-        return response()->json(['data' => $user->load('gerencia:id,gerencia_area_id,sigla,nombre')], 201);
+        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')], 201);
     }
 
     /**
@@ -125,7 +129,7 @@ class UserRoleController extends Controller
             'display_name' => ['sometimes', 'nullable', 'string', 'max:200'],
             'email'        => ['sometimes', 'nullable', 'email', 'max:200'],
             'rol'          => ['sometimes', Rule::in($rolesAsignables)],
-            'gerencia_id'  => ['sometimes', 'nullable', 'integer', 'exists:gerencias,id'],
+            'sector_id'    => ['sometimes', 'nullable', 'integer', 'exists:sector,sector_id'],
             'activo'       => ['sometimes', 'boolean'],
         ], $this->mensajes())->validate();
 
@@ -144,16 +148,16 @@ class UserRoleController extends Controller
             ], 409);
         }
 
-        $rolFinal   = $data['rol'] ?? $user->rol;
-        $gerenciaId = $this->resolverGerencia(
+        $rolFinal = $data['rol'] ?? $user->rol;
+        $sectorId = $this->resolverGerenciaArea(
             $request,
             $rolFinal,
-            array_key_exists('gerencia_id', $data) ? $data['gerencia_id'] : $user->gerencia_id,
+            array_key_exists('sector_id', $data) ? $data['sector_id'] : $user->sector_id,
         );
-        if ($gerenciaId instanceof JsonResponse) {
-            return $gerenciaId;
+        if ($sectorId instanceof JsonResponse) {
+            return $sectorId;
         }
-        $data['gerencia_id'] = $gerenciaId;
+        $data['sector_id'] = $sectorId;
 
         // Para usuarios LDAP, nombre y e-mail se sincronizan desde el directorio en cada login.
         if ($user->isLdap()) {
@@ -163,7 +167,7 @@ class UserRoleController extends Controller
         $user->fill($data);
         $user->save();
 
-        return response()->json(['data' => $user->load('gerencia:id,gerencia_area_id,sigla,nombre')]);
+        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')]);
     }
 
     /**
@@ -230,12 +234,12 @@ class UserRoleController extends Controller
     // Alcance
     // ------------------------------------------------------------------
 
-    /** El administrador de gerencia sólo ve y toca usuarios de su gerencia. */
+    /** El administrador de gerencia sólo ve y toca operadores de su Gerencia de Área. */
     private function limitarAGerencia($query, Request $request): void
     {
         $actual = $request->user();
         if ($actual instanceof UserRole && !$actual->isAdminSistema()) {
-            $query->where('gerencia_id', $actual->gerencia_id)
+            $query->where('sector_id', $actual->sector_id)
                   ->where('rol', UserRole::ROL_OPERADOR_GERENCIA);
         }
     }
@@ -248,14 +252,14 @@ class UserRoleController extends Controller
     }
 
     /**
-     * Determina la gerencia final del usuario y valida que quien administra
-     * tenga permiso sobre ella.
+     * Determina la Gerencia de Área final del usuario y valida que quien
+     * administra tenga permiso sobre ella.
      *
      * @return int|null|JsonResponse
      */
-    private function resolverGerencia(Request $request, string $rol, ?int $gerenciaId)
+    private function resolverGerenciaArea(Request $request, string $rol, ?int $sectorId)
     {
-        // El administrador de sistema no está acotado a ninguna gerencia.
+        // El administrador de sistema no está acotado a ninguna Gerencia de Área.
         if ($rol === UserRole::ROL_ADMIN_SISTEMA) {
             return null;
         }
@@ -263,18 +267,27 @@ class UserRoleController extends Controller
         $actual = $request->user();
         if ($actual instanceof UserRole && !$actual->isAdminSistema()) {
             // Un administrador de gerencia sólo da de alta en la suya.
-            return (int) $actual->gerencia_id;
+            return (int) $actual->sector_id;
         }
 
-        if (!$gerenciaId) {
+        if (!$sectorId) {
             return response()->json([
                 'error'   => 'gerencia_requerida',
-                'message' => 'Los roles de gerencia requieren indicar a qué gerencia pertenece el usuario.',
-                'errors'  => ['gerencia_id' => ['Debe indicar la gerencia del usuario.']],
+                'message' => 'Los roles de gerencia requieren indicar la Gerencia de Área del usuario.',
+                'errors'  => ['sector_id' => ['Debe indicar la Gerencia de Área del usuario.']],
             ], 422);
         }
 
-        return (int) $gerenciaId;
+        // El alcance se define sobre una Gerencia de Área, no sobre un subsector.
+        if (!$this->arbol->esRaiz($sectorId)) {
+            return response()->json([
+                'error'   => 'sector_no_raiz',
+                'message' => 'El usuario debe asociarse a una Gerencia de Área, no a un subsector.',
+                'errors'  => ['sector_id' => ['Debe elegir una Gerencia de Área (un sector sin dependencia).']],
+            ], 422);
+        }
+
+        return (int) $sectorId;
     }
 
     /**
@@ -294,7 +307,7 @@ class UserRoleController extends Controller
     {
         return [
             'rol.in'          => 'No tiene permisos para asignar ese rol.',
-            'gerencia_id.exists' => 'La gerencia indicada no existe.',
+            'sector_id.exists' => 'La Gerencia de Área indicada no existe.',
         ];
     }
 

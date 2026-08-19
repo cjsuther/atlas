@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\ContratoEjecucion;
-use App\Models\Gerencia;
 use App\Models\HistorialCambio;
+use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -13,8 +13,10 @@ use Illuminate\Support\Facades\DB;
 
 class ContratoEjecucionService
 {
-    public function __construct(protected AccessScopeService $scope)
-    {
+    public function __construct(
+        protected AccessScopeService $scope,
+        protected SectorTree $arbol,
+    ) {
     }
 
     /** Subquery SQL para sumar movimientos por tipo en esta ejecución. */
@@ -34,8 +36,8 @@ class ContratoEjecucionService
         ->with([
             'estado:id,nombre',
             'tipoContrato:id,sigla,nombre',
-            'gerencia:id,gerencia_area_id,sigla,nombre',
-            'gerencia.gerenciaArea:id,sigla,nombre',
+            'sector:sector_id,nombre,dependencia_id',
+            'sector.dependencia:sector_id,nombre',
             'solicitante:solicitante_id,razon_social',
             'uvt:uvt_id,siglas,nombre',
             'utt:utt_id,denominacion,nombre,regimen',
@@ -56,11 +58,13 @@ class ContratoEjecucionService
         if (!empty($filters['tipo_contrato_id'])) {
             $q->where('tipo_contrato_id', (int) $filters['tipo_contrato_id']);
         }
-        if (!empty($filters['gerencia_id'])) {
-            $q->where('gerencia_id', (int) $filters['gerencia_id']);
+        if (!empty($filters['sector_id'])) {
+            $q->where('sector_id', (int) $filters['sector_id']);
         }
+        // Filtrar por Gerencia de Área alcanza a todos sus subsectores.
         if (!empty($filters['gerencia_area_id'])) {
-            $q->whereIn('gerencia_id', Gerencia::where('gerencia_area_id', (int) $filters['gerencia_area_id'])->select('id'));
+            $rama = $this->arbol->ramaDe((int) $filters['gerencia_area_id']);
+            $q->whereIn('sector_id', $rama ?: [0]);
         }
         if (!empty($filters['uvt_id'])) {
             $q->where('uvt_id', (int) $filters['uvt_id']);
@@ -110,7 +114,7 @@ class ContratoEjecucionService
         $orderBy  = $filters['order_by']  ?? 'id';
         $orderDir = strtolower($filters['order_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
         $allowed  = ['id','nombre_proyecto','nro_expediente','fecha_inicio','fecha_vencimiento',
-                     'fecha_finalizacion','estado_id','tipo_contrato_id','gerencia_id','created_at'];
+                     'fecha_finalizacion','estado_id','tipo_contrato_id','sector_id','created_at'];
         if (!in_array($orderBy, $allowed, true)) $orderBy = 'id';
 
         return $q->orderBy($orderBy, $orderDir);
@@ -127,7 +131,7 @@ class ContratoEjecucionService
         $q = ContratoEjecucion::query()
             ->select('contratos_ejecucion.*')
             ->with([
-                'estado', 'tipoContrato', 'gerencia.gerenciaArea', 'solicitante', 'uvt', 'utt',
+                'estado', 'tipoContrato', 'sector.dependencia', 'solicitante', 'uvt', 'utt',
                 'resp1', 'resp2',
             ])
             ->addSelect([
@@ -166,26 +170,25 @@ class ContratoEjecucionService
     }
 
     /**
-     * Transfiere el contrato completo a otra gerencia. Los movimientos de
+     * Transfiere el contrato completo a otro sector. Los movimientos de
      * ejecución acompañan al contrato, porque cuelgan de él.
      *
      * Sólo el administrador de sistema puede hacerlo: la transferencia puede
      * cruzar el límite de la Gerencia de Área.
      */
-    public function transferirAGerencia(int $id, int $gerenciaId, ?string $motivo = null): ?ContratoEjecucion
+    public function transferirASector(int $id, int $sectorId, ?string $motivo = null): ?ContratoEjecucion
     {
         $c = ContratoEjecucion::find($id);
         if (!$c) return null;
 
-        $origen = (int) $c->gerencia_id;
-        if ($origen === $gerenciaId) {
+        if ((int) $c->sector_id === $sectorId) {
             return $c;
         }
 
-        DB::transaction(function () use ($c, $gerenciaId, $motivo) {
-            // El observer de historial ya registra el cambio de gerencia_id; el
+        DB::transaction(function () use ($c, $sectorId, $motivo) {
+            // El observer de historial ya registra el cambio de sector_id; el
             // motivo se guarda como una entrada adicional para dejarlo asentado.
-            $c->gerencia_id = $gerenciaId;
+            $c->sector_id = $sectorId;
             $c->save();
 
             if ($motivo) {

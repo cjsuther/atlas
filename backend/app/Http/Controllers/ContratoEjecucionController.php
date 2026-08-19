@@ -68,18 +68,18 @@ class ContratoEjecucionController extends Controller
     /**
      * POST /api/contratos-ejecucion/{id}/transferir
      *
-     * Transfiere el contrato completo a otra gerencia. Los movimientos de
-     * estructura —gerencias que se dan de baja y otras que se crean— hacen que
+     * Transfiere el contrato completo a otro sector. Los movimientos de
+     * estructura —sectores que se dan de baja y otros que se crean— hacen que
      * un contrato deba cambiar de gerencia sin perder su historia.
      */
     public function transferir(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'gerencia_id' => ['required', 'integer', 'exists:gerencias,id'],
-            'motivo'      => ['nullable', 'string', 'max:500'],
+            'sector_id' => ['required', 'integer', 'exists:sector,sector_id'],
+            'motivo'    => ['nullable', 'string', 'max:500'],
         ], [
-            'gerencia_id.required' => 'Debe indicar la gerencia de destino.',
-            'gerencia_id.exists'   => 'La gerencia de destino no existe.',
+            'sector_id.required' => 'Debe indicar el sector de destino.',
+            'sector_id.exists'   => 'El sector de destino no existe.',
         ]);
 
         if (!ContratoEjecucion::find($id)) {
@@ -89,10 +89,10 @@ class ContratoEjecucionController extends Controller
             ], 404);
         }
 
-        $c = $this->service->transferirAGerencia($id, (int) $data['gerencia_id'], $data['motivo'] ?? null);
+        $c = $this->service->transferirASector($id, (int) $data['sector_id'], $data['motivo'] ?? null);
 
         return response()->json([
-            'message' => 'Contrato transferido a la nueva gerencia.',
+            'message' => 'Contrato transferido al nuevo sector.',
             'data'    => $this->service->find($c->id, true),
         ]);
     }

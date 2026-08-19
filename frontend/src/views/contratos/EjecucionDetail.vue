@@ -12,9 +12,9 @@
                     </h1>
                     <p class="page-subtitle">
                         #{{ c.id }} · {{ c.nro_expediente }} · {{ c.tipo_contrato?.sigla }}
-                        <span v-if="c.gerencia">
-                            · {{ c.gerencia.nombre }}
-                            <template v-if="c.gerencia.gerencia_area"> ({{ c.gerencia.gerencia_area.nombre }})</template>
+                        <span v-if="c.sector">
+                            · {{ c.sector.nombre }}
+                            <template v-if="c.gerencia_area"> ({{ c.gerencia_area.nombre }})</template>
                         </span>
                     </p>
                 </div>
@@ -26,7 +26,7 @@
                     </router-link>
                     <button v-if="auth.isAdminSistema && !c.deleted_at" class="btn btn-secondary"
                             @click="abrirTransferencia">
-                        Transferir a otra gerencia
+                        Transferir a otro sector
                     </button>
                     <router-link :to="{ name: 'contratos-ejecucion' }" class="btn btn-secondary">Volver</router-link>
                 </div>
@@ -47,9 +47,8 @@
                 <div class="detail-section">
                     <h4>Áreas y responsables</h4>
                     <div class="detail-grid">
-                        <Field label="Gerencia de Área" :value="c.gerencia?.gerencia_area?.nombre" />
-                        <Field label="Gerencia" :value="c.gerencia?.nombre" />
-                        <Field label="Departamento / Laboratorio" :value="c.sector_detalle" />
+                        <Field label="Gerencia de Área" :value="c.gerencia_area?.nombre" />
+                        <Field label="Sector" :value="c.sector?.nombre" />
                         <Field label="Solicitante" :value="c.solicitante?.razon_social" />
                         <Field label="UVT" :value="c.uvt ? `${c.uvt.siglas} — ${c.uvt.nombre}` : '—'" />
                         <Field label="Resp. 1" :value="responsable(c.resp1)" />
@@ -93,22 +92,22 @@
             <HistorialPanel tabla="contratos_ejecucion" :id="c.id" />
 
             <!-- Transferencia completa del contrato a otra gerencia -->
-            <BaseModal v-model="transferOpen" title="Transferir contrato a otra gerencia">
+            <BaseModal v-model="transferOpen" title="Transferir contrato a otro sector">
                 <form @submit.prevent="transferir">
                     <p style="margin-top:0;font-size:13px;color:var(--color-muted);">
-                        El contrato y todos sus movimientos de ejecución pasan a la gerencia de destino.
-                        El cambio queda asentado en el historial.
+                        El contrato y todos sus movimientos de ejecución pasan al sector de destino,
+                        que puede estar en otra Gerencia de Área. El cambio queda asentado en el historial.
                     </p>
                     <div class="form-grid">
                         <div class="field" style="grid-column:1 / -1;">
-                            <label>Gerencia de destino <span style="color:var(--color-danger);">*</span></label>
-                            <select v-model="transferData.gerencia_id" class="select" required>
+                            <label>Sector de destino <span style="color:var(--color-danger);">*</span></label>
+                            <select v-model="transferData.sector_id" class="select" required>
                                 <option :value="null">—</option>
-                                <option v-for="g in gerenciasDestino" :key="g.id" :value="g.id">
-                                    {{ g.nombre }}<template v-if="g.gerencia_area"> · {{ g.gerencia_area.nombre }}</template>
+                                <option v-for="g in sectoresDestino" :key="g.sector_id" :value="g.sector_id">
+                                    {{ g.nombre }}<template v-if="g.dependencia"> · {{ g.dependencia.nombre }}</template>
                                 </option>
                             </select>
-                            <div v-if="transferErrors.gerencia_id" class="error">{{ transferErrors.gerencia_id[0] }}</div>
+                            <div v-if="transferErrors.sector_id" class="error">{{ transferErrors.sector_id[0] }}</div>
                         </div>
                         <div class="field" style="grid-column:1 / -1;">
                             <label>Motivo</label>
@@ -119,7 +118,7 @@
                 </form>
                 <template #footer>
                     <button type="button" class="btn btn-secondary" @click="transferOpen = false">Cancelar</button>
-                    <button type="button" class="btn btn-primary" :disabled="transfiriendo || !transferData.gerencia_id"
+                    <button type="button" class="btn btn-primary" :disabled="transfiriendo || !transferData.sector_id"
                             @click="transferir">
                         {{ transfiriendo ? 'Transfiriendo…' : 'Transferir' }}
                     </button>
@@ -167,18 +166,18 @@ async function refrescar() {
 const transferOpen = ref(false);
 const transfiriendo = ref(false);
 const transferErrors = ref({});
-const transferData = reactive({ gerencia_id: null, motivo: '' });
-const gerencias = ref([]);
+const transferData = reactive({ sector_id: null, motivo: '' });
+const sectores = ref([]);
 
-const gerenciasDestino = computed(() =>
-    gerencias.value.filter(g => g.id !== c.value?.gerencia_id));
+const sectoresDestino = computed(() =>
+    sectores.value.filter(s => s.sector_id !== c.value?.sector_id));
 
 async function abrirTransferencia() {
-    transferData.gerencia_id = null;
+    transferData.sector_id = null;
     transferData.motivo = '';
     transferErrors.value = {};
-    if (!gerencias.value.length) {
-        try { gerencias.value = await listAll('gerencias'); } catch { /* no-op */ }
+    if (!sectores.value.length) {
+        try { sectores.value = await listAll('sectores'); } catch { /* no-op */ }
     }
     transferOpen.value = true;
 }
@@ -188,7 +187,7 @@ async function transferir() {
     transfiriendo.value = true;
     try {
         await contratosEjecucionService.transferir(route.params.id, {
-            gerencia_id: transferData.gerencia_id,
+            sector_id: transferData.sector_id,
             motivo: transferData.motivo || undefined,
         });
         toast.success('Contrato transferido.');

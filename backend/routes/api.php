@@ -6,8 +6,6 @@ use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\EjecucionMovimientoController;
 use App\Http\Controllers\EstadoEjecucionController;
 use App\Http\Controllers\ExportController;
-use App\Http\Controllers\GerenciaAreaController;
-use App\Http\Controllers\GerenciaController;
 use App\Http\Controllers\HistorialController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\PersonalController;
@@ -25,17 +23,19 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Prefijo: /api  (configurado en bootstrap/app.php)
 |
-| Estructura: Gerencia de Área -> Gerencia -> Contrato -> Movimiento
+| La estructura organizativa es la tabla `sector`: los sectores sin dependencia
+| son las Gerencias de Área.
+|
+|   Gerencia de Área -> Subsector -> Contrato -> Movimiento
 |
 | Roles:
-|   admin_sistema     : todas las gerencias de área, gerencias y contratos;
-|                       ABM de usuarios de cualquier rol y gerencia.
-|   admin_gerencia    : contratos de su gerencia; ABM de operadores de su
-|                       gerencia; saldos de su Gerencia de Área.
-|   operador_gerencia : contratos y saldos de su gerencia.
+|   admin_sistema     : todas las Gerencias de Área y sus contratos; ABM de
+|                       usuarios de cualquier rol y Gerencia de Área.
+|   admin_gerencia    : contratos de su Gerencia de Área; ABM de operadores.
+|   operador_gerencia : contratos de su Gerencia de Área.
 |
-| El recorte por gerencia lo aplica AccessScopeService dentro de cada
-| servicio: las rutas sólo distinguen quién puede ejecutar cada acción.
+| El recorte lo aplica AccessScopeService dentro de cada servicio: las rutas
+| sólo distinguen quién puede ejecutar cada acción.
 */
 
 // ----------------------------------------------------------------------
@@ -121,13 +121,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/historial/{tabla}/{id}', [HistorialController::class, 'show'])->whereNumber('id');
 
     // ------------------------------------------------------------------
-    // Estructura organizativa y entidades maestras.
+    // Estructura organizativa (`sectores`) y entidades maestras.
     //   GET : todos (recortado al alcance del usuario)
     //   ABM : sólo admin_sistema
     // ------------------------------------------------------------------
     foreach ([
-        'gerencias-area'           => GerenciaAreaController::class,
-        'gerencias'                => GerenciaController::class,
         'tipos-contrato-ejecucion' => TipoContratoEjecucionController::class,
         'estados-ejecucion'        => EstadoEjecucionController::class,
         'solicitantes'             => SolicitanteController::class,

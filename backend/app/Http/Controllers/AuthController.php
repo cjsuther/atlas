@@ -158,14 +158,14 @@ class AuthController extends Controller
      *
      * Configuración de visualización del usuario. Por ahora, con qué
      * agrupación quiere ver los saldos del panel: por Gerencia de Área, por
-     * Gerencia o por Contrato.
+     * Subsector o por Contrato.
      */
     public function preferencias(Request $request): JsonResponse
     {
         $data = $request->validate([
             'saldos_agrupacion' => ['required', 'in:' . implode(',', UserRole::AGRUPACIONES_SALDO)],
         ], [
-            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Gerencia o Contrato.',
+            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Subsector o Contrato.',
         ]);
 
         $user = $request->user();
@@ -177,7 +177,7 @@ class AuthController extends Controller
 
     private function userPayload(UserRole $user): array
     {
-        $user->loadMissing('gerencia.gerenciaArea');
+        $user->loadMissing('gerenciaArea');
 
         return [
             'id'                => $user->id,
@@ -186,10 +186,8 @@ class AuthController extends Controller
             'email'             => $user->email,
             'rol'               => $user->rol,
             'auth_source'       => $user->auth_source,
-            'gerencia_id'       => $user->gerencia_id,
-            'gerencia'          => optional($user->gerencia)->nombre,
-            'gerencia_area_id'  => optional($user->gerencia)->gerencia_area_id,
-            'gerencia_area'     => optional(optional($user->gerencia)->gerenciaArea)->nombre,
+            'sector_id'         => $user->sector_id,
+            'gerencia_area'     => optional($user->gerenciaArea)->nombre,
             'saldos_agrupacion' => $user->saldos_agrupacion,
             'activo'            => (bool) $user->activo,
             'last_login'        => optional($user->last_login)->toIso8601String(),

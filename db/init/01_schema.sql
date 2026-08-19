@@ -11,16 +11,17 @@
 --   * Toda baja es lógica (`deleted_at`).
 --
 -- Cambios v3 (CAMBIOS SOLICITADOS AL SISTEMA ATLAS):
---   * Se incorpora la estructura `gerencias_area` -> `gerencias`, que reemplaza
---     a la gestión de contratos principales.
---   * `contratos_ejecucion.gerencia_id` es obligatorio (jerarquía completa
---     Gerencia de Área -> Gerencia -> Contrato -> Movimiento).
+--   * La estructura organizativa es la tabla `sector`: los sectores sin
+--     dependencia son las Gerencias de Área y reemplazan a la gestión de
+--     contratos principales.
+--   * `contratos_ejecucion.sector_id` es obligatorio (jerarquía completa
+--     Gerencia de Área -> Subsector -> Contrato -> Movimiento).
 --   * `ejecucion_movimientos` admite acciones además de facturas
 --     (transferencias entre contratos, incentivos y MCH) y contraparte
 --     flexible (cliente, proveedor, contrato o rubro).
 --   * `user_roles` pasa a los roles admin_sistema / admin_gerencia /
---     operador_gerencia, con alcance por gerencia y preferencia de
---     agrupación de saldos.
+--     operador_gerencia, con alcance por Gerencia de Área (`sector_id`) y
+--     preferencia de agrupación de saldos.
 -- =====================================================================
 
 SET NAMES utf8mb4;
@@ -75,6 +76,14 @@ CREATE TABLE IF NOT EXISTS solicitantes (
 
 -- ---------------------------------------------------------------------
 -- Tabla: sector  (autorreferencia jerárquica)
+--
+-- Es la estructura organizativa del sistema:
+--   * Un sector sin dependencia es una Gerencia de Área. Es el nivel al que se
+--     asocian los administradores y operadores de gerencia, y el límite de
+--     confidencialidad: la información no sale de la Gerencia de Área.
+--   * Los sectores dependientes son sus subsectores.
+--
+--   Gerencia de Área -> Subsector -> Contrato -> Movimiento de ejecución
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sector (
   sector_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -128,56 +137,16 @@ CREATE TABLE IF NOT EXISTS personal (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
--- Tabla: gerencias_area
--- Máximo nivel de la estructura. Reemplaza a la gestión de contratos
--- principales: la información de saldos no puede salir de la Gerencia de
--- Área, que es el límite de confidencialidad del sistema.
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS gerencias_area (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  sigla       VARCHAR(50)  NULL,
-  nombre      VARCHAR(200) NOT NULL,
-  responsable VARCHAR(200) NULL,
-  activo      TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_ga_nombre (nombre),
-  UNIQUE KEY uq_ga_sigla  (sigla)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------------------------------------------------------------------
--- Tabla: gerencias
--- Segundo nivel. Cada gerencia pertenece a una Gerencia de Área y cada
--- contrato pertenece a una gerencia:
---   Gerencia de Área -> Gerencia -> Contrato -> Movimiento de ejecución
--- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS gerencias (
-  id               INT AUTO_INCREMENT PRIMARY KEY,
-  gerencia_area_id INT          NOT NULL,
-  sigla            VARCHAR(50)  NULL,
-  nombre           VARCHAR(200) NOT NULL,
-  responsable      VARCHAR(200) NULL,
-  activo           TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-  updated_at       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_ger_area_nombre (gerencia_area_id, nombre),
-  KEY idx_ger_area (gerencia_area_id),
-  CONSTRAINT fk_ger_area
-    FOREIGN KEY (gerencia_area_id) REFERENCES gerencias_area(id)
-    ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------------------------------------------------------------------
 -- Tabla: user_roles  (gestión interna de roles, opcionalmente con password)
 --
 -- Roles y alcance:
---   admin_sistema     : todas las gerencias de área, gerencias y contratos.
---   admin_gerencia    : su gerencia (ABM de contratos y de operadores de esa
---                       gerencia); saldos agregados de su Gerencia de Área.
---   operador_gerencia : su gerencia (ABM de contratos, sin gestión de usuarios).
--- `gerencia_id` es obligatorio para los roles acotados a una gerencia.
+--   admin_sistema     : todas las Gerencias de Área y sus contratos.
+--   admin_gerencia    : su Gerencia de Área (ABM de contratos y de operadores).
+--   operador_gerencia : su Gerencia de Área (ABM de contratos, sin usuarios).
+-- `sector_id` apunta a la Gerencia de Área (un sector sin dependencia) y es
+-- obligatorio para los roles acotados.
 -- `saldos_agrupacion` es la configuración con la que el usuario ve los saldos
--- del panel (por Gerencia de Área, por Gerencia o por Contrato).
+-- del panel (por Gerencia de Área, por Subsector o por Contrato).
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_roles (
   id                INT AUTO_INCREMENT PRIMARY KEY,
@@ -187,16 +156,16 @@ CREATE TABLE IF NOT EXISTS user_roles (
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
   rol               ENUM('admin_sistema','admin_gerencia','operador_gerencia') NOT NULL DEFAULT 'operador_gerencia',
-  gerencia_id       INT NULL,
-  saldos_agrupacion ENUM('gerencia_area','gerencia','contrato') NOT NULL DEFAULT 'gerencia',
+  sector_id         INT NULL,
+  saldos_agrupacion ENUM('gerencia_area','subsector','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,
   last_login        TIMESTAMP NULL,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_username (username),
-  KEY idx_ur_gerencia (gerencia_id),
-  CONSTRAINT fk_ur_gerencia
-    FOREIGN KEY (gerencia_id) REFERENCES gerencias(id)
+  KEY idx_ur_sector (sector_id),
+  CONSTRAINT fk_ur_sector
+    FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
     ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -270,10 +239,10 @@ CREATE TABLE IF NOT EXISTS contratos_principal (
 -- ---------------------------------------------------------------------
 -- Tabla: contratos_ejecucion
 -- Contrato concreto. Tipos: CP, CIT, CE.
--- Pertenece SIEMPRE a una gerencia, y ésta a una Gerencia de Área. El
--- vínculo con contratos_principal se conserva sólo por trazabilidad
+-- Cuelga SIEMPRE de un sector; la Gerencia de Área es el ancestro raíz de ese
+-- sector. El vínculo con contratos_principal se conserva sólo por trazabilidad
 -- histórica: la gestión de contratos principales fue reemplazada por la
--- estructura Gerencia de Área -> Gerencia.
+-- estructura Gerencia de Área -> Subsector.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   id                          INT AUTO_INCREMENT PRIMARY KEY,
@@ -283,8 +252,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   nombre_proyecto             VARCHAR(500) NOT NULL,
   descripcion_objeto          TEXT         NULL,
   contrato_principal_id       INT          NULL,
-  gerencia_id                 INT          NOT NULL,
-  sector_detalle              VARCHAR(200) NULL,    -- departamento / laboratorio
+  sector_id                   INT          NOT NULL,
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,
@@ -313,7 +281,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   KEY idx_ce_estado           (estado_id),
   KEY idx_ce_tipo             (tipo_contrato_id),
   KEY idx_ce_principal        (contrato_principal_id),
-  KEY idx_ce_gerencia         (gerencia_id),
+  KEY idx_ce_sector           (sector_id),
   KEY idx_ce_uvt              (uvt_id),
   KEY idx_ce_solicitante      (solicitante_id),
   KEY idx_ce_vencimiento      (fecha_vencimiento),
@@ -328,8 +296,8 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   CONSTRAINT fk_ce_principal
     FOREIGN KEY (contrato_principal_id) REFERENCES contratos_principal(id)
     ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT fk_ce_gerencia
-    FOREIGN KEY (gerencia_id) REFERENCES gerencias(id)
+  CONSTRAINT fk_ce_sector
+    FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
     ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_ce_solic
     FOREIGN KEY (solicitante_id) REFERENCES solicitantes(solicitante_id)

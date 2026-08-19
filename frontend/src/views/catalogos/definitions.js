@@ -5,55 +5,6 @@
  *   - formFields: [{ name, label, type, required?, max?, options?, ... }]
  */
 export const ENTITY_DEFS = {
-    'gerencias-area': {
-        title: 'Gerencias de Área',
-        subtitle: 'Máximo nivel de la estructura. Los saldos no salen de la Gerencia de Área.',
-        endpoint: 'gerencias-area',
-        keyField: 'id',
-        columns: [
-            { key: 'id',              label: 'ID' },
-            { key: 'sigla',           label: 'Sigla' },
-            { key: 'nombre',          label: 'Nombre' },
-            { key: 'responsable',     label: 'Responsable' },
-            { key: 'gerencias_count', label: 'Gerencias' },
-            { key: 'activo',          label: 'Activa', render: (r) => (r.activo ? 'Sí' : 'No') },
-        ],
-        formFields: [
-            { name: 'nombre',      label: 'Nombre',      type: 'text', required: true, max: 200 },
-            { name: 'sigla',       label: 'Sigla',       type: 'text', max: 50 },
-            { name: 'responsable', label: 'Responsable', type: 'text', max: 200 },
-            { name: 'activo',      label: 'Activa',      type: 'select', options: [
-                { value: true,  label: 'Sí' },
-                { value: false, label: 'No' },
-            ] },
-        ],
-    },
-    'gerencias': {
-        title: 'Gerencias',
-        subtitle: 'Cada gerencia pertenece a una Gerencia de Área y agrupa contratos.',
-        endpoint: 'gerencias',
-        keyField: 'id',
-        columns: [
-            { key: 'id',              label: 'ID' },
-            { key: 'gerencia_area',   label: 'Gerencia de Área', render: (r) => r.gerencia_area?.nombre || '—' },
-            { key: 'sigla',           label: 'Sigla' },
-            { key: 'nombre',          label: 'Nombre' },
-            { key: 'responsable',     label: 'Responsable' },
-            { key: 'contratos_count', label: 'Contratos' },
-            { key: 'activo',          label: 'Activa', render: (r) => (r.activo ? 'Sí' : 'No') },
-        ],
-        formFields: [
-            { name: 'gerencia_area_id', label: 'Gerencia de Área', type: 'select-async', required: true,
-              endpoint: 'gerencias-area', valueKey: 'id', labelKey: 'nombre' },
-            { name: 'nombre',      label: 'Nombre',      type: 'text', required: true, max: 200 },
-            { name: 'sigla',       label: 'Sigla',       type: 'text', max: 50 },
-            { name: 'responsable', label: 'Responsable', type: 'text', max: 200 },
-            { name: 'activo',      label: 'Activa',      type: 'select', options: [
-                { value: true,  label: 'Sí' },
-                { value: false, label: 'No' },
-            ] },
-        ],
-    },
     'tipos-contrato-ejecucion': {
         title: 'Tipos de contrato',
         endpoint: 'tipos-contrato-ejecucion',
@@ -104,19 +55,24 @@ export const ENTITY_DEFS = {
         ],
     },
     'sectores': {
-        title: 'Sectores',
+        title: 'Sectores y Gerencias',
+        subtitle: 'Los sectores que no dependen de ningún otro son las Gerencias de Área: '
+                + 'definen el alcance de los usuarios y el límite de confidencialidad.',
         endpoint: 'sectores',
         keyField: 'sector_id',
         columns: [
             { key: 'sector_id',   label: 'ID' },
             { key: 'nombre',      label: 'Nombre' },
+            { key: 'nivel',       label: 'Nivel',
+              render: (r) => (r.es_gerencia_area ? 'Gerencia de Área' : 'Subsector') },
             { key: 'dependencia', label: 'Depende de', render: (r) => r.dependencia?.nombre || '—' },
             { key: 'responsable', label: 'Responsable' },
             { key: 'ubicacion',   label: 'Ubicación' },
         ],
         formFields: [
             { name: 'nombre',         label: 'Nombre',      type: 'text', required: true, max: 200 },
-            { name: 'dependencia_id', label: 'Depende de',  type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
+            { name: 'dependencia_id', label: 'Depende de (vacío = Gerencia de Área)',
+              type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
             { name: 'responsable',    label: 'Responsable', type: 'text', max: 200 },
             { name: 'web',            label: 'Web',         type: 'text', max: 300 },
             { name: 'ubicacion',      label: 'Ubicación',   type: 'text', max: 200 },
