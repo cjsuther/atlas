@@ -33,7 +33,7 @@ function formatValue(v) { return props.money ? fmtMoney(v) : fmtInt(v); }
 
 <style scoped>
 .bar-chart .extra {
-    min-width: 130px;
+    min-width: 70px;
     text-align: right;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
