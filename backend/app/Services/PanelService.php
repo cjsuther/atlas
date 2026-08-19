@@ -558,14 +558,20 @@ class PanelService
 
     /** ---------------- Helpers privados ---------------- */
 
-    /** Suma `monto * cotizacion` para llevar todo a la moneda base (Peso). */
+    /**
+     * Suma `monto * cotizacion` para llevar todo a la moneda base (Peso).
+     *
+     * Los importes negativos cuentan: los saldos iniciales de una gerencia
+     * pueden serlo, y descartarlos haría que este total no coincida con el de
+     * la vista de saldos.
+     */
     private function sumarMontos(Builder $q, string $col, string $monedaBase): float
     {
         $rows = $q->select('moneda', 'cotizacion', $col)->get();
         $total = 0.0;
         foreach ($rows as $r) {
             $monto = (float) ($r->{$col} ?? 0);
-            if ($monto <= 0) continue;
+            if ($monto === 0.0) continue;
             if ($r->moneda === $monedaBase) {
                 $total += $monto;
             } else {

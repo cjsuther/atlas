@@ -336,7 +336,7 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
 /* KPI cards */
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
     margin-bottom: 20px;
 }
@@ -346,14 +346,27 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
     border-radius: var(--radius);
     padding: 16px 20px;
     box-shadow: var(--shadow-sm);
+    /* Permite que el tamaño del número se ajuste al ancho de la tarjeta. */
+    container-type: inline-size;
+    overflow: hidden;
 }
 .kpi-card .label {
     color: var(--color-muted); font-size: 12px;
     text-transform: uppercase; letter-spacing: 0.5px;
 }
 .kpi-card .value {
-    font-size: 28px; font-weight: 700;
-    color: var(--color-primary); margin-top: 4px;
+    font-size: clamp(20px, 14cqi, 28px);
+    font-weight: 700;
+    color: var(--color-primary);
+    margin-top: 4px;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    /* Último recurso: un importe muy largo baja de línea en vez de desbordar. */
+    overflow-wrap: anywhere;
+}
+/* Los importes tienen muchos más dígitos que un conteo: arrancan más chicos. */
+.kpi-card .value.money {
+    font-size: clamp(17px, 9.5cqi, 23px);
 }
 .kpi-card.success { border-left-color: var(--color-success); }
 .kpi-card.info    { border-left-color: var(--color-info); }
@@ -689,7 +702,8 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
     .toast { max-width: 100%; min-width: 0; }
 
     .kpi-card { padding: 14px 16px; }
-    .kpi-card .value { font-size: 22px; }
+    .kpi-card .value { font-size: clamp(18px, 13cqi, 22px); }
+    .kpi-card .value.money { font-size: clamp(16px, 9cqi, 20px); }
 
     .login-box { padding: 24px 20px; }
     .btn { min-height: 40px; padding: 10px 14px; }

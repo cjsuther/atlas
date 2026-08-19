@@ -153,23 +153,23 @@
             </div>
             <div class="kpi-card">
                 <div class="label">Presup. ingresos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value">{{ fmtMoney(ind?.montos?.presupuestado_ingresos_total) }}</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.presupuestado_ingresos_total) }}</div>
             </div>
             <div class="kpi-card">
                 <div class="label">Presup. gastos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value">{{ fmtMoney(ind?.montos?.presupuestado_gastos_total) }}</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.presupuestado_gastos_total) }}</div>
             </div>
             <div class="kpi-card info">
                 <div class="label">Ejec. ingresos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value">{{ fmtMoney(ind?.montos?.ejecutado_ingresos_total) }}</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.ejecutado_ingresos_total) }}</div>
             </div>
             <div class="kpi-card info">
                 <div class="label">Ejec. gastos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value">{{ fmtMoney(ind?.montos?.ejecutado_gastos_total) }}</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.ejecutado_gastos_total) }}</div>
             </div>
             <div class="kpi-card success">
                 <div class="label">Beneficio (ejec. ing. − gtos.)</div>
-                <div class="value">{{ fmtMoney(ind?.montos?.beneficio_total) }}</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.beneficio_total) }}</div>
             </div>
         </div>
 
