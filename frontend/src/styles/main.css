@@ -575,7 +575,8 @@ table.atlas-table tr.deleted td { opacity: 0.55; font-style: italic; }
 .bar-chart { display: flex; flex-direction: column; gap: 6px; }
 .bar-chart .row {
     display: grid;
-    grid-template-columns: minmax(140px, 30%) 1fr 70px;
+    /* La cuarta columna es opcional: sólo aparece si la fila trae importe. */
+    grid-template-columns: minmax(140px, 28%) 1fr 70px auto;
     gap: 10px;
     align-items: center;
     font-size: 13px;

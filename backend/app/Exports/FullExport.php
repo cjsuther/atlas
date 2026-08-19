@@ -267,8 +267,8 @@ class FullExport implements WithMultipleSheets
                 'Acta finalización', 'Prórroga', 'Renov. autom.',
                 'Caja BAS',
                 'Moneda', 'Cotización',
-                'Presup. ingresos', 'Presup. gastos',
-                'Ejec. ingresos (calc.)', 'Ejec. gastos (calc.)',
+                'Saldo inicial',
+                'Ejec. ingresos (calc.)', 'Ejec. gastos (calc.)', 'Saldo (calc.)',
                 'Observaciones',
             ],
             fn ($r) => [
@@ -299,10 +299,10 @@ class FullExport implements WithMultipleSheets
                 $r->caja_bas,
                 $r->moneda,
                 $r->cotizacion,
-                $r->monto_presupuestado_ingresos,
-                $r->monto_presupuestado_gastos,
+                $r->saldo_inicial,
                 $r->monto_ejecutado_ingresos,
                 $r->monto_ejecutado_gastos,
+                $r->saldo,
                 $r->observaciones,
             ],
         );

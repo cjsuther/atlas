@@ -45,8 +45,8 @@ class ContratoEjecucionRequest extends FormRequest
             'caja_bas'                   => ['nullable', 'string', 'max:200'],
             'moneda'                     => ['required', 'in:Peso,Dólar,Euro,Otro'],
             'cotizacion'                 => ['nullable', 'numeric', 'min:0', 'required_unless:moneda,Peso'],
-            'monto_presupuestado_ingresos' => ['nullable', 'numeric', 'min:0'],
-            'monto_presupuestado_gastos'   => ['nullable', 'numeric', 'min:0'],
+            // Puede ser negativo: una gerencia puede arrancar en rojo.
+            'saldo_inicial'              => ['nullable', 'numeric'],
         ];
     }
 

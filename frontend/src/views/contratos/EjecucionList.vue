@@ -105,14 +105,18 @@
                         <th>UVT</th>
                         <th>F. Inicio</th>
                         <th>F. Venc.</th>
-                        <th>Ejecutado</th>
+                        <th>Ejecución y saldo</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="r in rows" :key="r.id" :class="{ deleted: r.deleted_at }">
                         <td>{{ r.id }}</td>
-                        <td>{{ r.nro_expediente }}</td>
+                        <td>
+                            <router-link :to="{ name: 'contratos-ejecucion-detalle', params: { id: r.id } }">
+                                {{ r.nro_expediente }}
+                            </router-link>
+                        </td>
                         <td>{{ r.tipo_contrato?.sigla }}</td>
                         <td>{{ r.nombre_proyecto }}</td>
                         <td><span :class="['badge', badgeForEstado(r.estado)]">{{ r.estado?.nombre || '—' }}</span></td>
@@ -126,15 +130,16 @@
                         <td>{{ fmtDate(r.fecha_inicio) }}</td>
                         <td>{{ fmtDate(r.fecha_vencimiento) }}</td>
                         <td>
-                            <div style="font-size:12px;line-height:1.3;">
-                                <div><span style="color:var(--color-muted);">Ing.:</span> {{ r.moneda }} {{ fmtMoney(r.monto_ejecutado_ingresos) }}</div>
-                                <div><span style="color:var(--color-muted);">Gtos.:</span> {{ r.moneda }} {{ fmtMoney(r.monto_ejecutado_gastos) }}</div>
+                            <div class="ejecutado">
+                                <div><span>Saldo inic.:</span> {{ fmtMoney(r.saldo_inicial) }}</div>
+                                <div><span>Ing.:</span> {{ fmtMoney(r.monto_ejecutado_ingresos) }}</div>
+                                <div><span>Gtos.:</span> {{ fmtMoney(r.monto_ejecutado_gastos) }}</div>
+                                <div class="saldo" :class="{ negativo: Number(r.saldo) < 0 }">
+                                    <span>Saldo:</span> {{ r.moneda }} {{ fmtMoney(r.saldo) }}
+                                </div>
                             </div>
                         </td>
                         <td class="actions">
-                            <router-link :to="{ name: 'contratos-ejecucion-detalle', params: { id: r.id } }">
-                                <button><IconLib name="eye" :size="14" /></button>
-                            </router-link>
                             <router-link v-if="auth.canEdit && !r.deleted_at"
                                          :to="{ name: 'contratos-ejecucion-editar', params: { id: r.id } }">
                                 <button><IconLib name="edit" :size="14" /></button>
@@ -266,3 +271,15 @@ onMounted(async () => {
     load();
 });
 </script>
+
+<style scoped>
+.ejecutado { font-size: 12px; line-height: 1.35; white-space: nowrap; }
+.ejecutado span { color: var(--color-muted, #888); }
+.ejecutado .saldo {
+    font-weight: 600;
+    border-top: 1px solid var(--color-border, #e3e6ea);
+    margin-top: 3px;
+    padding-top: 3px;
+}
+.ejecutado .saldo.negativo { color: var(--color-danger, #c0392b); }
+</style>

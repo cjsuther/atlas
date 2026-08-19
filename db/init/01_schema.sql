@@ -19,6 +19,8 @@
 --   * `ejecucion_movimientos` admite acciones además de facturas
 --     (transferencias entre contratos, incentivos y MCH) y contraparte
 --     flexible (cliente, proveedor, contrato o rubro).
+--   * El contrato guarda `saldo_inicial`; su saldo es ese monto más los
+--     ingresos ejecutados menos los gastos ejecutados.
 --   * `user_roles` pasa a los roles admin_sistema / admin_gerencia /
 --     operador_gerencia, con alcance por Gerencia de Área (`sector_id`) y
 --     preferencia de agrupación de saldos.
@@ -270,8 +272,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   caja_bas                    VARCHAR(200) NULL,
   moneda                      ENUM('Peso','Dólar','Euro','Otro') NOT NULL DEFAULT 'Peso',
   cotizacion                  DECIMAL(18,4) NULL,
-  monto_presupuestado_ingresos DECIMAL(18,2) NULL,
-  monto_presupuestado_gastos   DECIMAL(18,2) NULL,
+  saldo_inicial               DECIMAL(18,2) NULL,    -- saldo con el que arranca el contrato
   deleted_at                  TIMESTAMP    NULL,
   created_at                  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   updated_at                  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

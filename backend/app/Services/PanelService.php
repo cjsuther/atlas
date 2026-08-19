@@ -89,10 +89,9 @@ class PanelService
             ->count();
 
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
-        $sumPresupIngresos = $this->sumarMontos($this->ejecucionQuery($filters), 'monto_presupuestado_ingresos', $monedaBase);
-        $sumPresupGastos   = $this->sumarMontos($this->ejecucionQuery($filters), 'monto_presupuestado_gastos',   $monedaBase);
-        $sumEjecIngresos   = $this->sumaMovimientos($filters, 'ingreso');
-        $sumEjecGastos     = $this->sumaMovimientos($filters, 'gasto');
+        $sumSaldoInicial = $this->sumarMontos($this->ejecucionQuery($filters), 'saldo_inicial', $monedaBase);
+        $sumEjecIngresos = $this->sumaMovimientos($filters, 'ingreso');
+        $sumEjecGastos   = $this->sumaMovimientos($filters, 'gasto');
 
         return [
             'totales' => [
@@ -104,12 +103,12 @@ class PanelService
                 'con_atraso'   => $vencidos,
             ],
             'montos' => [
-                'moneda_base'                  => $monedaBase,
-                'presupuestado_ingresos_total' => round($sumPresupIngresos, 2),
-                'presupuestado_gastos_total'   => round($sumPresupGastos, 2),
-                'ejecutado_ingresos_total'     => round($sumEjecIngresos, 2),
-                'ejecutado_gastos_total'       => round($sumEjecGastos, 2),
-                'beneficio_total'              => round($sumEjecIngresos - $sumEjecGastos, 2),
+                'moneda_base'              => $monedaBase,
+                'saldo_inicial_total'      => round($sumSaldoInicial, 2),
+                'ejecutado_ingresos_total' => round($sumEjecIngresos, 2),
+                'ejecutado_gastos_total'   => round($sumEjecGastos, 2),
+                'beneficio_total'          => round($sumEjecIngresos - $sumEjecGastos, 2),
+                'saldo_total'              => round($sumSaldoInicial + $sumEjecIngresos - $sumEjecGastos, 2),
             ],
         ];
     }
@@ -131,10 +130,9 @@ class PanelService
             filters: $filters,
         );
 
-        $sumPresup = $this->sumarMontos($this->ejecucionQuery($filters), 'monto_presupuestado_ingresos', $monedaBase)
-                   + $this->sumarMontos($this->ejecucionQuery($filters), 'monto_presupuestado_gastos',   $monedaBase);
-        $sumEjec  = $this->sumaMovimientos($filters);
-        $pctEjec  = $sumPresup > 0 ? round(($sumEjec / $sumPresup) * 100, 2) : null;
+        $sumSaldoInicial = $this->sumarMontos($this->ejecucionQuery($filters), 'saldo_inicial', $monedaBase);
+        $sumEjec = $this->sumaMovimientos($filters);
+        $pctEjec = $sumSaldoInicial > 0 ? round(($sumEjec / $sumSaldoInicial) * 100, 2) : null;
 
         return [
             'dias_firma_promedio'             => $diasFirma,
@@ -155,6 +153,8 @@ class PanelService
      * Los importes de cada fila incluyen los de toda su rama: una Gerencia de
      * Área suma lo de todos sus subsectores. Así los totales cierran en
      * cualquier nivel al que se mire.
+     *
+     * El saldo es `saldo inicial + ingresos ejecutados - gastos ejecutados`.
      */
     public function saldos(array $filters): array
     {
@@ -171,8 +171,7 @@ class PanelService
                 'contratos_ejecucion.sector_id',
                 'contratos_ejecucion.moneda',
                 'contratos_ejecucion.cotizacion',
-                'contratos_ejecucion.monto_presupuestado_ingresos',
-                'contratos_ejecucion.monto_presupuestado_gastos',
+                'contratos_ejecucion.saldo_inicial',
             )
             ->get();
 
@@ -186,12 +185,11 @@ class PanelService
             $factor   = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
 
             $importes = [
-                'contratos'              => 1,
-                'presupuestado_ingresos' => ((float) ($c->monto_presupuestado_ingresos ?? 0)) * $factor,
-                'presupuestado_gastos'   => ((float) ($c->monto_presupuestado_gastos   ?? 0)) * $factor,
+                'contratos'          => 1,
+                'saldo_inicial'      => ((float) ($c->saldo_inicial ?? 0)) * $factor,
                 // Los movimientos ya están expresados en pesos.
-                'ejecutado_ingresos'     => (float) ($sumas[$c->id]['ingreso'] ?? 0),
-                'ejecutado_gastos'       => (float) ($sumas[$c->id]['gasto']   ?? 0),
+                'ejecutado_ingresos' => (float) ($sumas[$c->id]['ingreso'] ?? 0),
+                'ejecutado_gastos'   => (float) ($sumas[$c->id]['gasto']   ?? 0),
             ];
 
             $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, $importes);
@@ -230,12 +228,11 @@ class PanelService
             'moneda_base' => $monedaBase,
             'filas'       => $rows,
             'totales'     => [
-                'contratos'              => (int) $raices->sum('contratos'),
-                'presupuestado_ingresos' => round($raices->sum('presupuestado_ingresos'), 2),
-                'presupuestado_gastos'   => round($raices->sum('presupuestado_gastos'), 2),
-                'ejecutado_ingresos'     => round($raices->sum('ejecutado_ingresos'), 2),
-                'ejecutado_gastos'       => round($raices->sum('ejecutado_gastos'), 2),
-                'saldo'                  => round($raices->sum('saldo'), 2),
+                'contratos'          => (int) $raices->sum('contratos'),
+                'saldo_inicial'      => round($raices->sum('saldo_inicial'), 2),
+                'ejecutado_ingresos' => round($raices->sum('ejecutado_ingresos'), 2),
+                'ejecutado_gastos'   => round($raices->sum('ejecutado_gastos'), 2),
+                'saldo'              => round($raices->sum('saldo'), 2),
             ],
         ];
     }
@@ -322,8 +319,7 @@ class PanelService
      */
     private function acumular(?array $base, array $extra): array
     {
-        $campos = ['contratos', 'presupuestado_ingresos', 'presupuestado_gastos',
-                   'ejecutado_ingresos', 'ejecutado_gastos'];
+        $campos = ['contratos', 'cantidad', 'saldo_inicial', 'ejecutado_ingresos', 'ejecutado_gastos'];
 
         $out = [];
         foreach ($campos as $campo) {
@@ -335,14 +331,14 @@ class PanelService
     /** @param array<string, mixed> $f @return array<string, mixed> */
     private function redondear(array $f): array
     {
-        foreach (['presupuestado_ingresos', 'presupuestado_gastos',
-                  'ejecutado_ingresos', 'ejecutado_gastos'] as $campo) {
+        foreach (['saldo_inicial', 'ejecutado_ingresos', 'ejecutado_gastos'] as $campo) {
             $f[$campo] = round((float) ($f[$campo] ?? 0), 2);
         }
-        $f['contratos']           = (int) ($f['contratos'] ?? 0);
-        $f['saldo']               = round($f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2);
-        $f['disponible_ingresos'] = round($f['presupuestado_ingresos'] - $f['ejecutado_ingresos'], 2);
-        $f['disponible_gastos']   = round($f['presupuestado_gastos'] - $f['ejecutado_gastos'], 2);
+        $f['contratos'] = (int) ($f['contratos'] ?? 0);
+        // Saldo = lo que había al empezar, más lo que entró, menos lo que salió.
+        $f['saldo'] = round(
+            $f['saldo_inicial'] + $f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2
+        );
         return $f;
     }
 
@@ -371,102 +367,116 @@ class PanelService
     }
 
     /** ---------------- Distribuciones ---------------- */
+
+    /**
+     * Importes de cada contrato del alcance, listos para agrupar.
+     *
+     * @return array<int, array{sector_id: int, uvt_id: ?int, importes: array<string, float|int>}>
+     */
+    private function importesPorContrato(array $filters): array
+    {
+        $monedaBase = $filters['moneda_base'] ?? 'Peso';
+
+        $contratos = $this->ejecucionQuery($filters)
+            ->select('contratos_ejecucion.id', 'contratos_ejecucion.sector_id',
+                     'contratos_ejecucion.uvt_id', 'contratos_ejecucion.moneda',
+                     'contratos_ejecucion.cotizacion', 'contratos_ejecucion.saldo_inicial')
+            ->get();
+
+        $sumas = $this->sumasPorContrato($contratos->pluck('id')->all());
+
+        $out = [];
+        foreach ($contratos as $c) {
+            $factor = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
+            $out[] = [
+                'sector_id' => (int) $c->sector_id,
+                'uvt_id'    => $c->uvt_id !== null ? (int) $c->uvt_id : null,
+                'importes'  => [
+                    'cantidad'           => 1,
+                    'saldo_inicial'      => ((float) ($c->saldo_inicial ?? 0)) * $factor,
+                    'ejecutado_ingresos' => (float) ($sumas[$c->id]['ingreso'] ?? 0),
+                    'ejecutado_gastos'   => (float) ($sumas[$c->id]['gasto']   ?? 0),
+                ],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Cierra una fila agrupada: redondea y calcula el saldo.
+     *
+     * @param  array<string, float|int>  $f
+     * @return array<string, float|int>
+     */
+    private function cerrarFila(array $f): array
+    {
+        foreach (['saldo_inicial', 'ejecutado_ingresos', 'ejecutado_gastos'] as $campo) {
+            $f[$campo] = round((float) ($f[$campo] ?? 0), 2);
+        }
+        $f['cantidad'] = (int) ($f['cantidad'] ?? 0);
+        $f['saldo'] = round(
+            $f['saldo_inicial'] + $f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2
+        );
+        return $f;
+    }
+
+    /** Distribución por UVT, con cantidad de contratos e importes. */
     public function porUvt(array $filters): array
     {
+        $porUvt  = [];
+        $nombres = DB::table('uvt')->get()->keyBy('uvt_id');
+
+        foreach ($this->importesPorContrato($filters) as $c) {
+            $clave = $c['uvt_id'] ?? 0;
+            $porUvt[$clave] ??= [
+                'uvt_id' => $c['uvt_id'],
+                'siglas' => optional($nombres->get($c['uvt_id']))->siglas ?? 'Sin UVT',
+                'nombre' => optional($nombres->get($c['uvt_id']))->nombre,
+            ];
+            $porUvt[$clave] = $this->acumular($porUvt[$clave], $c['importes']) + $porUvt[$clave];
+        }
+
         return [
             'moneda_base' => $filters['moneda_base'] ?? 'Peso',
-            'contratos'   => $this->ejecucionQuery($filters)
-                ->select('uvt_id', DB::raw('COUNT(*) as cantidad'))
-                ->groupBy('uvt_id')
-                ->with('uvt:uvt_id,siglas,nombre')
-                ->get()
-                ->map(fn ($r) => [
-                    'uvt_id'   => $r->uvt_id,
-                    'siglas'   => optional($r->uvt)->siglas,
-                    'nombre'   => optional($r->uvt)->nombre,
-                    'cantidad' => (int) $r->cantidad,
-                ]),
+            'contratos'   => collect(array_values($porUvt))
+                ->map(fn ($r) => $this->cerrarFila($r))
+                ->sortByDesc('cantidad')->values(),
         ];
     }
 
     /**
-     * Distribución de contratos por sector y por Gerencia de Área. La segunda
-     * acumula la de todos los subsectores de cada rama.
+     * Distribución por sector y por Gerencia de Área, con cantidad de contratos
+     * e importes. La de Gerencia de Área acumula la de todos sus subsectores.
      */
     public function porGerencia(array $filters): array
     {
-        $porSector = $this->ejecucionQuery($filters)
-            ->select('sector_id', DB::raw('COUNT(*) as cantidad'))
-            ->groupBy('sector_id')
-            ->get();
+        $porSector = [];
+        $porArea   = [];
 
-        $porArea = [];
-        $sectores = [];
-        foreach ($porSector as $r) {
-            $sectorId = (int) $r->sector_id;
-            $cantidad = (int) $r->cantidad;
+        foreach ($this->importesPorContrato($filters) as $c) {
+            $sectorId = $c['sector_id'];
             $raiz     = $this->arbol->raizDe($sectorId) ?? $sectorId;
 
-            $sectores[] = [
+            $porSector[$sectorId] ??= [
                 'sector_id'     => $sectorId,
                 'nombre'        => $this->arbol->nombre($sectorId) ?? "Sector #{$sectorId}",
                 'gerencia_area' => $this->arbol->nombre($raiz),
-                'cantidad'      => $cantidad,
             ];
+            $porSector[$sectorId] = $this->acumular($porSector[$sectorId], $c['importes']) + $porSector[$sectorId];
 
             $porArea[$raiz] ??= [
                 'gerencia_area_id' => $raiz,
                 'nombre'           => $this->arbol->nombre($raiz) ?? "Sector #{$raiz}",
-                'cantidad'         => 0,
             ];
-            $porArea[$raiz]['cantidad'] += $cantidad;
+            $porArea[$raiz] = $this->acumular($porArea[$raiz], $c['importes']) + $porArea[$raiz];
         }
 
         return [
-            'sectores'       => collect($sectores)->sortByDesc('cantidad')->values(),
-            'gerencias_area' => collect(array_values($porArea))->sortByDesc('cantidad')->values(),
-        ];
-    }
-
-    public function porTipo(array $filters): array
-    {
-        return [
-            'contratos' => $this->ejecucionQuery($filters)
-                ->select('tipo_contrato_id', DB::raw('COUNT(*) as cantidad'))
-                ->groupBy('tipo_contrato_id')
-                ->with('tipoContrato:id,sigla,nombre')
-                ->get()
-                ->map(fn ($r) => [
-                    'tipo_contrato_id' => $r->tipo_contrato_id,
-                    'sigla'            => optional($r->tipoContrato)->sigla,
-                    'nombre'           => optional($r->tipoContrato)->nombre,
-                    'cantidad'         => (int) $r->cantidad,
-                ]),
-        ];
-    }
-
-    public function porEstado(array $filters): array
-    {
-        return [
-            'contratos' => $this->ejecucionQuery($filters)
-                ->select('estado_id', DB::raw('COUNT(*) as cantidad'))
-                ->groupBy('estado_id')
-                ->with('estado:id,nombre')
-                ->get()
-                ->map(fn ($r) => [
-                    'estado_id' => $r->estado_id,
-                    'nombre'    => optional($r->estado)->nombre,
-                    'cantidad'  => (int) $r->cantidad,
-                ]),
-        ];
-    }
-
-    public function porMoneda(array $filters): array
-    {
-        return [
-            'contratos' => $this->ejecucionQuery($filters)
-                ->select('moneda', DB::raw('COUNT(*) as cantidad'))
-                ->groupBy('moneda')->get(),
+            'moneda_base'    => $filters['moneda_base'] ?? 'Peso',
+            'sectores'       => collect(array_values($porSector))
+                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('cantidad')->values(),
+            'gerencias_area' => collect(array_values($porArea))
+                ->map(fn ($r) => $this->cerrarFila($r))->sortByDesc('cantidad')->values(),
         ];
     }
 
@@ -534,24 +544,10 @@ class PanelService
         }
         $rankGerencia = collect(array_values($porArea))->sortByDesc('cantidad')->take(20)->values();
 
-        $rankUvtCantidad = $this->ejecucionQuery($filters)
-            ->select('uvt_id', DB::raw('COUNT(*) as cantidad'))
-            ->groupBy('uvt_id')
-            ->with('uvt:uvt_id,siglas,nombre')
-            ->orderByDesc('cantidad')
-            ->limit(20)
-            ->get()
-            ->map(fn ($r) => [
-                'uvt_id'   => $r->uvt_id,
-                'siglas'   => optional($r->uvt)->siglas,
-                'nombre'   => optional($r->uvt)->nombre,
-                'cantidad' => (int) $r->cantidad,
-            ]);
-
         return [
             'gerencias_area_por_cantidad' => $rankGerencia,
-            'uvt_por_cantidad'       => $rankUvtCantidad,
-            'uvt_por_monto'          => $this->montoPorUvt($filters, $monedaBase),
+            'uvt_por_monto'          => $this->montoPorUvt($filters, $monedaBase)
+                                            ->sortByDesc('saldo')->values(),
             'moneda_base'            => $monedaBase,
         ];
     }
@@ -585,36 +581,7 @@ class PanelService
 
     private function montoPorUvt(array $filters, string $monedaBase): Collection
     {
-        $rows = $this->ejecucionQuery($filters)
-            ->select('contratos_ejecucion.id', 'uvt_id', 'moneda', 'cotizacion',
-                     'monto_presupuestado_ingresos', 'monto_presupuestado_gastos')
-            ->with('uvt:uvt_id,siglas,nombre')
-            ->get();
-
-        $sumas = $this->sumasPorContrato($rows->pluck('id')->all());
-
-        $byUvt = [];
-        foreach ($rows as $r) {
-            $key = $r->uvt_id ?? 0;
-            $byUvt[$key] ??= [
-                'uvt_id'        => $r->uvt_id,
-                'siglas'        => optional($r->uvt)->siglas,
-                'nombre'        => optional($r->uvt)->nombre,
-                'presupuestado' => 0.0,
-                'ejecutado'     => 0.0,
-            ];
-            $factor = ($r->moneda === $monedaBase || !$r->cotizacion) ? 1 : (float) $r->cotizacion;
-            $byUvt[$key]['presupuestado'] += ((float) ($r->monto_presupuestado_ingresos ?? 0)
-                                            + (float) ($r->monto_presupuestado_gastos ?? 0)) * $factor;
-            // Ejecutados (movimientos) ya están en pesos: no aplica el factor de cotización del contrato.
-            $byUvt[$key]['ejecutado'] += ($sumas[$r->id]['ingreso'] ?? 0) + ($sumas[$r->id]['gasto'] ?? 0);
-        }
-
-        return collect(array_values($byUvt))->map(function ($r) {
-            $r['presupuestado'] = round($r['presupuestado'], 2);
-            $r['ejecutado']     = round($r['ejecutado'], 2);
-            return $r;
-        })->sortByDesc('ejecutado')->values();
+        return collect($this->porUvt($filters + ['moneda_base' => $monedaBase])['contratos']);
     }
 
     private function porcentajeFinalizadosEnTermino(array $filters): ?float

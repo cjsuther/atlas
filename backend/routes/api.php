@@ -71,9 +71,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/saldos',       [PanelController::class, 'saldos']);
         Route::get('/por-uvt',      [PanelController::class, 'porUvt']);
         Route::get('/por-gerencia', [PanelController::class, 'porGerencia']);
-        Route::get('/por-tipo',     [PanelController::class, 'porTipo']);
-        Route::get('/por-estado',   [PanelController::class, 'porEstado']);
-        Route::get('/por-moneda',   [PanelController::class, 'porMoneda']);
         Route::get('/por-accion',   [PanelController::class, 'porAccion']);
         Route::get('/vencimientos', [PanelController::class, 'vencimientos']);
         Route::get('/rankings',     [PanelController::class, 'rankings']);

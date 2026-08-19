@@ -83,10 +83,9 @@
                     <tr>
                         <th>{{ tituloColumnaSaldos }}</th>
                         <th style="text-align:right;">Contratos</th>
-                        <th style="text-align:right;">Presup. ingresos</th>
-                        <th style="text-align:right;">Presup. gastos</th>
-                        <th style="text-align:right;">Ejec. ingresos</th>
-                        <th style="text-align:right;">Ejec. gastos</th>
+                        <th style="text-align:right;">Saldo inicial</th>
+                        <th style="text-align:right;">Ingresos</th>
+                        <th style="text-align:right;">Gastos</th>
                         <th style="text-align:right;">Saldo</th>
                     </tr>
                 </thead>
@@ -103,8 +102,7 @@
                                  style="font-size:11px;color:var(--color-muted);">{{ f.detalle }}</div>
                         </td>
                         <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
-                        <td style="text-align:right;">{{ fmtMoney(f.presupuestado_ingresos) }}</td>
-                        <td style="text-align:right;">{{ fmtMoney(f.presupuestado_gastos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(f.saldo_inicial) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.ejecutado_ingresos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.ejecutado_gastos) }}</td>
                         <td style="text-align:right;font-weight:600;"
@@ -113,13 +111,12 @@
                         </td>
                     </tr>
                     <tr v-if="!saldos?.filas?.length">
-                        <td colspan="7" class="empty-state">Sin datos para el filtro aplicado.</td>
+                        <td colspan="6" class="empty-state">Sin datos para el filtro aplicado.</td>
                     </tr>
                     <tr v-else style="font-weight:600;border-top:2px solid var(--color-border);">
                         <td>Total ({{ saldos?.moneda_base }})</td>
                         <td style="text-align:right;">{{ fmtInt(saldos?.totales?.contratos) }}</td>
-                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.presupuestado_ingresos) }}</td>
-                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.presupuestado_gastos) }}</td>
+                        <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.saldo_inicial) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.ejecutado_ingresos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.ejecutado_gastos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.saldo) }}</td>
@@ -152,12 +149,8 @@
                 <div class="value">{{ fmtInt(ind?.totales?.vencidos) }}</div>
             </div>
             <div class="kpi-card">
-                <div class="label">Presup. ingresos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value money">{{ fmtMoney(ind?.montos?.presupuestado_ingresos_total) }}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="label">Presup. gastos ({{ ind?.montos?.moneda_base }})</div>
-                <div class="value money">{{ fmtMoney(ind?.montos?.presupuestado_gastos_total) }}</div>
+                <div class="label">Saldo inicial ({{ ind?.montos?.moneda_base }})</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.saldo_inicial_total) }}</div>
             </div>
             <div class="kpi-card info">
                 <div class="label">Ejec. ingresos ({{ ind?.montos?.moneda_base }})</div>
@@ -168,8 +161,12 @@
                 <div class="value money">{{ fmtMoney(ind?.montos?.ejecutado_gastos_total) }}</div>
             </div>
             <div class="kpi-card success">
-                <div class="label">Beneficio (ejec. ing. − gtos.)</div>
+                <div class="label">Beneficio (ing. − gtos.)</div>
                 <div class="value money">{{ fmtMoney(ind?.montos?.beneficio_total) }}</div>
+            </div>
+            <div class="kpi-card success">
+                <div class="label">Saldo ({{ ind?.montos?.moneda_base }})</div>
+                <div class="value money">{{ fmtMoney(ind?.montos?.saldo_total) }}</div>
             </div>
         </div>
 
@@ -198,32 +195,35 @@
             </div>
         </div>
 
-        <!-- Distribución -->
+        <!-- Distribución: un indicador por fila, con cantidad e importe -->
         <h3 style="margin:24px 0 10px;">Distribución</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr;gap:16px;">
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Gerencia de Área</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">
+                    Por Gerencia de Área
+                    <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
+                        · contratos y saldo
+                    </span>
+                </h4>
                 <BarChart :rows="rowsPorArea" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Subsector</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">
+                    Por Subsector
+                    <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
+                        · contratos y saldo
+                    </span>
+                </h4>
                 <BarChart :rows="rowsPorSector" />
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por UVT</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">
+                    Por UVT
+                    <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
+                        · contratos y saldo
+                    </span>
+                </h4>
                 <BarChart :rows="rowsPorUvt" />
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Tipo</h4>
-                <BarChart :rows="rowsPorTipo" />
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Estado</h4>
-                <BarChart :rows="rowsPorEstado" />
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Por Moneda</h4>
-                <BarChart :rows="rowsPorMoneda" />
             </div>
         </div>
 
@@ -297,35 +297,20 @@
                 </table>
             </div>
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">UVT por cantidad</h4>
-                <table class="atlas-table">
-                    <thead><tr><th>UVT</th><th style="text-align:right;">Cantidad</th></tr></thead>
-                    <tbody>
-                        <tr v-for="(r, i) in ranks?.uvt_por_cantidad || []" :key="i">
-                            <td>{{ r.siglas }} — {{ r.nombre || '—' }}</td>
-                            <td style="text-align:right;">{{ fmtInt(r.cantidad) }}</td>
-                        </tr>
-                        <tr v-if="!ranks?.uvt_por_cantidad?.length">
-                            <td colspan="2" class="empty-state">Sin datos.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">UVT por monto ejecutado ({{ ranks?.moneda_base }})</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">UVT por saldo ({{ ranks?.moneda_base }})</h4>
                 <table class="atlas-table">
                     <thead>
                         <tr>
                             <th>UVT</th>
-                            <th style="text-align:right;">Presupuestado</th>
-                            <th style="text-align:right;">Ejecutado</th>
+                            <th style="text-align:right;">Saldo inicial</th>
+                            <th style="text-align:right;">Saldo</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="(r, i) in ranks?.uvt_por_monto || []" :key="i">
-                            <td>{{ r.siglas }} — {{ r.nombre || '—' }}</td>
-                            <td style="text-align:right;">{{ fmtMoney(r.presupuestado) }}</td>
-                            <td style="text-align:right;">{{ fmtMoney(r.ejecutado) }}</td>
+                            <td>{{ r.siglas }}<template v-if="r.nombre"> — {{ r.nombre }}</template></td>
+                            <td style="text-align:right;">{{ fmtMoney(r.saldo_inicial) }}</td>
+                            <td style="text-align:right;">{{ fmtMoney(r.saldo) }}</td>
                         </tr>
                         <tr v-if="!ranks?.uvt_por_monto?.length">
                             <td colspan="3" class="empty-state">Sin datos.</td>
@@ -378,9 +363,6 @@ const calc = ref(null);
 const saldos = ref(null);
 const dUvt = ref(null);
 const dGer = ref(null);
-const dTipo = ref(null);
-const dEstado = ref(null);
-const dMoneda = ref(null);
 const acciones = ref(null);
 const venc = ref(null);
 const ranks = ref(null);
@@ -459,21 +441,17 @@ async function loadAll() {
     loading.value = true;
     try {
         const p = paramsClean();
-        const [a, b, c, d, e, f, g, h, i, j] = await Promise.all([
+        const [a, b, c, d, e, f, g] = await Promise.all([
             panelService.indicadores(p),
             panelService.calculados(p),
             panelService.saldos({ ...p, agrupacion: agrupacion.value }),
             panelService.porUvt(p),
             panelService.porGerencia(p),
-            panelService.porTipo(p),
-            panelService.porEstado(p),
-            panelService.porMoneda(p),
             panelService.porAccion(p),
             panelService.vencimientos(p),
         ]);
         ind.value = a; calc.value = b; saldos.value = c; dUvt.value = d;
-        dGer.value = e; dTipo.value = f; dEstado.value = g; dMoneda.value = h;
-        acciones.value = i; venc.value = j;
+        dGer.value = e; acciones.value = f; venc.value = g;
         ranks.value = await panelService.rankings(p);
     } catch (err) {
         toast.error(extractError(err, 'No se pudieron cargar los indicadores.'));

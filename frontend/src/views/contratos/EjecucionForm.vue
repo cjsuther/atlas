@@ -174,18 +174,14 @@
                 </div>
 
                 <div class="field">
-                    <label>Monto presupuestado · Ingresos</label>
-                    <input v-model="data.monto_presupuestado_ingresos" type="number" step="0.01" class="input" />
-                    <div v-if="errors.monto_presupuestado_ingresos" class="error">{{ errors.monto_presupuestado_ingresos[0] }}</div>
-                </div>
-                <div class="field">
-                    <label>Monto presupuestado · Gastos</label>
-                    <input v-model="data.monto_presupuestado_gastos" type="number" step="0.01" class="input" />
-                    <div v-if="errors.monto_presupuestado_gastos" class="error">{{ errors.monto_presupuestado_gastos[0] }}</div>
+                    <label>Saldo inicial</label>
+                    <input v-model="data.saldo_inicial" type="number" step="0.01" class="input" />
+                    <div class="hint">Monto con el que arranca el contrato. Puede ser negativo.</div>
+                    <div v-if="errors.saldo_inicial" class="error">{{ errors.saldo_inicial[0] }}</div>
                 </div>
                 <div class="field full" style="font-size:12px;color:var(--color-muted);">
-                    Los montos <strong>ejecutados</strong> (ingresos y gastos) se calculan a partir de los movimientos
-                    que se carguen en la sección "Ejecución de gastos e ingresos" del detalle de este contrato.
+                    El <strong>saldo</strong> del contrato es el saldo inicial más los ingresos y menos los gastos
+                    que se carguen en la solapa "Ejecución" de su detalle.
                 </div>
                 <div class="field">
                     <label>Caja BAS</label>
@@ -252,8 +248,7 @@ const data = reactive({
     caja_bas: '',
     moneda: 'Peso',
     cotizacion: null,
-    monto_presupuestado_ingresos: null,
-    monto_presupuestado_gastos: null,
+    saldo_inicial: null,
 });
 
 const estados = ref([]);

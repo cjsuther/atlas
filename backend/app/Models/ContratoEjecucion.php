@@ -40,8 +40,7 @@ class ContratoEjecucion extends Model
         'caja_bas',
         'moneda',
         'cotizacion',
-        'monto_presupuestado_ingresos',
-        'monto_presupuestado_gastos',
+        'saldo_inicial',
     ];
 
     protected $casts = [
@@ -52,14 +51,13 @@ class ContratoEjecucion extends Model
         'prorroga'                     => 'boolean',
         'renovacion_automatica'        => 'boolean',
         'cotizacion'                   => 'decimal:4',
-        'monto_presupuestado_ingresos' => 'decimal:2',
-        'monto_presupuestado_gastos'   => 'decimal:2',
+        'saldo_inicial'                => 'decimal:2',
     ];
 
     protected $appends = [
         'duracion_meses', 'atraso_meses',
         'monto_ejecutado_ingresos', 'monto_ejecutado_gastos',
-        'gerencia_area',
+        'saldo', 'gerencia_area',
     ];
 
     // ----------------------------------------------------------------------
@@ -176,6 +174,20 @@ class ContratoEjecucion extends Model
     public function getMontoEjecutadoGastosAttribute(): float
     {
         return $this->sumMovimientos('gasto', 'sum_gastos');
+    }
+
+    /**
+     * Saldo del contrato: lo que tenía al empezar más lo que entró menos lo
+     * que salió.
+     */
+    public function getSaldoAttribute(): float
+    {
+        return round(
+            (float) ($this->saldo_inicial ?? 0)
+            + $this->monto_ejecutado_ingresos
+            - $this->monto_ejecutado_gastos,
+            2
+        );
     }
 
     private function sumMovimientos(string $tipo, string $aliasPrecargado): float

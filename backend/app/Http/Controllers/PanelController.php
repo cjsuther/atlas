@@ -51,21 +51,6 @@ class PanelController extends Controller
         return response()->json(['data' => $this->service->porGerencia($request->all())]);
     }
 
-    public function porTipo(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->porTipo($request->all())]);
-    }
-
-    public function porEstado(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->porEstado($request->all())]);
-    }
-
-    public function porMoneda(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->porMoneda($request->all())]);
-    }
-
     public function porAccion(Request $request): JsonResponse
     {
         return response()->json(['data' => $this->service->porAccion($request->all())]);
