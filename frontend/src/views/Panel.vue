@@ -471,12 +471,19 @@ function pctOrDash(v) {
     return `${v}%`;
 }
 
-const rowsPorUvt      = computed(() => (dUvt.value?.contratos || []).map(r => ({ label: r.siglas || '—', value: r.cantidad })));
-const rowsPorSector = computed(() => (dGer.value?.sectores || []).slice(0, 15).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
-const rowsPorArea     = computed(() => (dGer.value?.gerencias_area || []).map(r => ({ label: r.nombre || '—', value: Number(r.cantidad) })));
-const rowsPorTipo     = computed(() => (dTipo.value?.contratos || []).map(r => ({ label: r.sigla || '—', value: r.cantidad })));
-const rowsPorEstado   = computed(() => (dEstado.value?.contratos || []).map(r => ({ label: r.nombre || '—', value: r.cantidad })));
-const rowsPorMoneda   = computed(() => (dMoneda.value?.contratos || []).map(r => ({ label: r.moneda || '—', value: Number(r.cantidad) })));
+/** Cada fila de la distribución muestra la cantidad y, al lado, el saldo. */
+function conImporte(filas, etiqueta) {
+    return (filas || []).map(r => ({
+        label: etiqueta(r) || '—',
+        value: Number(r.cantidad) || 0,
+        extra: fmtMoney(r.saldo),
+        extraNegativo: Number(r.saldo) < 0,
+    }));
+}
+
+const rowsPorUvt    = computed(() => conImporte(dUvt.value?.contratos, r => r.siglas));
+const rowsPorSector = computed(() => conImporte((dGer.value?.sectores || []).slice(0, 20), r => r.nombre));
+const rowsPorArea   = computed(() => conImporte(dGer.value?.gerencias_area, r => r.nombre));
 
 onMounted(async () => {
     try {
