@@ -30,6 +30,12 @@
                     </div>
                     <div v-if="errors.gerencia_id" class="error">{{ errors.gerencia_id[0] }}</div>
                 </div>
+                <div class="field">
+                    <label>Departamento / Laboratorio</label>
+                    <input v-model="data.sector_detalle" class="input" maxlength="200" />
+                    <div class="hint">Detalle dentro de la gerencia (opcional).</div>
+                    <div v-if="errors.sector_detalle" class="error">{{ errors.sector_detalle[0] }}</div>
+                </div>
 
                 <div class="field">
                     <label>Nº de expediente *</label>
@@ -235,6 +241,7 @@ const data = reactive({
     nombre_proyecto: '',
     descripcion_objeto: '',
     gerencia_id: null,
+    sector_detalle: '',
     solicitante_id: null,
     resp1_id: null,
     resp2_id: null,
@@ -353,3 +360,7 @@ onMounted(async () => {
     }
 });
 </script>
+
+<style scoped>
+.hint { font-size: 12px; color: var(--color-muted, #888); margin-top: 4px; }
+</style>

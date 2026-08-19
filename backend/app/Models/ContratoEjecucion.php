@@ -22,6 +22,7 @@ class ContratoEjecucion extends Model
         'descripcion_objeto',
         'contrato_principal_id',
         'gerencia_id',
+        'sector_detalle',
         'solicitante_id',
         'resp1_id',
         'resp2_id',

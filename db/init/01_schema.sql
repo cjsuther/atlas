@@ -284,6 +284,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   descripcion_objeto          TEXT         NULL,
   contrato_principal_id       INT          NULL,
   gerencia_id                 INT          NOT NULL,
+  sector_detalle              VARCHAR(200) NULL,    -- departamento / laboratorio
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,

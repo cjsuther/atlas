@@ -49,6 +49,7 @@
                     <div class="detail-grid">
                         <Field label="Gerencia de Área" :value="c.gerencia?.gerencia_area?.nombre" />
                         <Field label="Gerencia" :value="c.gerencia?.nombre" />
+                        <Field label="Departamento / Laboratorio" :value="c.sector_detalle" />
                         <Field label="Solicitante" :value="c.solicitante?.razon_social" />
                         <Field label="UVT" :value="c.uvt ? `${c.uvt.siglas} — ${c.uvt.nombre}` : '—'" />
                         <Field label="Resp. 1" :value="responsable(c.resp1)" />

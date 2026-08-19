@@ -6,9 +6,14 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Cada contrato de ejecución pasa a estar vinculado a una gerencia (y por lo
- * tanto a una Gerencia de Área). Las columnas de texto libre `gerencia_area`
- * y `gerencia` se reemplazan por la FK; su contenido ya quedó volcado al
- * catálogo en la migración anterior.
+ * tanto a una Gerencia de Área).
+ *
+ * Las dos columnas de texto libre que existían se resuelven así:
+ *   - `gerencia`      -> se reemplaza por la FK `gerencia_id`; su contenido ya
+ *                        quedó volcado al catálogo en la migración anterior.
+ *   - `gerencia_area` -> en la práctica guardaba el departamento o laboratorio
+ *                        del contrato, no una Gerencia de Área, así que su
+ *                        contenido se conserva en `sector_detalle`.
  */
 return new class extends Migration
 {
@@ -16,6 +21,18 @@ return new class extends Migration
     {
         if (!Schema::hasColumn('contratos_ejecucion', 'gerencia_id')) {
             DB::statement('ALTER TABLE contratos_ejecucion ADD COLUMN gerencia_id INT NULL AFTER contrato_principal_id');
+        }
+        if (!Schema::hasColumn('contratos_ejecucion', 'sector_detalle')) {
+            DB::statement('ALTER TABLE contratos_ejecucion ADD COLUMN sector_detalle VARCHAR(200) NULL AFTER gerencia_id');
+        }
+
+        // El departamento / laboratorio se preserva antes de descartar la columna.
+        if (Schema::hasColumn('contratos_ejecucion', 'gerencia_area')) {
+            DB::statement("
+                UPDATE contratos_ejecucion
+                   SET sector_detalle = NULLIF(TRIM(gerencia_area), '')
+                 WHERE sector_detalle IS NULL
+            ");
         }
 
         $this->vincularContratos();
@@ -43,38 +60,32 @@ return new class extends Migration
     /** Resuelve la gerencia de cada contrato a partir del texto libre previo. */
     private function vincularContratos(): void
     {
-        $pendientes = DB::table('contratos_ejecucion')->whereNull('gerencia_id')->exists();
-        if (!$pendientes) {
+        if (!DB::table('contratos_ejecucion')->whereNull('gerencia_id')->exists()) {
             // Instalación nueva o ya migrada: no hay nada que resolver.
-            return;
-        }
-
-        if (!Schema::hasColumn('contratos_ejecucion', 'gerencia')) {
-            DB::table('contratos_ejecucion')->whereNull('gerencia_id')
-                ->update(['gerencia_id' => $this->gerenciaSinAsignar()]);
             return;
         }
 
         $fallback = $this->gerenciaSinAsignar();
 
-        $contratos = DB::table('contratos_ejecucion')
-            ->select('id', 'gerencia_area', 'gerencia')
-            ->whereNull('gerencia_id')
-            ->get();
+        if (!Schema::hasColumn('contratos_ejecucion', 'gerencia')) {
+            DB::table('contratos_ejecucion')->whereNull('gerencia_id')
+                ->update(['gerencia_id' => $fallback]);
+            return;
+        }
 
-        foreach ($contratos as $c) {
-            $nombreArea     = trim((string) ($c->gerencia_area ?? '')) ?: 'Sin asignar';
-            $nombreGerencia = trim((string) ($c->gerencia ?? ''))      ?: 'Sin asignar';
+        // Una sola pasada por nombre de gerencia, en lugar de una por contrato.
+        $porNombre = DB::table('gerencias')->pluck('id', 'nombre');
 
-            $gerenciaId = DB::table('gerencias as g')
-                ->join('gerencias_area as ga', 'ga.id', '=', 'g.gerencia_area_id')
-                ->where('ga.nombre', $nombreArea)
-                ->where('g.nombre', $nombreGerencia)
-                ->value('g.id') ?? $fallback;
-
-            DB::table('contratos_ejecucion')->where('id', $c->id)
+        foreach ($porNombre as $nombre => $gerenciaId) {
+            DB::table('contratos_ejecucion')
+                ->whereNull('gerencia_id')
+                ->whereRaw('TRIM(gerencia) = ?', [$nombre])
                 ->update(['gerencia_id' => $gerenciaId]);
         }
+
+        // Lo que no matcheó (gerencia vacía o inesperada) va al destino de respaldo.
+        DB::table('contratos_ejecucion')->whereNull('gerencia_id')
+            ->update(['gerencia_id' => $fallback]);
     }
 
     private function gerenciaSinAsignar(): int
@@ -111,13 +122,25 @@ return new class extends Migration
         if ($this->foreignKeyExists('contratos_ejecucion', 'fk_ce_gerencia')) {
             DB::statement('ALTER TABLE contratos_ejecucion DROP FOREIGN KEY fk_ce_gerencia');
         }
-        foreach (['gerencia_area' => 'VARCHAR(200) NULL', 'gerencia' => 'VARCHAR(200) NULL'] as $col => $tipo) {
+
+        foreach (['gerencia_area', 'gerencia'] as $col) {
             if (!Schema::hasColumn('contratos_ejecucion', $col)) {
-                DB::statement("ALTER TABLE contratos_ejecucion ADD COLUMN {$col} {$tipo}");
+                DB::statement("ALTER TABLE contratos_ejecucion ADD COLUMN {$col} VARCHAR(200) NULL");
             }
         }
+
+        // Se devuelven los textos a sus columnas originales antes de quitarlas.
         if (Schema::hasColumn('contratos_ejecucion', 'gerencia_id')) {
+            DB::statement('
+                UPDATE contratos_ejecucion ce
+                  JOIN gerencias g ON g.id = ce.gerencia_id
+                   SET ce.gerencia = g.nombre
+            ');
             DB::statement('ALTER TABLE contratos_ejecucion DROP COLUMN gerencia_id');
+        }
+        if (Schema::hasColumn('contratos_ejecucion', 'sector_detalle')) {
+            DB::statement('UPDATE contratos_ejecucion SET gerencia_area = sector_detalle');
+            DB::statement('ALTER TABLE contratos_ejecucion DROP COLUMN sector_detalle');
         }
     }
 };

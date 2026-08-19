@@ -26,6 +26,8 @@ class ContratoEjecucionRequest extends FormRequest
 
             // Todo contrato pertenece a una gerencia, y ésta a una Gerencia de Área.
             'gerencia_id'                => ['required', 'integer', 'exists:gerencias,id'],
+            // Departamento o laboratorio dentro de la gerencia.
+            'sector_detalle'             => ['nullable', 'string', 'max:200'],
             'solicitante_id'             => ['nullable', 'integer', 'exists:solicitantes,solicitante_id'],
             'resp1_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
             'resp2_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],

@@ -56,63 +56,71 @@ return new class extends Migration
     }
 
     /**
-     * Hasta ahora `gerencia_area` y `gerencia` eran texto libre en los contratos.
-     * Se da de alta un registro de catálogo por cada combinación distinta que
-     * exista en contratos_principal y contratos_ejecucion, de modo que ningún
-     * dato cargado se pierda al pasar al modelo relacional.
+     * Hasta ahora la gerencia del contrato era texto libre. Cada valor distinto
+     * de `contratos_ejecucion.gerencia` (siglas del tipo GAEN#CNEA) se da de alta
+     * como Gerencia de Área y, dentro de ella, como Gerencia homónima, de modo
+     * que ningún contrato quede sin estructura al pasar al modelo relacional.
+     *
+     * La jerarquía queda plana a propósito: sólo la organización sabe qué
+     * gerencias pertenecen realmente a cada Gerencia de Área, y eso se
+     * consolida después desde la pantalla de Estructura.
      */
     private function backfillDesdeTextoLibre(): void
     {
-        $pares = collect();
+        $nombres = collect();
 
-        foreach (['contratos_principal', 'contratos_ejecucion'] as $tabla) {
-            if (!Schema::hasTable($tabla) || !Schema::hasColumn($tabla, 'gerencia')) {
-                continue;
-            }
-            $pares = $pares->merge(
-                DB::table($tabla)
-                    ->select('gerencia_area', 'gerencia')
-                    ->distinct()
-                    ->get()
-                    ->map(fn ($r) => [
-                        'area'     => trim((string) ($r->gerencia_area ?? '')),
-                        'gerencia' => trim((string) ($r->gerencia ?? '')),
-                    ])
-            );
+        if (Schema::hasTable('contratos_ejecucion') && Schema::hasColumn('contratos_ejecucion', 'gerencia')) {
+            $nombres = DB::table('contratos_ejecucion')
+                ->select('gerencia')
+                ->distinct()
+                ->pluck('gerencia')
+                ->map(fn ($g) => trim((string) $g))
+                ->filter()
+                ->unique();
         }
 
-        // Siempre existe un destino de respaldo para los contratos sin gerencia.
-        $pares->push(['area' => '', 'gerencia' => '']);
+        // Destino de respaldo para los contratos sin gerencia cargada.
+        $nombres = $nombres->push('Sin asignar')->unique()->values();
 
-        $areasPorNombre = [];
-        foreach ($pares->unique(fn ($p) => $p['area'] . '||' . $p['gerencia']) as $par) {
-            $nombreArea     = $par['area']     !== '' ? $par['area']     : 'Sin asignar';
-            $nombreGerencia = $par['gerencia'] !== '' ? $par['gerencia'] : 'Sin asignar';
+        foreach ($nombres as $nombre) {
+            $nombre = mb_substr($nombre, 0, 200);
+            $sigla  = $this->siglaDe($nombre);
 
-            if (!isset($areasPorNombre[$nombreArea])) {
-                $areasPorNombre[$nombreArea] = DB::table('gerencias_area')
-                    ->where('nombre', $nombreArea)->value('id')
-                    ?? DB::table('gerencias_area')->insertGetId([
-                        'nombre'     => $nombreArea,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-            }
-            $areaId = $areasPorNombre[$nombreArea];
+            $areaId = DB::table('gerencias_area')->where('nombre', $nombre)->value('id')
+                ?? DB::table('gerencias_area')->insertGetId([
+                    'nombre'     => $nombre,
+                    'sigla'      => $sigla,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
             $existe = DB::table('gerencias')
                 ->where('gerencia_area_id', $areaId)
-                ->where('nombre', $nombreGerencia)
+                ->where('nombre', $nombre)
                 ->exists();
             if (!$existe) {
                 DB::table('gerencias')->insert([
                     'gerencia_area_id' => $areaId,
-                    'nombre'           => $nombreGerencia,
+                    'nombre'           => $nombre,
+                    'sigla'            => $sigla,
                     'created_at'       => now(),
                     'updated_at'       => now(),
                 ]);
             }
         }
+    }
+
+    /**
+     * Sigla legible a partir del nombre: `GAEN#CNEA` -> `GAEN`.
+     * Se descarta si no es única, porque la columna lo exige.
+     */
+    private function siglaDe(string $nombre): ?string
+    {
+        $sigla = mb_substr(trim(explode('#', $nombre)[0]), 0, 50);
+        if ($sigla === '' || $sigla === $nombre) {
+            return null;
+        }
+        return DB::table('gerencias_area')->where('sigla', $sigla)->exists() ? null : $sigla;
     }
 
     public function down(): void
