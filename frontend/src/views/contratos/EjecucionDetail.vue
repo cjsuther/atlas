@@ -24,6 +24,10 @@
                                  class="btn btn-primary">
                         <IconLib name="edit" /> Editar
                     </router-link>
+                    <router-link :to="{ name: 'contratos-ejecucion-movimientos', params: { id: c.id } }"
+                                 class="btn btn-primary">
+                        Ejecución
+                    </router-link>
                     <button v-if="auth.isAdminSistema && !c.deleted_at" class="btn btn-secondary"
                             @click="abrirTransferencia">
                         Transferir a otro sector
@@ -32,18 +36,7 @@
                 </div>
             </div>
 
-            <div class="tabs">
-                <button type="button" :class="['tab', { activa: tab === 'detalle' }]"
-                        @click="tab = 'detalle'">
-                    Detalle
-                </button>
-                <button type="button" :class="['tab', { activa: tab === 'ejecucion' }]"
-                        @click="tab = 'ejecucion'">
-                    Ejecución e historial
-                </button>
-            </div>
-
-            <div v-show="tab === 'detalle'" class="card">
+            <div class="card">
                 <div class="detail-section">
                     <h4>Identificación</h4>
                     <div class="detail-grid">
@@ -99,10 +92,6 @@
                 </div>
             </div>
 
-            <div v-show="tab === 'ejecucion'">
-                <MovimientosPanel :contrato-ejecucion-id="c.id" @changed="refrescar" />
-                <HistorialPanel tabla="contratos_ejecucion" :id="c.id" />
-            </div>
 
             <!-- Transferencia completa del contrato a otra gerencia -->
             <BaseModal v-model="transferOpen" title="Transferir contrato a otro sector">
@@ -151,9 +140,7 @@ import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtDate, fmtMoney, badgeForEstado } from '@/composables/useFormat';
 import IconLib from '@/components/IconLib.vue';
-import HistorialPanel from '@/components/HistorialPanel.vue';
 import BaseModal from '@/components/BaseModal.vue';
-import MovimientosPanel from '@/components/MovimientosPanel.vue';
 import Field from '@/components/DetailField.vue';
 
 const route = useRoute();
@@ -162,9 +149,6 @@ const toast = useToast();
 
 const c = ref(null);
 const loading = ref(true);
-
-// El detalle es la primera solapa, así que es la que abre.
-const tab = ref('detalle');
 
 function responsable(p) {
     if (!p) return '—';
@@ -226,26 +210,3 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.tabs {
-    display: flex;
-    gap: 4px;
-    margin: 16px 0 0;
-    border-bottom: 1px solid var(--color-border, #e3e6ea);
-}
-.tab {
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 10px 16px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-muted, #888);
-    cursor: pointer;
-}
-.tab:hover { color: var(--color-text, #222); }
-.tab.activa {
-    color: var(--color-primary, #1a2e4a);
-    border-bottom-color: var(--color-accent, #4aa3c7);
-}
-</style>
