@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Exports\DatabaseBackupExport;
 use App\Support\DatabaseBackupSchema;
+use App\Support\ImportadorTablas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,11 @@ use Throwable;
 
 class DatabaseBackupController extends Controller
 {
+    public function __construct(protected ImportadorTablas $importador) {}
+
+    /** @var array<int, string> avisos propios del recorrido de tablas */
+    private array $avisos = [];
+
     /**
      * GET /api/admin/db/export — backup técnico round-trip (una solapa por tabla).
      */
@@ -66,6 +72,7 @@ class DatabaseBackupController extends Controller
         return response()->json([
             'data' => [
                 'resumen' => $resumen,
+                'avisos'  => array_merge($this->avisos, $this->importador->avisos()),
             ],
         ]);
     }
@@ -80,6 +87,11 @@ class DatabaseBackupController extends Controller
         foreach (DatabaseBackupSchema::tables() as $def) {
             $table = $def['table'];
             $pk    = $def['pk'];
+
+            if ($this->importador->seIgnora($table)) {
+                $resumen[] = ['tabla' => $table, 'insertados' => 0, 'actualizados' => 0, 'omitida' => true];
+                continue;
+            }
 
             $sheet = $spreadsheet->getSheetByName($table);
             if (!$sheet) {
@@ -98,6 +110,8 @@ class DatabaseBackupController extends Controller
             $headers = array_map(fn ($h) => is_string($h) ? trim($h) : $h, array_shift($matrix));
             $insertados = 0;
             $actualizados = 0;
+            $omitidas = 0;
+            $pkAutomatica = $this->importador->claveEsAutomatica($table, $pk);
 
             foreach ($matrix as $i => $cells) {
                 $row = $this->mapRow($headers, $cells, $allowed);
@@ -106,7 +120,19 @@ class DatabaseBackupController extends Controller
                 }
 
                 try {
+                    // Traduce el formato anterior, convierte fechas de Excel y
+                    // completa lo que la tabla exige y el archivo no trae.
+                    $row = $this->importador->prepararFila($table, $row, $allowed, $pk);
+
                     $pkValue = $row[$pk] ?? null;
+
+                    // Sin clave primaria propia la fila no identifica a nada:
+                    // se omite en lugar de pisar a las demás.
+                    if (($pkValue === null || $pkValue === '') && !$pkAutomatica) {
+                        $omitidas++;
+                        continue;
+                    }
+
                     if ($pkValue !== null && $pkValue !== '') {
                         $exists = DB::table($table)->where($pk, $pkValue)->exists();
                         $attrs = $row;
@@ -127,14 +153,29 @@ class DatabaseBackupController extends Controller
                 }
             }
 
-            $resumen[] = ['tabla' => $table, 'insertados' => $insertados, 'actualizados' => $actualizados];
+            $resumen[] = [
+                'tabla'        => $table,
+                'insertados'   => $insertados,
+                'actualizados' => $actualizados,
+                'omitidas'     => $omitidas,
+            ];
+            if ($omitidas > 0) {
+                $this->avisos[] = "{$table}: {$omitidas} fila(s) omitida(s) por no traer {$pk}.";
+            }
+            if ($table === 'user_roles' && $actualizados > 0) {
+                // El upsert va por id: una fila del archivo puede caer sobre un
+                // usuario que ya existía y cambiarle nombre y rol.
+                $this->avisos[] = "user_roles: {$actualizados} usuario(s) existente(s) fueron "
+                                . 'sobrescritos porque el archivo trae su mismo id. Verifique que '
+                                . 'sigue habiendo un administrador de sistema con acceso.';
+            }
         }
     }
 
     /**
-     * Construye una fila asociativa columna→valor, limitada a las columnas
-     * permitidas de la tabla. Convierte cadenas vacías en null. Devuelve null
-     * si la fila está completamente vacía.
+     * Construye una fila asociativa columna→valor con las columnas permitidas
+     * de la tabla más las del formato anterior. Convierte cadenas vacías en
+     * null. Devuelve null si la fila está completamente vacía.
      *
      * @param  array<int, mixed>  $headers
      * @param  array<int, mixed>  $cells
@@ -143,11 +184,14 @@ class DatabaseBackupController extends Controller
      */
     private function mapRow(array $headers, array $cells, array $allowed): ?array
     {
+        // Además de las columnas de la tabla se conservan las del formato
+        // anterior, porque el importador las necesita para traducirlas.
+        $legadas = ['gerencia', 'gerencia_area'];
         $row = [];
         $hasValue = false;
 
         foreach ($headers as $idx => $col) {
-            if (!is_string($col) || !in_array($col, $allowed, true)) {
+            if (!is_string($col) || (!in_array($col, $allowed, true) && !in_array($col, $legadas, true))) {
                 continue;
             }
             $value = $cells[$idx] ?? null;

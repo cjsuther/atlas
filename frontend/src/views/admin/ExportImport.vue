@@ -45,6 +45,7 @@
                             <th>Tabla</th>
                             <th>Insertados</th>
                             <th>Actualizados</th>
+                            <th>Omitidos</th>
                             <th>Estado</th>
                         </tr>
                     </thead>
@@ -53,6 +54,7 @@
                             <td>{{ r.tabla }}</td>
                             <td>{{ r.insertados }}</td>
                             <td>{{ r.actualizados }}</td>
+                            <td>{{ r.omitidas || 0 }}</td>
                             <td>
                                 <span v-if="r.omitida" class="badge badge-default">No estaba en el archivo</span>
                                 <span v-else class="badge badge-success">OK</span>
@@ -60,6 +62,16 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Avisos: datos que se cargaron incompletos o se convirtieron -->
+            <div v-if="avisos.length" class="card" style="margin-top:16px;">
+                <h4 style="margin:0 0 8px;color:var(--color-warning, #b26a00);">
+                    Revisar después de importar
+                </h4>
+                <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">
+                    <li v-for="(a, i) in avisos" :key="i">{{ a }}</li>
+                </ul>
             </div>
         </div>
 
@@ -94,6 +106,7 @@ const fileInput = ref(null);
 const archivo = ref(null);
 const importing = ref(false);
 const resumen = ref([]);
+const avisos = ref([]);
 
 function onFile(ev) {
     archivo.value = ev.target.files?.[0] || null;
@@ -115,9 +128,11 @@ async function confirmarImportar() {
 async function importar() {
     importing.value = true;
     resumen.value = [];
+    avisos.value = [];
     try {
         const res = await dbBackupService.import(archivo.value);
         resumen.value = res.data?.resumen || [];
+        avisos.value = res.data?.avisos || [];
         toast.success('Importación completada.');
         archivo.value = null;
         if (fileInput.value) fileInput.value.value = '';
