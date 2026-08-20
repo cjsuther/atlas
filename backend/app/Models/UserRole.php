@@ -18,6 +18,9 @@ use Laravel\Sanctum\HasApiTokens;
  *   admin_gerencia    : administra los contratos de su Gerencia de Área y los
  *                       usuarios operadores de esa Gerencia de Área.
  *   operador_gerencia : administra los contratos de su Gerencia de Área.
+ *   sin_acceso        : puede autenticarse y nada más. Es el rol con el que se
+ *                       dan de alta los usuarios que llegan por LDAP, hasta que
+ *                       un administrador les asigne rol y Gerencia de Área.
  */
 class UserRole extends Authenticatable
 {
@@ -26,11 +29,13 @@ class UserRole extends Authenticatable
     public const ROL_ADMIN_SISTEMA     = 'admin_sistema';
     public const ROL_ADMIN_GERENCIA    = 'admin_gerencia';
     public const ROL_OPERADOR_GERENCIA = 'operador_gerencia';
+    public const ROL_SIN_ACCESO        = 'sin_acceso';
 
     public const ROLES = [
         self::ROL_ADMIN_SISTEMA,
         self::ROL_ADMIN_GERENCIA,
         self::ROL_OPERADOR_GERENCIA,
+        self::ROL_SIN_ACCESO,
     ];
 
     /** Roles que sólo operan dentro de su propia Gerencia de Área. */
@@ -100,6 +105,12 @@ class UserRole extends Authenticatable
     public function isOperadorGerencia(): bool
     {
         return $this->rol === self::ROL_OPERADOR_GERENCIA;
+    }
+
+    /** Sin acceso: se autentica, pero no puede ver nada del sistema. */
+    public function sinAcceso(): bool
+    {
+        return $this->rol === self::ROL_SIN_ACCESO;
     }
 
     /** Puede crear y modificar usuarios (de todo el sistema o de su gerencia). */

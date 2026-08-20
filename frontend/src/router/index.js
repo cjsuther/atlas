@@ -4,6 +4,10 @@ import { ROLES, useAuthStore } from '@/stores/auth';
 const routes = [
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { public: true } },
 
+    // Pantalla para quien se autenticó pero todavía no tiene permisos asignados.
+    // Va fuera del layout: no hay menú que mostrarle.
+    { path: '/sin-acceso', name: 'sin-acceso', component: () => import('@/views/SinAcceso.vue') },
+
     {
         path: '/',
         component: () => import('@/components/AppShell.vue'),
@@ -64,6 +68,13 @@ router.beforeEach((to) => {
         return { name: 'login' };
     }
     if (to.name === 'login' && auth.isAuthenticated) {
+        return auth.sinAcceso ? { name: 'sin-acceso' } : { name: 'panel' };
+    }
+    // Sin permisos asignados no hay nada que ver: cualquier ruta cae en el aviso.
+    if (auth.isAuthenticated && auth.sinAcceso && to.name !== 'sin-acceso') {
+        return { name: 'sin-acceso' };
+    }
+    if (to.name === 'sin-acceso' && auth.isAuthenticated && !auth.sinAcceso) {
         return { name: 'panel' };
     }
     if (to.meta?.requiresRole && !to.meta.requiresRole.includes(auth.role)) {

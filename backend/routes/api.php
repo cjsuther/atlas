@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Route;
 |                       usuarios de cualquier rol y Gerencia de Área.
 |   admin_gerencia    : contratos de su Gerencia de Área; ABM de operadores.
 |   operador_gerencia : contratos de su Gerencia de Área.
+|   sin_acceso        : se autentica y nada más; es el rol de alta por LDAP.
 |
 | El recorte lo aplica AccessScopeService dentro de cada servicio: las rutas
 | sólo distinguen quién puede ejecutar cada acción.
@@ -52,12 +53,19 @@ Route::get('/health', fn () => response()->json([
 Route::post('/auth/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/auth/logout',       [AuthController::class, 'logout']);
-    Route::get ('/auth/me',           [AuthController::class, 'me']);
-    Route::put ('/auth/preferencias', [AuthController::class, 'preferencias']);
+    // Lo único que puede hacer un usuario sin permisos asignados: saber quién
+    // es —para que la aplicación se lo explique— y cerrar sesión.
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get ('/auth/me',     [AuthController::class, 'me']);
+});
+
+// De acá en adelante hace falta tener permisos asignados: el rol `sin_acceso`
+// se autentica pero no ve nada.
+Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
+    Route::put('/auth/preferencias', [AuthController::class, 'preferencias']);
 
     // ------------------------------------------------------------------
-    // Export consolidado de todas las tablas (todos los roles autenticados).
+    // Export consolidado, recortado al alcance de quien lo pide.
     // ------------------------------------------------------------------
     Route::get('/export/excel', [ExportController::class, 'full']);
 

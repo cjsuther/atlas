@@ -26,6 +26,12 @@
                         <option v-for="r in rolesAsignables" :key="r" :value="r">{{ ROL_LABELS[r] }}</option>
                     </select>
                 </div>
+                <div v-if="auth.isAdminSistema && pendientes > 0" class="field aviso-pendientes">
+                    <label>Pendientes de asignación</label>
+                    <button type="button" class="btn btn-secondary" @click="verPendientes">
+                        {{ pendientes }} usuario{{ pendientes === 1 ? '' : 's' }} sin acceso
+                    </button>
+                </div>
                 <div v-if="auth.isAdminSistema" class="field">
                     <label>Gerencia de Área</label>
                     <select v-model="state.sector_id" class="select" @change="reload">
@@ -237,12 +243,13 @@ const onSearch = debounce(() => { state.page = 1; load(); }, 300);
  * dar de alta operadores, y siempre en su propia gerencia.
  */
 const rolesAsignables = computed(() => auth.isAdminSistema
-    ? [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA]
+    ? [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA, ROLES.SIN_ACCESO]
     : [ROLES.OPERADOR_GERENCIA]);
 
 function rolBadge(rol) {
     if (rol === ROLES.ADMIN_SISTEMA) return 'badge-warning';
     if (rol === ROLES.ADMIN_GERENCIA) return 'badge-info';
+    if (rol === ROLES.SIN_ACCESO) return 'badge-danger';
     return 'badge-default';
 }
 
@@ -265,6 +272,25 @@ async function load() {
     }
 }
 
+/**
+ * Usuarios que entraron por LDAP y todavía esperan que se les asigne rol y
+ * Gerencia de Área. Se cuentan aparte para que no pasen inadvertidos.
+ */
+const pendientes = ref(0);
+
+async function contarPendientes() {
+    if (!auth.isAdminSistema) return;
+    try {
+        const res = await usuariosService.list({ rol: ROLES.SIN_ACCESO, per_page: 1 });
+        pendientes.value = res.total || 0;
+    } catch { /* no-op */ }
+}
+
+function verPendientes() {
+    state.rol = ROLES.SIN_ACCESO;
+    reload();
+}
+
 function reload() { state.page = 1; load(); }
 function goto(p) { state.page = p; load(); }
 
@@ -277,8 +303,9 @@ const saving = ref(false);
 
 const formTitle = computed(() => editing.value ? `Editar — ${editing.value.username}` : 'Nuevo usuario');
 const isLdapEdit = computed(() => !!editing.value && editing.value.auth_source === 'ldap');
-/** El administrador de sistema no está acotado a ninguna gerencia. */
-const requiereGerencia = computed(() => formData.rol !== ROLES.ADMIN_SISTEMA);
+/** Ni el administrador de sistema ni quien no tiene permisos llevan gerencia. */
+const requiereGerencia = computed(() =>
+    formData.rol !== ROLES.ADMIN_SISTEMA && formData.rol !== ROLES.SIN_ACCESO);
 
 function resetForm(values) {
     Object.keys(formData).forEach(k => delete formData[k]);
@@ -343,6 +370,7 @@ async function save() {
         }
         formOpen.value = false;
         load();
+        contarPendientes();
     } catch (err) {
         if (err?.response?.status === 422 && err.response.data?.errors) {
             errors.value = err.response.data.errors;
@@ -414,6 +442,7 @@ async function remove(u) {
 onMounted(async () => {
     if (auth.isAdminSistema) {
         try { sectores.value = await listAll('sectores'); } catch { /* no-op */ }
+        contarPendientes();
     }
     load();
 });

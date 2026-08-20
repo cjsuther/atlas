@@ -133,6 +133,9 @@ CREATE TABLE IF NOT EXISTS personal (
 --   admin_sistema     : todas las Gerencias de Área y sus contratos.
 --   admin_gerencia    : su Gerencia de Área (ABM de contratos y de operadores).
 --   operador_gerencia : su Gerencia de Área (ABM de contratos, sin usuarios).
+--   sin_acceso        : puede autenticarse y nada más. Es el rol con el que se
+--                       dan de alta los usuarios que llegan por LDAP, hasta que
+--                       un administrador les asigne rol y Gerencia de Área.
 -- `sector_id` apunta a la Gerencia de Área (un sector sin dependencia) y es
 -- obligatorio para los roles acotados.
 -- `saldos_agrupacion` es la configuración con la que el usuario ve los saldos
@@ -145,7 +148,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
   email             VARCHAR(200),
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
-  rol               ENUM('admin_sistema','admin_gerencia','operador_gerencia') NOT NULL DEFAULT 'operador_gerencia',
+  rol               ENUM('admin_sistema','admin_gerencia','operador_gerencia','sin_acceso') NOT NULL DEFAULT 'sin_acceso',
   sector_id         INT NULL,
   saldos_agrupacion ENUM('gerencia_area','subsector','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,

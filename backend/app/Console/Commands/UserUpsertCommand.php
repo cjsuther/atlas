@@ -13,7 +13,7 @@ class UserUpsertCommand extends Command
     protected $signature = 'atlas:user
                             {username        : Username (login) del usuario}
                             {--password=     : Contraseña en texto plano (se guarda hasheada). Si se omite, se pedirá interactivamente}
-                            {--rol=operador_gerencia : Rol: admin_sistema | admin_gerencia | operador_gerencia}
+                            {--rol=operador_gerencia : Rol: admin_sistema | admin_gerencia | operador_gerencia | sin_acceso}
                             {--gerencia=     : ID o nombre de la Gerencia de Área (obligatorio salvo para admin_sistema)}
                             {--display=      : Display name (opcional)}
                             {--email=        : Email (opcional)}

@@ -239,6 +239,8 @@ class UserRoleController extends Controller
     {
         $actual = $request->user();
         if ($actual instanceof UserRole && !$actual->isAdminSistema()) {
+            // Los usuarios sin acceso no tienen gerencia todavía, así que sólo
+            // los ve el administrador de sistema, que es quien los asigna.
             $query->where('sector_id', $actual->sector_id)
                   ->where('rol', UserRole::ROL_OPERADOR_GERENCIA);
         }
@@ -259,8 +261,9 @@ class UserRoleController extends Controller
      */
     private function resolverGerenciaArea(Request $request, string $rol, ?int $sectorId)
     {
-        // El administrador de sistema no está acotado a ninguna Gerencia de Área.
-        if ($rol === UserRole::ROL_ADMIN_SISTEMA) {
+        // Ni el administrador de sistema ni quien todavía no tiene permisos
+        // están acotados a una Gerencia de Área.
+        if ($rol === UserRole::ROL_ADMIN_SISTEMA || $rol === UserRole::ROL_SIN_ACCESO) {
             return null;
         }
 

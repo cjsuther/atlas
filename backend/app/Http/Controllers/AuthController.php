@@ -65,10 +65,29 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // El usuario debe existir previamente: se da de alta desde el administrador
-        // de usuarios indicando si es local (base de datos) o LDAP. Ya no se crea
-        // automáticamente en el primer login.
         $user = UserRole::where('username', $authPayload['username'])->first();
+
+        // Quien llega por LDAP y todavía no está en el sistema se da de alta sin
+        // acceso: el directorio confirma quién es, pero qué puede ver lo decide
+        // un administrador asignándole rol y Gerencia de Área.
+        if (!$user && $authMethod === 'ldap') {
+            $user = new UserRole();
+            $user->username     = $authPayload['username'];
+            $user->display_name = $authPayload['display_name'] ?? $authPayload['username'];
+            $user->email        = $authPayload['email'] ?? null;
+            $user->auth_source  = 'ldap';
+            $user->rol          = UserRole::ROL_SIN_ACCESO;
+            $user->sector_id    = null;
+            $user->activo       = true;
+            $user->save();
+
+            Log::info('ATLAS AUTH: alta automática de usuario LDAP sin acceso', [
+                'username' => $user->username,
+            ]);
+        }
+
+        // Los usuarios locales no se autocrean: no hay directorio contra el cual
+        // validarlos, así que los da de alta un administrador.
         if (!$user) {
             Log::warning('ATLAS AUTH: login rechazado, usuario no registrado', [
                 'username' => $authPayload['username'],
