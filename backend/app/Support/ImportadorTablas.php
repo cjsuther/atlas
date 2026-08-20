@@ -191,13 +191,27 @@ class ImportadorTablas
     private function completar(string $tabla, array $fila, ?string $pk = null): array
     {
         foreach ($this->metaDe($tabla) as $columna => $info) {
-            if (!array_key_exists($columna, $fila) || $fila[$columna] !== null || $info['admite_null']) {
+            if (!array_key_exists($columna, $fila) || $fila[$columna] !== null) {
                 continue;
             }
 
             // La clave primaria identifica la fila: se deja como está para que
             // el llamador decida si la omite.
             if ($columna === $pk) {
+                continue;
+            }
+
+            // Si el archivo no trae el dato y la tabla tiene un valor por
+            // defecto, manda el de la tabla. Es lo que pasa con created_at y
+            // updated_at: guardarlos en nulo dejaba a los registros fuera de
+            // cualquier filtro por fecha.
+            if ($info['admite_null']) {
+                if ($info['default'] === null) {
+                    continue;
+                }
+                $fila[$columna] = str_contains(strtoupper($info['default']), 'CURRENT_TIMESTAMP')
+                    ? now()
+                    : $info['default'];
                 continue;
             }
 

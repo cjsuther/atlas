@@ -484,7 +484,9 @@ function conImporte(filas, etiqueta) {
 }
 
 const rowsPorUvt    = computed(() => conImporte(dUvt.value?.contratos, r => r.siglas));
-const rowsPorSector = computed(() => conImporte((dGer.value?.sectores || []).slice(0, 20), r => r.nombre));
+// Se muestran todos los subsectores: recortar a los primeros hacía que la suma
+// del gráfico no coincidiera con el total de contratos del panel.
+const rowsPorSector = computed(() => conImporte(dGer.value?.sectores, r => r.nombre));
 const rowsPorArea   = computed(() => conImporte(dGer.value?.gerencias_area, r => r.nombre));
 
 onMounted(async () => {
