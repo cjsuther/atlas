@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Console\Commands\EnsureAdminCommand;
 use App\Console\Commands\ImportarLegacyCommand;
+use App\Console\Commands\LimpiarCommand;
 use App\Models\ContratoEjecucion;
 use App\Models\ContratoPrincipal;
 use App\Models\EjecucionMovimiento;
@@ -38,6 +39,7 @@ class AppServiceProvider extends ServiceProvider
             $this->commands([
                 EnsureAdminCommand::class,
                 ImportarLegacyCommand::class,
+                LimpiarCommand::class,
             ]);
         }
     }
