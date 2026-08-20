@@ -96,16 +96,12 @@
             <table class="atlas-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Expediente</th>
-                        <th>Tipo</th>
-                        <th>Proyecto</th>
-                        <th>Estado</th>
-                        <th>Sector</th>
-                        <th>UVT</th>
-                        <th>F. Inicio</th>
-                        <th>F. Venc.</th>
-                        <th>Ejecución y saldo</th>
+                        <th v-for="col in columnas" :key="col.campo || col.label"
+                            :class="{ ordenable: col.campo, activa: orden.by === col.campo }"
+                            @click="col.campo && ordenarPor(col.campo)">
+                            {{ col.label }}
+                            <span v-if="col.campo" class="flecha">{{ flecha(col.campo) }}</span>
+                        </th>
                         <th></th>
                     </tr>
                 </thead>
@@ -151,7 +147,19 @@
                     </tr>
                 </tbody>
             </table>
-            <BasePager :page="page" :per-page="perPage" :total="total" @change="goto" />
+            <div class="pie-grilla">
+                <label>
+                    Ver
+                    <select v-model.number="perPage" class="select" @change="cambiarTamanio">
+                        <option :value="20">20</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                        <option :value="200">200</option>
+                    </select>
+                    por página
+                </label>
+                <BasePager :page="page" :per-page="perPage" :total="total" @change="goto" />
+            </div>
         </div>
 
         <ConfirmDialog ref="confirmRef" />
@@ -206,19 +214,65 @@ const subsectoresFiltrados = computed(() => {
     return hijos.filter(s => String(s.dependencia_id) === String(filters.gerencia_area_id));
 });
 
+/**
+ * Columnas de la grilla. `campo` es lo que se manda al backend para ordenar;
+ * las que no lo tienen no son ordenables.
+ */
+const columnas = [
+    { label: 'ID',                campo: 'id' },
+    { label: 'Expediente',        campo: 'nro_expediente' },
+    { label: 'Tipo',              campo: 'tipo' },
+    { label: 'Proyecto',          campo: 'nombre_proyecto' },
+    { label: 'Estado',            campo: 'estado' },
+    { label: 'Sector',            campo: 'sector' },
+    { label: 'UVT',               campo: 'uvt' },
+    { label: 'F. Inicio',         campo: 'fecha_inicio' },
+    { label: 'F. Venc.',          campo: 'fecha_vencimiento' },
+    { label: 'Ejecución y saldo', campo: 'saldo' },
+];
+
+const orden = reactive({ by: 'id', dir: 'desc' });
+
+/** Un clic ordena ascendente; el siguiente sobre la misma columna invierte. */
+function ordenarPor(campo) {
+    if (orden.by === campo) {
+        orden.dir = orden.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        orden.by = campo;
+        orden.dir = 'asc';
+    }
+    page.value = 1;
+    load();
+}
+
+function flecha(campo) {
+    if (orden.by !== campo) return '';
+    return orden.dir === 'asc' ? '▲' : '▼';
+}
+
+function cambiarTamanio() {
+    page.value = 1;
+    load();
+}
+
 const onFilter = debounce(() => { page.value = 1; load(); }, 300);
 
 async function load() {
     loading.value = true;
     try {
-        const params = { page: page.value, per_page: perPage.value };
+        const params = {
+            page: page.value,
+            per_page: perPage.value,
+            order_by: orden.by,
+            order_dir: orden.dir,
+        };
         for (const [k, v] of Object.entries(filters)) {
             if (v !== '' && v !== null && v !== undefined) params[k] = v;
         }
         const res = await contratosEjecucionService.list(params);
         rows.value = res.data || [];
         total.value = res.total || 0;
-        perPage.value = res.per_page || 20;
+        perPage.value = Number(res.per_page) || perPage.value;
     } catch (err) {
         toast.error(extractError(err, 'No se pudieron cargar los contratos.'));
     } finally {
@@ -247,7 +301,7 @@ async function darBaja(r) {
 
 async function exportar() {
     try {
-        const params = {};
+        const params = { order_by: orden.by, order_dir: orden.dir };
         for (const [k, v] of Object.entries(filters)) {
             if (v !== '' && v !== null && v !== undefined) params[k] = v;
         }
@@ -273,6 +327,35 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.atlas-table th.ordenable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.atlas-table th.ordenable:hover { text-decoration: underline; }
+.atlas-table th .flecha {
+    font-size: 10px;
+    margin-left: 3px;
+    opacity: 0.85;
+}
+
+.pie-grilla {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.pie-grilla > label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-muted, #888);
+    white-space: nowrap;
+}
+.pie-grilla .select { width: auto; padding: 4px 8px; height: auto; font-size: 13px; }
+
 .ejecutado { font-size: 12px; line-height: 1.35; white-space: nowrap; }
 .ejecutado span { color: var(--color-muted, #888); }
 .ejecutado .saldo {

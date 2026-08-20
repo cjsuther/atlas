@@ -107,13 +107,81 @@ class ContratoEjecucionService
             $q->withTrashed();
         }
 
-        $orderBy  = $filters['order_by']  ?? 'id';
-        $orderDir = strtolower($filters['order_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
-        $allowed  = ['id','nombre_proyecto','nro_expediente','fecha_inicio','fecha_vencimiento',
-                     'fecha_finalizacion','estado_id','tipo_contrato_id','sector_id','created_at'];
-        if (!in_array($orderBy, $allowed, true)) $orderBy = 'id';
+        return $this->aplicarOrden($q, $filters);
+    }
 
-        return $q->orderBy($orderBy, $orderDir);
+    /** Columnas propias de la tabla por las que se puede ordenar. */
+    private const ORDEN_COLUMNAS = [
+        'id', 'nro_expediente', 'nombre_proyecto', 'fecha_apertura_expediente',
+        'fecha_inicio', 'fecha_vencimiento', 'fecha_finalizacion',
+        'saldo_inicial', 'created_at',
+    ];
+
+    /**
+     * Órdenes que apuntan a otra tabla. Se ordena por el nombre de la entidad,
+     * no por su id, que es lo que el usuario ve en la grilla.
+     *
+     * clave => [tabla, clave primaria, clave foránea, campo a ordenar]
+     */
+    private const ORDEN_RELACIONES = [
+        'estado' => ['estado_ejecucion',        'id',        'estado_id',        'nombre'],
+        'tipo'   => ['tipo_contrato_ejecucion', 'id',        'tipo_contrato_id', 'sigla'],
+        'sector' => ['sector',                  'sector_id', 'sector_id',        'nombre'],
+        'uvt'    => ['uvt',                     'uvt_id',    'uvt_id',           'siglas'],
+    ];
+
+    /**
+     * Ordena el listado. Además de las columnas propias admite ordenar por el
+     * nombre de las entidades relacionadas y por el saldo, que es un calculado.
+     */
+    private function aplicarOrden(Builder $q, array $filters): Builder
+    {
+        $dir = strtolower($filters['order_dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+        $por = $filters['order_by'] ?? 'id';
+
+        if (in_array($por, self::ORDEN_COLUMNAS, true)) {
+            return $q->orderBy("contratos_ejecucion.{$por}", $dir);
+        }
+
+        if (isset(self::ORDEN_RELACIONES[$por])) {
+            [$tabla, $pk, $fk, $campo] = self::ORDEN_RELACIONES[$por];
+            return $q->orderBy(
+                DB::table($tabla)
+                    ->select($campo)
+                    ->whereColumn("{$tabla}.{$pk}", "contratos_ejecucion.{$fk}")
+                    ->limit(1),
+                $dir
+            );
+        }
+
+        if ($por === 'saldo') {
+            // Mismo cálculo que expone el contrato: inicial + ingresos - gastos.
+            return $q->orderByRaw(
+                'COALESCE(contratos_ejecucion.saldo_inicial, 0)'
+                . ' + ' . $this->sumaMovimientosSql('ingreso')
+                . ' - ' . $this->sumaMovimientosSql('gasto')
+                . ' ' . $dir
+            );
+        }
+
+        return $q->orderBy('contratos_ejecucion.id', 'desc');
+    }
+
+    /**
+     * Subconsulta de movimientos como SQL, para poder usarla en un ORDER BY.
+     * El tipo se resuelve contra una lista cerrada: nunca llega texto externo
+     * a la consulta.
+     */
+    private function sumaMovimientosSql(string $tipo): string
+    {
+        $tipo = match ($tipo) {
+            'ingreso' => 'ingreso',
+            'gasto'   => 'gasto',
+        };
+
+        return "COALESCE((SELECT SUM(m.monto) FROM ejecucion_movimientos m
+                 WHERE m.contrato_ejecucion_id = contratos_ejecucion.id
+                   AND m.tipo = '{$tipo}' AND m.deleted_at IS NULL), 0)";
     }
 
     public function paginate(array $filters): LengthAwarePaginator
