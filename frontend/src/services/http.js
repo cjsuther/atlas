@@ -25,8 +25,14 @@ http.interceptors.response.use(
     (err) => {
         if (err.response?.status === 401) {
             const auth = useAuthStore();
+            const teniaSesion = !!auth.token;
             auth.clear();
             if (router.currentRoute.value.name !== 'login') {
+                // El token ahora vence: si había sesión, el 401 es una sesión
+                // expirada y conviene decirlo en vez de volver al login sin más.
+                if (teniaSesion) {
+                    useToast().info('Su sesión expiró. Vuelva a ingresar.');
+                }
                 router.replace({ name: 'login' });
             }
         }

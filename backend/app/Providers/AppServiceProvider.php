@@ -10,6 +10,9 @@ use App\Models\ContratoPrincipal;
 use App\Models\EjecucionMovimiento;
 use App\Observers\ContratoHistorialObserver;
 use App\Support\SectorTree;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
@@ -27,6 +30,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Schema::defaultStringLength(191);
 
+        $this->limitarIntentosDeLogin();
+
         // Sanctum
         Sanctum::usePersonalAccessTokenModel(\Laravel\Sanctum\PersonalAccessToken::class);
 
@@ -42,5 +47,25 @@ class AppServiceProvider extends ServiceProvider
                 LimpiarCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Límite de intentos sobre el login.
+     *
+     * Sin esto el endpoint admite fuerza bruta y password spraying, cada intento
+     * dispara un bind contra el AD —con riesgo de bloquear cuentas del
+     * directorio— y cada credencial válida desconocida da de alta una fila en
+     * `user_roles`. Se acota por usuario y por origen.
+     */
+    private function limitarIntentosDeLogin(): void
+    {
+        RateLimiter::for('login', function (Request $request) {
+            $usuario = mb_strtolower((string) $request->input('username'));
+
+            return [
+                Limit::perMinute(5)->by($usuario . '|' . $request->ip()),
+                Limit::perMinute(20)->by($request->ip()),
+            ];
+        });
     }
 }

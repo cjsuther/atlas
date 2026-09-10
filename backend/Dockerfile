@@ -29,6 +29,24 @@ RUN apk add --no-cache \
         opcache \
     && rm -rf /var/cache/apk/*
 
+# ---------------------------------------------------------------------
+# Configuración de PHP
+#   Los errores no se muestran en la respuesta: un aviso del intérprete
+#   filtra rutas, versiones y estructura interna. Se registran en el log.
+#   Los límites de subida acompañan al client_max_body_size del gateway,
+#   para que un archivo grande devuelva un error de la aplicación y no del
+#   intérprete.
+# ---------------------------------------------------------------------
+RUN { \
+        echo 'display_errors = Off'; \
+        echo 'display_startup_errors = Off'; \
+        echo 'log_errors = On'; \
+        echo 'error_log = /proc/self/fd/2'; \
+        echo 'expose_php = Off'; \
+        echo 'post_max_size = 25M'; \
+        echo 'upload_max_filesize = 25M'; \
+    } > /usr/local/etc/php/conf.d/atlas-seguridad.ini
+
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

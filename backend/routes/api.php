@@ -50,7 +50,10 @@ Route::get('/health', fn () => response()->json([
 // ----------------------------------------------------------------------
 // Autenticación
 // ----------------------------------------------------------------------
-Route::post('/auth/login', [AuthController::class, 'login']);
+// El throttle acota fuerza bruta y, de paso, el alta automática de usuarios
+// LDAP que dispara cada login de una credencial válida desconocida.
+Route::post('/auth/login', [AuthController::class, 'login'])
+    ->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->group(function () {
     // Lo único que puede hacer un usuario sin permisos asignados: saber quién

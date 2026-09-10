@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\ContratoEjecucion;
 use App\Models\EjecucionMovimiento;
+use App\Services\AccessScopeService;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -86,6 +88,16 @@ class EjecucionMovimientoRequest extends FormRequest
                     } elseif ($this->contratoActualId() === (int) $this->input('contrato_contraparte_id')) {
                         $v->errors()->add('contrato_contraparte_id',
                             'No se puede transferir un contrato a sí mismo.');
+                    } else {
+                        // La transferencia escribe un movimiento espejo dentro del
+                        // contrato contraparte, así que ese contrato también tiene
+                        // que estar dentro del alcance de quien la registra: si no,
+                        // se toca la ejecución de otra Gerencia de Área.
+                        $contraparte = ContratoEjecucion::find((int) $this->input('contrato_contraparte_id'));
+                        if ($contraparte && !app(AccessScopeService::class)->puedeVerContrato($contraparte)) {
+                            $v->errors()->add('contrato_contraparte_id',
+                                'No tiene permisos sobre el contrato de la contraparte.');
+                        }
                     }
                     break;
 

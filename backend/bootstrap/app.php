@@ -43,6 +43,13 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 401);
         });
 
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, Request $request) {
+            return response()->json([
+                'error'   => 'too_many_attempts',
+                'message' => 'Demasiados intentos. Espere un momento antes de volver a probar.',
+            ], 429);
+        });
+
         $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
