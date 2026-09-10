@@ -266,11 +266,11 @@ class EjecucionMovimientoService
         return $data;
     }
 
-    /** Sólo los ingresos por factura llevan archivo adjunto. */
+    /** Sólo los gastos por factura llevan archivo adjunto. */
     private function admiteFactura(array $data): bool
     {
         return ($data['accion'] ?? null) === EjecucionMovimiento::ACCION_FACTURA
-            && ($data['tipo'] ?? null) === 'ingreso';
+            && ($data['tipo'] ?? null) === 'gasto';
     }
 
     private function borrarFactura(EjecucionMovimiento $m): void

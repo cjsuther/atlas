@@ -101,7 +101,7 @@
                     <div v-if="errors.objeto" class="error">{{ errors.objeto[0] }}</div>
                 </div>
 
-                <!-- Factura (sólo ingresos por factura) -->
+                <!-- Factura (sólo gastos por factura) -->
                 <div v-if="admiteFactura" class="field full">
                     <label>Factura (opcional) · PDF / JPG / PNG, máx. 10 MB</label>
                     <div v-if="currentFactura && !eliminarFactura && !archivo"
@@ -194,7 +194,7 @@ const isEdit = computed(() => !!editingId.value);
 const ayudaAccion = computed(() => AYUDAS[data.accion] || '');
 /** Los incentivos y la MCH son siempre gastos. */
 const tipoFijo = computed(() => data.accion === 'incentivo' || data.accion === 'mch');
-const admiteFactura = computed(() => data.accion === 'factura' && data.tipo === 'ingreso');
+const admiteFactura = computed(() => data.accion === 'factura' && data.tipo === 'gasto');
 
 /** Campo de contraparte que corresponde a la acción y el tipo elegidos. */
 const contraparte = computed(() => {

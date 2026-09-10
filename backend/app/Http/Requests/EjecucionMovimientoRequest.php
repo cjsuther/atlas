@@ -41,7 +41,7 @@ class EjecucionMovimientoRequest extends FormRequest
 
             'objeto'         => ['required', 'string'],
 
-            // factura: opcional, sólo aplica a ingresos por factura. PDF / JPG / PNG, hasta 10 MB.
+            // factura: opcional, sólo aplica a gastos por factura. PDF / JPG / PNG, hasta 10 MB.
             'factura'        => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
 
             // bandera del frontend para eliminar la factura existente al editar.
@@ -101,8 +101,8 @@ class EjecucionMovimientoRequest extends FormRequest
             }
 
             if ($this->hasFile('factura')
-                && ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'ingreso')) {
-                $v->errors()->add('factura', 'Sólo se adjunta factura en los ingresos por factura.');
+                && ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'gasto')) {
+                $v->errors()->add('factura', 'Sólo se adjunta factura en los gastos por factura.');
             }
         });
     }

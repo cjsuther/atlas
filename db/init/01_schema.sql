@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS ejecucion_movimientos (
   monto_dolares            DECIMAL(18,2) NULL,         -- monto original si moneda='Dólar'
   cotizacion               DECIMAL(18,4) NULL,         -- cotización aplicada si moneda='Dólar'
   objeto                   TEXT         NOT NULL,
-  factura_path             VARCHAR(500) NULL,          -- ingresos: ruta relativa al disk local
+  factura_path             VARCHAR(500) NULL,          -- gastos por factura: ruta relativa al disk local
   factura_original_name    VARCHAR(255) NULL,
   factura_mime             VARCHAR(100) NULL,
   deleted_at               TIMESTAMP    NULL,
