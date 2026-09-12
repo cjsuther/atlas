@@ -8,7 +8,12 @@
                     <template v-if="alcance"> · {{ alcance }}</template>
                 </p>
             </div>
-            <div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary" :disabled="loading || generandoPdf" @click="descargarPdf">
+                    <span v-if="generandoPdf" class="loader dark" />
+                    <IconLib v-else name="download" />
+                    {{ generandoPdf ? 'Generando…' : 'Descargar PDF' }}
+                </button>
                 <button class="btn btn-secondary" :disabled="exporting" @click="exportarTodo">
                     <span v-if="exporting" class="loader dark" />
                     <IconLib v-else name="download" />
@@ -45,11 +50,30 @@
                 <div class="field">
                     <label>Gerencia</label>
                     <select v-model="filters.sector_id" class="select">
-                        <option value="">Todos</option>
-                        <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
+                        <option value="">Todas</option>
+                        <option v-for="g in gerenciasFiltradas" :key="g.sector_id" :value="g.sector_id">
                             {{ g.nombre }}
                         </option>
                     </select>
+                </div>
+                <div class="field">
+                    <label>Contrato</label>
+                    <select v-model="filters.nodo_id" class="select">
+                        <option value="">Todos</option>
+                        <option v-for="c in contratosFiltrados" :key="c.sector_id" :value="c.sector_id">
+                            {{ c.nombre }}
+                        </option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Cuenta operativa</label>
+                    <select v-model="filters.cuenta_operativa_id" class="select">
+                        <option value="">Todas</option>
+                        <option v-for="c in cuentasFiltradas" :key="c.id" :value="c.id">
+                            {{ c.nombre }}
+                        </option>
+                    </select>
+                    <div class="hint">Los expedientes imputados a esa cuenta.</div>
                 </div>
             </div>
             <div class="actions">
@@ -330,11 +354,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { panelService } from '@/services/panel';
 import { authService } from '@/services/auth';
 import { exportFullService } from '@/services/exportFull';
-import { listAll } from '@/services/catalogos';
+import { contratosEjecucionService } from '@/services/contratosEjecucion';
 import { AGRUPACIONES_SALDO as AGRUPACIONES, useAuthStore } from '@/stores/auth';
 import { fmtInt, fmtMoney } from '@/composables/useFormat';
 import { useToast } from '@/composables/useToast';
@@ -358,6 +382,8 @@ const filters = reactive({
     moneda_base: 'Peso',
     gerencia_area_id: '',
     sector_id: '',
+    nodo_id: '',
+    cuenta_operativa_id: '',
 });
 
 // Agrupación con la que se muestran los saldos; arranca en la preferencia del usuario.
@@ -378,17 +404,42 @@ const dGer = ref(null);
 const acciones = ref(null);
 const venc = ref(null);
 const ranks = ref(null);
-const sectores = ref([]);
+const arbol = ref(null);
 const loading = ref(false);
 const exporting = ref(false);
 const guardandoPref = ref(false);
+const generandoPdf = ref(false);
 
 const alcance = computed(() => {
     return auth.veTodo ? 'Todas las Gerencias de Área' : auth.alcanceLabel;
 });
 
-/** Los sectores sin dependencia son las Gerencias de Área. */
-const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
+/**
+ * El árbol aplanado, con el nivel y el ancestro de cada nodo, para armar los
+ * selectores encadenados de la barra de filtros.
+ */
+const nodos = computed(() => {
+    const filas = [];
+    const recorrer = (nodo, nivel, padre, raiz) => {
+        if (nodo.sector_id !== null) {
+            filas.push({
+                sector_id: nodo.sector_id,
+                nombre:    nodo.nombre,
+                nivel,
+                padre,
+                raiz,
+                cuentas:   nodo.cuentas,
+            });
+        }
+        for (const h of nodo.hijos) {
+            recorrer(h, nivel + 1, nodo.sector_id, nodo.sector_id === null ? h.sector_id : raiz);
+        }
+    };
+    if (arbol.value) recorrer(arbol.value, 0, null, null);
+    return filas;
+});
+
+const areas = computed(() => nodos.value.filter(n => n.nivel === 1));
 
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
@@ -396,11 +447,84 @@ const tituloColumnaSaldos = computed(() => ({
     contrato:      'Gerencia de Área / Gerencia / Contrato',
 }[agrupacion.value] || 'Gerencia de Área'));
 
-const subsectoresFiltrados = computed(() => {
-    const hijos = sectores.value.filter(s => s.dependencia_id !== null);
-    if (!filters.gerencia_area_id) return hijos;
-    return hijos.filter(s => String(s.dependencia_id) === String(filters.gerencia_area_id));
+/** Gerencias: segundo nivel, acotado a la Gerencia de Área elegida. */
+const gerenciasFiltradas = computed(() => nodos.value.filter(n => n.nivel === 2
+    && (!filters.gerencia_area_id || String(n.padre) === String(filters.gerencia_area_id))));
+
+/** Contratos: tercer nivel, acotado a la Gerencia elegida. */
+const contratosFiltrados = computed(() => nodos.value.filter(n => n.nivel === 3
+    && (!filters.sector_id || String(n.padre) === String(filters.sector_id))
+    && (!filters.gerencia_area_id || String(n.raiz) === String(filters.gerencia_area_id))));
+
+/** Cuentas del nodo más profundo que se haya elegido, o de toda la rama. */
+const cuentasFiltradas = computed(() => {
+    const dentroDe = (n) => {
+        if (filters.nodo_id)          return String(n.sector_id) === String(filters.nodo_id);
+        if (filters.sector_id)        return String(n.sector_id) === String(filters.sector_id)
+                                          || String(n.padre) === String(filters.sector_id);
+        if (filters.gerencia_area_id) return String(n.raiz) === String(filters.gerencia_area_id);
+        return true;
+    };
+    return nodos.value.filter(dentroDe).flatMap(n => n.cuentas);
 });
+
+// Al cambiar un nivel se descartan los de abajo, que ya no le pertenecen.
+watch(() => filters.gerencia_area_id, () => {
+    filters.sector_id = ''; filters.nodo_id = ''; filters.cuenta_operativa_id = '';
+});
+watch(() => filters.sector_id, () => {
+    filters.nodo_id = ''; filters.cuenta_operativa_id = '';
+});
+watch(() => filters.nodo_id, () => { filters.cuenta_operativa_id = ''; });
+
+/**
+ * Descripción de los filtros aplicados, para que el PDF diga de qué recorte
+ * salieron los números.
+ */
+function descripcionFiltros() {
+    const nombre = (id) => nodos.value.find(n => String(n.sector_id) === String(id))?.nombre;
+    const partes = [];
+    if (filters.desde) partes.push(`desde ${filters.desde}`);
+    if (filters.hasta) partes.push(`hasta ${filters.hasta}`);
+    if (filters.moneda_base) partes.push(`moneda base ${filters.moneda_base}`);
+    if (filters.gerencia_area_id) partes.push(`Gerencia de Área: ${nombre(filters.gerencia_area_id)}`);
+    if (filters.sector_id) partes.push(`Gerencia: ${nombre(filters.sector_id)}`);
+    if (filters.nodo_id) partes.push(`Contrato: ${nombre(filters.nodo_id)}`);
+    if (filters.cuenta_operativa_id) {
+        const cta = cuentasFiltradas.value.find(c => String(c.id) === String(filters.cuenta_operativa_id));
+        partes.push(`Cuenta: ${cta?.nombre || filters.cuenta_operativa_id}`);
+    }
+    return partes;
+}
+
+async function descargarPdf() {
+    generandoPdf.value = true;
+    try {
+        // La carga del módulo se difiere: el armado del PDF pesa y sólo hace
+        // falta cuando alguien lo pide.
+        const { generarPanelPdf } = await import('@/services/panelPdf');
+        generarPanelPdf({
+            ind: ind.value,
+            calc: calc.value,
+            saldos: saldos.value,
+            dGer: dGer.value,
+            dUvt: dUvt.value,
+            acciones: acciones.value,
+            venc: venc.value,
+            ranks: ranks.value,
+            filtrosAplicados: descripcionFiltros(),
+            alcance: alcance.value,
+            usuario: auth.user?.display_name || auth.user?.username || '',
+            tituloSaldos: tituloColumnaSaldos.value,
+            accionLabels: ACCION_LABELS,
+        });
+        toast.success('PDF generado.');
+    } catch (err) {
+        toast.error(extractError(err, 'No se pudo generar el PDF.'));
+    } finally {
+        generandoPdf.value = false;
+    }
+}
 
 async function exportarTodo() {
     exporting.value = true;
@@ -474,6 +598,7 @@ async function loadAll() {
 function clearFilters() {
     filters.desde = ''; filters.hasta = ''; filters.moneda_base = 'Peso';
     filters.gerencia_area_id = ''; filters.sector_id = '';
+    filters.nodo_id = ''; filters.cuenta_operativa_id = '';
     loadAll();
 }
 
@@ -502,7 +627,7 @@ const rowsPorArea   = computed(() => conImporte(dGer.value?.gerencias_area, r =>
 
 onMounted(async () => {
     try {
-        sectores.value = await listAll('sectores');
+        arbol.value = await contratosEjecucionService.arbolEstructura();
     } catch { /* no-op */ }
     loadAll();
 });

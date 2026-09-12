@@ -17,10 +17,14 @@ use Illuminate\Support\Facades\DB;
  * los saldos y registros de una Gerencia de Área no se ven desde otra.
  *
  * Filtros comunes:
- *   - desde, hasta      : recortan por created_at del contrato
- *   - moneda_base       : 'Peso' por defecto, para conversión de montos
- *   - sector_id         : acota a un sector dentro del alcance
- *   - gerencia_area_id  : acota a una Gerencia de Área (y sus subsectores)
+ *   - desde, hasta          : recortan por created_at del expediente
+ *   - moneda_base           : 'Peso' por defecto, para conversión de montos
+ *   - gerencia_area_id      : acota a una Gerencia de Área y su rama
+ *   - sector_id             : acota a una Gerencia y su rama
+ *   - nodo_id               : acota a un Contrato (tercer nivel) y su rama
+ *   - cuenta_operativa_id   : acota a los expedientes de una cuenta
+ *
+ * Los de estructura se combinan: cada uno recorta sobre el anterior.
  */
 class PanelService
 {
@@ -55,6 +59,13 @@ class PanelService
         }
         if (!empty($filters['gerencia_area_id'])) {
             $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['gerencia_area_id']) ?: [0]);
+        }
+        if (!empty($filters['nodo_id'])) {
+            $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['nodo_id']) ?: [0]);
+        }
+        // La cuenta es el corte más fino: los expedientes imputados a ella.
+        if (!empty($filters['cuenta_operativa_id'])) {
+            $q->where('cuenta_operativa_id', (int) $filters['cuenta_operativa_id']);
         }
 
         return $q;
