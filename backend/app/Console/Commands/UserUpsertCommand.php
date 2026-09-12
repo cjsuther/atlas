@@ -4,17 +4,18 @@ namespace App\Console\Commands;
 
 use App\Models\Sector;
 use App\Models\UserRole;
+use App\Models\UsuarioPermiso;
 use App\Support\SectorTree;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Hash;
 
 class UserUpsertCommand extends Command
 {
     protected $signature = 'atlas:user
                             {username        : Username (login) del usuario}
                             {--password=     : Contraseña en texto plano (se guarda hasheada). Si se omite, se pedirá interactivamente}
-                            {--rol=operador_gerencia : Rol: admin_sistema | admin_gerencia | operador_gerencia | sin_acceso}
-                            {--gerencia=     : ID o nombre de la Gerencia de Área (obligatorio salvo para admin_sistema)}
+                            {--admin         : Administrador del sistema: ve y opera sobre todo, y administra la configuración}
+                            {--nodo=         : ID o nombre del nodo del árbol sobre el que se le da permiso}
+                            {--nivel=escritura : Nivel del permiso sobre ese nodo: lectura | escritura}
                             {--display=      : Display name (opcional)}
                             {--email=        : Email (opcional)}
                             {--inactivo      : Marcar el usuario como inactivo}
@@ -30,28 +31,17 @@ class UserUpsertCommand extends Command
             return self::FAILURE;
         }
 
-        $rol = (string) $this->option('rol');
-        if (!in_array($rol, UserRole::ROLES, true)) {
-            $this->error("Rol inválido: {$rol}. Use " . implode(' | ', UserRole::ROLES) . '.');
+        $nivel = (string) $this->option('nivel');
+        if (!in_array($nivel, UsuarioPermiso::NIVELES, true)) {
+            $this->error("Nivel inválido: {$nivel}. Use " . implode(' | ', UsuarioPermiso::NIVELES) . '.');
             return self::FAILURE;
         }
 
         $user  = UserRole::firstOrNew(['username' => $username]);
         $isNew = !$user->exists;
 
-        // Los roles acotados necesitan Gerencia de Área; el de sistema no.
-        if (in_array($rol, UserRole::ROLES_CON_GERENCIA, true)) {
-            $sectorId = $this->resolverGerenciaArea($user->sector_id);
-            if ($sectorId === null) {
-                return self::FAILURE;
-            }
-            $user->sector_id = $sectorId;
-        } else {
-            $user->sector_id = null;
-        }
-
-        $user->rol    = $rol;
-        $user->activo = $this->option('inactivo') ? 0 : 1;
+        $user->es_admin = $this->option('admin') ? true : (bool) $user->es_admin;
+        $user->activo   = $this->option('inactivo') ? 0 : 1;
 
         if ($display = $this->option('display')) {
             $user->display_name = $display;
@@ -80,7 +70,7 @@ class UserUpsertCommand extends Command
                     $this->error('La contraseña debe tener al menos 8 caracteres.');
                     return self::FAILURE;
                 }
-                $user->password = Hash::make($password);
+                $user->password = $password; // el cast 'hashed' lo hashea
             }
         }
 
@@ -89,63 +79,45 @@ class UserUpsertCommand extends Command
 
         $user->save();
 
-        $gerencia = $user->sector_id ? optional(Sector::find($user->sector_id))->nombre : '—';
+        // Permiso sobre una rama del árbol, si se indicó un nodo.
+        if ($this->option('nodo') !== null && $this->option('nodo') !== '') {
+            $sectorId = $this->resolverNodo();
+            if ($sectorId === null) {
+                return self::FAILURE;
+            }
+            $user->permisos()->updateOrCreate(['sector_id' => $sectorId], ['nivel' => $nivel]);
+            $this->line("  permiso de {$nivel} sobre " . app(SectorTree::class)->rutaDe($sectorId));
+        }
+
         $this->info(($isNew ? 'Creado' : 'Actualizado')
-            . ": {$username} (rol={$user->rol}, gerencia={$gerencia}, activo=" . ($user->activo ? 'sí' : 'no') . ')');
+            . ": {$username} (" . ($user->es_admin ? 'administrador del sistema' : 'usuario')
+            . ', activo=' . ($user->activo ? 'sí' : 'no') . ')');
 
         if (!$user->password) {
             $this->warn('El usuario no tiene contraseña local — sólo podrá ingresar vía LDAP.');
         }
 
+        if (!$user->es_admin && !$user->permisos()->exists()) {
+            $this->warn('El usuario no tiene permisos sobre ninguna rama: se autentica, pero no ve nada.');
+        }
+
         return self::SUCCESS;
     }
 
-    /**
-     * Resuelve --gerencia por ID o por nombre. Debe ser una Gerencia de Área,
-     * es decir un sector sin dependencia. Devuelve null si no se puede.
-     */
-    private function resolverGerenciaArea(?int $actual): ?int
+    /** Resuelve --nodo por ID o por nombre. Devuelve null si no se puede. */
+    private function resolverNodo(): ?int
     {
-        $valor = $this->option('gerencia');
+        $valor = (string) $this->option('nodo');
 
-        if ($valor === null || $valor === '') {
-            if ($actual) {
-                return $actual;
-            }
-            $this->error('Debe indicar --gerencia para los roles acotados a una Gerencia de Área.');
-            $this->listarGerenciasArea();
-            return null;
-        }
-
-        $sector = is_numeric($valor)
+        $sector = ctype_digit($valor)
             ? Sector::find((int) $valor)
             : Sector::where('nombre', $valor)->first();
 
         if (!$sector) {
-            $this->error("No se encontró el sector: {$valor}");
-            $this->listarGerenciasArea();
-            return null;
-        }
-
-        if ($sector->dependencia_id !== null) {
-            $this->error("'{$sector->nombre}' es un subsector; el usuario debe asociarse a una Gerencia de Área.");
-            $this->listarGerenciasArea();
+            $this->error("No se encontró el nodo «{$valor}» en la estructura.");
             return null;
         }
 
         return (int) $sector->sector_id;
-    }
-
-    private function listarGerenciasArea(): void
-    {
-        $raices = Sector::gerenciasArea()->orderBy('nombre')->get(['sector_id', 'nombre']);
-        if ($raices->isEmpty()) {
-            $this->warn('No hay Gerencias de Área cargadas en la tabla `sector`.');
-            return;
-        }
-        $this->line('Gerencias de Área disponibles:');
-        foreach ($raices as $r) {
-            $this->line("  [{$r->sector_id}] {$r->nombre}");
-        }
     }
 }

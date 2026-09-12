@@ -7,9 +7,9 @@ use Illuminate\Console\Command;
 
 class EnsureAdminCommand extends Command
 {
-    protected $signature = 'atlas:ensure-admin {username : Username del AD para registrar como administrador de sistema}';
+    protected $signature = 'atlas:ensure-admin {username : Username del AD para registrar como administrador del sistema}';
 
-    protected $description = 'Asegura que el usuario indicado exista en user_roles con rol admin_sistema (idempotente).';
+    protected $description = 'Asegura que el usuario indicado exista en user_roles como administrador del sistema (idempotente).';
 
     public function handle(): int
     {
@@ -21,9 +21,8 @@ class EnsureAdminCommand extends Command
         }
 
         $user = UserRole::firstOrNew(['username' => $username]);
-        $user->rol = UserRole::ROL_ADMIN_SISTEMA;
-        $user->sector_id = null; // el administrador de sistema no está acotado a una Gerencia de Área
-        $user->activo = 1;
+        $user->es_admin = true;  // el administrador ve y opera sobre todo el árbol
+        $user->activo   = 1;
         if (!$user->display_name) {
             $user->display_name = $username;
         }

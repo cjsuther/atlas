@@ -30,10 +30,7 @@
             <div class="user-area">
                 <div class="user-info">
                     <div class="name">{{ auth.user?.display_name || auth.user?.username || '—' }}</div>
-                    <div class="role">
-                        {{ auth.rolLabel }}
-                        <template v-if="auth.gerenciaArea"> · {{ auth.gerenciaArea }}</template>
-                    </div>
+                    <div class="role">{{ auth.alcanceLabel }}</div>
                 </div>
                 <button class="btn btn-ghost" @click="logout" title="Cerrar sesión">
                     <IconLib name="logout" :size="18" />
@@ -50,7 +47,7 @@
 <script setup>
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ROLES, useAuthStore } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 import { useToast } from '@/composables/useToast';
 import { authService } from '@/services/auth';
@@ -65,44 +62,44 @@ const toast = useToast();
 
 const pageTitle = computed(() => route.meta?.title || '');
 
-const TODOS = [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA];
+/** Visible para cualquiera con permisos; `soloAdmin` reserva la opción. */
 
 const NAV_SECTIONS = [
     {
         title: 'Principal',
         items: [
-            { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' }, roles: TODOS },
-            { label: 'Expedientes',      icon: 'contratos', to: { name: 'contratos-ejecucion' }, roles: TODOS },
+            { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' } },
+            { label: 'Expedientes',      icon: 'contratos', to: { name: 'contratos-ejecucion' } },
         ],
     },
     {
         title: 'Estructura',
         items: [
-            { label: 'Estructura',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
-            { label: 'Cuentas Operativas',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } }, roles: TODOS },
+            { label: 'Estructura',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } } },
+            { label: 'Cuentas Operativas',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } } },
         ],
     },
     {
         title: 'Catálogos',
         items: [
-            { label: 'Tipos de expediente', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
-            { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: TODOS },
-            { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: TODOS },
-            { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: TODOS },
-            { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } }, roles: TODOS },
+            { label: 'Tipos de expediente', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } } },
+            { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } } },
+            { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } } },
+            { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } } },
+            { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } } },
         ],
     },
     {
         title: 'Administración',
         items: [
-            { label: 'Usuarios y Roles',    icon: 'users',    to: { name: 'usuarios' },      roles: [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA] },
-            { label: 'Exportar / Importar', icon: 'database', to: { name: 'export-import' }, roles: [ROLES.ADMIN_SISTEMA] },
+            { label: 'Usuarios y Permisos', icon: 'users',    to: { name: 'usuarios' },      soloAdmin: true },
+            { label: 'Exportar / Importar', icon: 'database', to: { name: 'export-import' }, soloAdmin: true },
         ],
     },
 ];
 
 const visibleNav = computed(() => NAV_SECTIONS
-    .map(s => ({ ...s, items: s.items.filter(i => i.roles.includes(auth.role)) }))
+    .map(s => ({ ...s, items: s.items.filter(i => !i.soloAdmin || auth.isAdmin) }))
     .filter(s => s.items.length > 0));
 
 function onNavClick() {

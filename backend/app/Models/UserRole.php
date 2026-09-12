@@ -7,42 +7,23 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
- * Usuario del sistema, con rol y alcance.
+ * Usuario del sistema.
  *
- * El alcance se define por `sector_id`, que apunta a una Gerencia de Área (un
- * sector sin dependencia). El usuario ve los contratos de todos los subsectores
- * que cuelgan de ella.
+ * El alcance no es un rol: son asignaciones sobre el árbol de la estructura.
+ * A cada usuario se le da uno o más nodos —o la raíz, que es toda la
+ * organización— con nivel de lectura o de escritura, y el permiso se hereda
+ * hacia abajo. Quien puede escribir, puede ver.
  *
- *   admin_sistema     : ve y administra todas las Gerencias de Área y sus
- *                       contratos, y crea/modifica usuarios de cualquier rol.
- *   admin_gerencia    : administra los contratos de su Gerencia de Área y los
- *                       usuarios operadores de esa Gerencia de Área.
- *   operador_gerencia : administra los contratos de su Gerencia de Área.
- *   sin_acceso        : puede autenticarse y nada más. Es el rol con el que se
- *                       dan de alta los usuarios que llegan por LDAP, hasta que
- *                       un administrador les asigne rol y Gerencia de Área.
+ * Aparte del árbol está `es_admin`, que habilita la configuración del sistema:
+ * estructura, cuentas, catálogos, usuarios y respaldos.
+ *
+ * Un usuario sin asignaciones y sin el atributo de administrador se autentica
+ * y nada más: es el estado con el que se dan de alta los que llegan por LDAP,
+ * hasta que un administrador les asigne permisos.
  */
 class UserRole extends Authenticatable
 {
     use HasApiTokens, Notifiable;
-
-    public const ROL_ADMIN_SISTEMA     = 'admin_sistema';
-    public const ROL_ADMIN_GERENCIA    = 'admin_gerencia';
-    public const ROL_OPERADOR_GERENCIA = 'operador_gerencia';
-    public const ROL_SIN_ACCESO        = 'sin_acceso';
-
-    public const ROLES = [
-        self::ROL_ADMIN_SISTEMA,
-        self::ROL_ADMIN_GERENCIA,
-        self::ROL_OPERADOR_GERENCIA,
-        self::ROL_SIN_ACCESO,
-    ];
-
-    /** Roles que sólo operan dentro de su propia Gerencia de Área. */
-    public const ROLES_CON_GERENCIA = [
-        self::ROL_ADMIN_GERENCIA,
-        self::ROL_OPERADOR_GERENCIA,
-    ];
 
     public const AGRUPACIONES_SALDO = ['gerencia_area', 'subsector', 'contrato'];
 
@@ -54,14 +35,14 @@ class UserRole extends Authenticatable
         'email',
         'password',
         'auth_source',
-        'rol',
-        'sector_id',
+        'es_admin',
         'saldos_agrupacion',
         'activo',
         'last_login',
     ];
 
     protected $casts = [
+        'es_admin'   => 'boolean',
         'activo'     => 'boolean',
         'last_login' => 'datetime',
         'password'   => 'hashed',
@@ -71,10 +52,10 @@ class UserRole extends Authenticatable
         'password',
     ];
 
-    /** Gerencia de Área a la que está asociado el usuario (un sector raíz). */
-    public function gerenciaArea()
+    /** Permisos del usuario sobre el árbol de la estructura. */
+    public function permisos()
     {
-        return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
+        return $this->hasMany(UsuarioPermiso::class, 'user_role_id');
     }
 
     public function hasLocalPassword(): bool
@@ -92,41 +73,42 @@ class UserRole extends Authenticatable
         return $this->auth_source === 'ldap';
     }
 
-    public function isAdminSistema(): bool
+    /** Administra la configuración del sistema. */
+    public function esAdmin(): bool
     {
-        return $this->rol === self::ROL_ADMIN_SISTEMA;
+        return (bool) $this->es_admin;
     }
 
-    public function isAdminGerencia(): bool
-    {
-        return $this->rol === self::ROL_ADMIN_GERENCIA;
-    }
-
-    public function isOperadorGerencia(): bool
-    {
-        return $this->rol === self::ROL_OPERADOR_GERENCIA;
-    }
-
-    /** Sin acceso: se autentica, pero no puede ver nada del sistema. */
+    /**
+     * Sin acceso: se autentica, pero no tiene ni un permiso sobre el árbol.
+     * Es el estado inicial de quien llega por LDAP.
+     */
     public function sinAcceso(): bool
     {
-        return $this->rol === self::ROL_SIN_ACCESO;
+        return !$this->esAdmin() && !$this->permisos()->exists();
     }
 
-    /** Puede crear y modificar usuarios (de todo el sistema o de su gerencia). */
+    /** Puede crear y modificar usuarios. */
     public function puedeAdministrarUsuarios(): bool
     {
-        return $this->isAdminSistema() || $this->isAdminGerencia();
+        return $this->esAdmin();
     }
 
-    /** true si el usuario no está acotado a una gerencia. */
+    /**
+     * true si el usuario no está acotado a una rama: es administrador o tiene
+     * un permiso sobre la raíz del árbol.
+     */
     public function veTodo(): bool
     {
-        return $this->isAdminSistema();
+        return $this->esAdmin() || $this->permisos()->whereNull('sector_id')->exists();
     }
 
-    public function hasRole(string ...$roles): bool
+    /** true si puede escribir en toda la organización. */
+    public function escribeEnTodo(): bool
     {
-        return in_array($this->rol, $roles, true);
+        return $this->permisos()
+            ->whereNull('sector_id')
+            ->where('nivel', UsuarioPermiso::NIVEL_ESCRITURA)
+            ->exists();
     }
 }

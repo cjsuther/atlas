@@ -40,13 +40,6 @@ class ImportadorTablas
         'euros' => 'Euro',  'euro' => 'Euro',
     ];
 
-    /** Equivalencia de los roles anteriores con los actuales. */
-    private const ROLES = [
-        'admin'    => 'admin_sistema',
-        'operador' => 'operador_gerencia',
-        'consulta' => 'operador_gerencia',
-    ];
-
     /** @var array<string, array<string, array{tipo: string, admite_null: bool, default: ?string}>> */
     private array $meta = [];
 
@@ -121,14 +114,17 @@ class ImportadorTablas
         }
 
         if ($tabla === 'user_roles') {
+            // Los permisos no vienen del archivo: el alcance sobre el árbol lo
+            // asigna un administrador desde el sistema. Del rol anterior sólo
+            // se conserva quién era administrador.
             $rol = $fila['rol'] ?? null;
-            if (is_string($rol) && isset(self::ROLES[$rol])) {
-                $fila['rol'] = self::ROLES[$rol];
-                $this->avisos[] = 'user_roles: los roles anteriores se convirtieron a los actuales. '
-                                . 'Falta asignar a cada usuario su Gerencia de Área.';
+            if ($rol !== null) {
+                $fila['es_admin'] = in_array($rol, ['admin', 'admin_sistema'], true) ? 1 : 0;
+                unset($fila['rol']);
+                $this->avisos[] = 'user_roles: el rol anterior sólo definió quién es administrador. '
+                                . 'Falta asignar a cada usuario sus permisos sobre el árbol.';
             }
-            // El alcance lo define la organización, no el archivo.
-            $fila['sector_id'] = $fila['sector_id'] ?? null;
+            unset($fila['sector_id']);
         }
 
         if ($tabla === 'ejecucion_movimientos') {

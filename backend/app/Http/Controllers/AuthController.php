@@ -68,16 +68,15 @@ class AuthController extends Controller
         $user = UserRole::where('username', $authPayload['username'])->first();
 
         // Quien llega por LDAP y todavía no está en el sistema se da de alta sin
-        // acceso: el directorio confirma quién es, pero qué puede ver lo decide
-        // un administrador asignándole rol y Gerencia de Área.
+        // permisos: el directorio confirma quién es, pero qué puede ver lo decide
+        // un administrador asignándole ramas del árbol.
         if (!$user && $authMethod === 'ldap') {
             $user = new UserRole();
             $user->username     = $authPayload['username'];
             $user->display_name = $authPayload['display_name'] ?? $authPayload['username'];
             $user->email        = $authPayload['email'] ?? null;
             $user->auth_source  = 'ldap';
-            $user->rol          = UserRole::ROL_SIN_ACCESO;
-            $user->sector_id    = null;
+            $user->es_admin     = false;
             $user->activo       = true;
             $user->save();
 
@@ -133,7 +132,7 @@ class AuthController extends Controller
 
         Log::info('ATLAS AUTH: login exitoso', [
             'username' => $user->username,
-            'rol'      => $user->rol,
+            'es_admin' => $user->esAdmin(),
             'method'   => $authMethod,
         ]);
 
@@ -177,14 +176,14 @@ class AuthController extends Controller
      *
      * Configuración de visualización del usuario. Por ahora, con qué
      * agrupación quiere ver los saldos del panel: por Gerencia de Área, por
-     * Subsector o por Contrato.
+     * Gerencia o por Expediente.
      */
     public function preferencias(Request $request): JsonResponse
     {
         $data = $request->validate([
             'saldos_agrupacion' => ['required', 'in:' . implode(',', UserRole::AGRUPACIONES_SALDO)],
         ], [
-            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Subsector o Contrato.',
+            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Gerencia o Expediente.',
         ]);
 
         $user = $request->user();
@@ -196,17 +195,24 @@ class AuthController extends Controller
 
     private function userPayload(UserRole $user): array
     {
-        $user->loadMissing('gerenciaArea');
+        $user->loadMissing('permisos.sector:sector_id,nombre');
 
         return [
             'id'                => $user->id,
             'username'          => $user->username,
             'display_name'      => $user->display_name,
             'email'             => $user->email,
-            'rol'               => $user->rol,
+            'es_admin'          => $user->esAdmin(),
             'auth_source'       => $user->auth_source,
-            'sector_id'         => $user->sector_id,
-            'gerencia_area'     => optional($user->gerenciaArea)->nombre,
+            'permisos'          => $user->permisos->map(fn ($p) => [
+                'sector_id' => $p->sector_id,
+                'nivel'     => $p->nivel,
+                'ruta'      => $p->ruta,
+            ])->all(),
+            // Atajos que la interfaz usa para habilitar o esconder acciones.
+            've_todo'           => $user->veTodo(),
+            'puede_editar'      => $user->esAdmin()
+                || $user->permisos->contains('nivel', \App\Models\UsuarioPermiso::NIVEL_ESCRITURA),
             'saldos_agrupacion' => $user->saldos_agrupacion,
             'activo'            => (bool) $user->activo,
             'last_login'        => optional($user->last_login)->toIso8601String(),

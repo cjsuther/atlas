@@ -8,11 +8,11 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Corta el paso a los usuarios con rol `sin_acceso`.
+ * Corta el paso a los usuarios sin ningún permiso asignado.
  *
  * Son los que llegan por LDAP: el directorio confirma quiénes son, pero hasta
- * que un administrador les asigne un rol y una Gerencia de Área no pueden ver
- * nada. Se les deja consultar su propio usuario y cerrar sesión para que la
+ * que un administrador les dé permisos sobre alguna rama del árbol no pueden
+ * ver nada. Se les deja consultar su propio usuario y cerrar sesión para que la
  * aplicación pueda explicarles por qué no ven nada.
  */
 class EnsureHasAccess

@@ -61,7 +61,7 @@ class FullExport implements WithMultipleSheets
 
         // Los contratos principales son un módulo retirado: quedan para el
         // administrador de sistema, que es el único sin recorte.
-        if ($this->scope->usuario()?->isAdminSistema()) {
+        if ($this->scope->usuario()?->esAdmin()) {
             $hojas[] = $this->tiposPrincipal();
             $hojas[] = $this->estadosPrincipal();
             $hojas[] = $this->contratosPrincipal();
@@ -189,17 +189,20 @@ class FullExport implements WithMultipleSheets
         return new TableSheet(
             'Usuarios',
             function () {
-                $q = UserRole::query()->with('gerenciaArea:sector_id,nombre')->orderBy('username');
+                $q = UserRole::query()->with('permisos.sector:sector_id,nombre')->orderBy('username');
+                // Los usuarios los administra el administrador del sistema; el
+                // resto no ve la nómina.
                 $usuario = $this->scope->usuario();
-                if ($usuario && !$usuario->isAdminSistema()) {
-                    $q->where('sector_id', $usuario->sector_id);
+                if ($usuario && !$usuario->esAdmin()) {
+                    $q->whereRaw('1 = 0');
                 }
                 return $q;
             },
-            ['ID', 'Username', 'Nombre', 'Email', 'Rol', 'Gerencia de Área', 'Agrupación de saldos', 'Activo', 'Último login'],
+            ['ID', 'Username', 'Nombre', 'Email', 'Administrador', 'Permisos', 'Agrupación de saldos', 'Activo', 'Último login'],
             fn ($r) => [
-                $r->id, $r->username, $r->display_name, $r->email, $r->rol,
-                optional($r->gerenciaArea)->nombre,
+                $r->id, $r->username, $r->display_name, $r->email,
+                $r->es_admin ? 'Sí' : 'No',
+                $r->permisos->map(fn ($p) => $p->ruta . ' (' . $p->nivel . ')')->implode(' · '),
                 $r->saldos_agrupacion,
                 $r->activo ? 'Sí' : 'No',
                 optional($r->last_login)?->format('d/m/Y H:i'),

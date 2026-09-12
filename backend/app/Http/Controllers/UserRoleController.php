@@ -3,34 +3,35 @@
 namespace App\Http\Controllers;
 
 use App\Models\UserRole;
-use App\Services\AccessScopeService;
+use App\Models\UsuarioPermiso;
 use App\Support\SectorTree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 /**
- * Administración de usuarios.
+ * Administración de usuarios y de sus permisos sobre el árbol.
  *
- *   admin_sistema  : crea y modifica usuarios de cualquier rol y Gerencia de Área.
- *   admin_gerencia : crea y modifica operadores de su propia Gerencia de Área.
+ * Es exclusiva del administrador del sistema: no hay roles intermedios que
+ * deleguen el alta de usuarios.
+ *
+ * A cada usuario se le asignan nodos del árbol —o la raíz, que es toda la
+ * organización— con nivel de lectura o de escritura. El permiso se hereda hacia
+ * abajo y la escritura incluye la lectura, así que no hace falta repetirlo en
+ * cada nivel.
  */
 class UserRoleController extends Controller
 {
-    public function __construct(
-        protected AccessScopeService $scope,
-        protected SectorTree $arbol,
-    ) {}
+    public function __construct(protected SectorTree $arbol) {}
 
     /**
      * GET /api/usuarios — listado paginado con búsqueda y filtros.
      */
     public function index(Request $request): JsonResponse
     {
-        $q = UserRole::query()->with('gerenciaArea:sector_id,nombre');
-
-        $this->limitarAGerencia($q, $request);
+        $q = UserRole::query()->with('permisos.sector:sector_id,nombre');
 
         if ($search = $request->query('search')) {
             $term = '%' . $search . '%';
@@ -41,12 +42,17 @@ class UserRoleController extends Controller
             });
         }
 
-        if ($rol = $request->query('rol')) {
-            $q->where('rol', $rol);
+        if (($admin = $request->query('es_admin')) !== null && $admin !== '') {
+            $q->where('es_admin', filter_var($admin, FILTER_VALIDATE_BOOLEAN) ? 1 : 0);
         }
 
+        // Filtro por rama: los usuarios con permiso sobre ese nodo o sobre
+        // cualquiera de sus ancestros, porque el permiso se hereda.
         if ($sectorId = $request->query('sector_id')) {
-            $q->where('sector_id', (int) $sectorId);
+            $ancestros = $this->ancestrosDe((int) $sectorId);
+            $q->whereHas('permisos', function ($w) use ($ancestros) {
+                $w->whereIn('sector_id', $ancestros)->orWhereNull('sector_id');
+            });
         }
 
         if (($activo = $request->query('activo')) !== null && $activo !== '') {
@@ -57,7 +63,8 @@ class UserRoleController extends Controller
             $q->where('auth_source', $source);
         }
 
-        $orderBy  = in_array($request->query('order_by'), ['username', 'display_name', 'email', 'rol', 'last_login', 'activo'], true)
+        $orderBy  = in_array($request->query('order_by'),
+            ['username', 'display_name', 'email', 'es_admin', 'last_login', 'activo'], true)
             ? $request->query('order_by') : 'username';
         $orderDir = strtolower($request->query('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
         $q->orderBy($orderBy, $orderDir);
@@ -71,11 +78,11 @@ class UserRoleController extends Controller
      */
     public function show(Request $request, string $username): JsonResponse
     {
-        $user = $this->buscarEnAlcance($request, $username);
+        $user = UserRole::where('username', $username)->first();
         if (!$user) {
             return $this->notFound();
         }
-        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')]);
+        return response()->json(['data' => $user->load('permisos.sector:sector_id,nombre')]);
     }
 
     /**
@@ -85,89 +92,81 @@ class UserRoleController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $rolesAsignables = $this->scope->rolesAsignables($request->user());
-
         $data = Validator::make($request->all(), [
             'username'     => ['required', 'string', 'max:200', Rule::unique('user_roles', 'username')],
             'display_name' => ['nullable', 'string', 'max:200'],
             'email'        => ['nullable', 'email', 'max:200'],
-            'rol'          => ['required', Rule::in($rolesAsignables)],
-            'sector_id'    => ['nullable', 'integer', 'exists:sector,sector_id'],
+            'es_admin'     => ['sometimes', 'boolean'],
             'activo'       => ['sometimes', 'boolean'],
             'auth_source'  => ['required', 'in:local,ldap'],
             'password'     => ['exclude_if:auth_source,ldap', 'required', 'string', 'min:8', 'confirmed'],
+            'permisos'                 => ['sometimes', 'array'],
+            'permisos.*.sector_id'     => ['nullable', 'integer', 'exists:sector,sector_id'],
+            'permisos.*.nivel'         => ['required', Rule::in(UsuarioPermiso::NIVELES)],
         ], $this->mensajes())->validate();
-
-        $sectorId = $this->resolverGerenciaArea($request, $data['rol'], $data['sector_id'] ?? null);
-        if ($sectorId instanceof JsonResponse) {
-            return $sectorId;
-        }
 
         $user = new UserRole();
         $user->username     = $data['username'];
         $user->display_name = $data['display_name'] ?? $data['username'];
         $user->email        = $data['email'] ?? null;
-        $user->rol          = $data['rol'];
-        $user->sector_id    = $sectorId;
+        $user->es_admin     = (bool) ($data['es_admin'] ?? false);
         $user->activo       = array_key_exists('activo', $data) ? (bool) $data['activo'] : true;
         $user->auth_source  = $data['auth_source'];
-        $user->password     = $data['auth_source'] === 'local' ? $data['password'] : null; // se hashea por el cast 'hashed'
+        $user->password     = $data['auth_source'] === 'local' ? $data['password'] : null; // el cast 'hashed' lo hashea
         $user->save();
 
-        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')], 201);
+        $this->sincronizarPermisos($user, $data['permisos'] ?? []);
+
+        return response()->json(['data' => $user->load('permisos.sector:sector_id,nombre')], 201);
     }
 
     /**
-     * PUT /api/usuarios/{username} — editar datos, rol, gerencia y/o estado.
+     * PUT /api/usuarios/{username} — editar datos, permisos y/o estado.
      * El username es inmutable. La contraseña se cambia con el endpoint dedicado.
      */
     public function update(Request $request, string $username): JsonResponse
     {
-        $rolesAsignables = $this->scope->rolesAsignables($request->user());
-
         $data = Validator::make($request->all(), [
             'display_name' => ['sometimes', 'nullable', 'string', 'max:200'],
             'email'        => ['sometimes', 'nullable', 'email', 'max:200'],
-            'rol'          => ['sometimes', Rule::in($rolesAsignables)],
-            'sector_id'    => ['sometimes', 'nullable', 'integer', 'exists:sector,sector_id'],
+            'es_admin'     => ['sometimes', 'boolean'],
             'activo'       => ['sometimes', 'boolean'],
+            'permisos'                 => ['sometimes', 'array'],
+            'permisos.*.sector_id'     => ['nullable', 'integer', 'exists:sector,sector_id'],
+            'permisos.*.nivel'         => ['required', Rule::in(UsuarioPermiso::NIVELES)],
         ], $this->mensajes())->validate();
 
-        $user = $this->buscarEnAlcance($request, $username);
+        $user = UserRole::where('username', $username)->first();
         if (!$user) {
             return $this->notFound();
         }
 
-        // Cambios que podrían dejar al sistema sin administradores de sistema activos.
-        $degradaRol = array_key_exists('rol', $data) && $data['rol'] !== UserRole::ROL_ADMIN_SISTEMA;
-        $desactiva  = array_key_exists('activo', $data) && !$data['activo'];
-        if ($user->isAdminSistema() && ($degradaRol || $desactiva) && $this->isLastActiveAdmin($username)) {
+        // Cambios que dejarían al sistema sin administradores activos.
+        $degrada   = array_key_exists('es_admin', $data) && !$data['es_admin'];
+        $desactiva = array_key_exists('activo', $data) && !$data['activo'];
+        if ($user->esAdmin() && ($degrada || $desactiva) && $this->esUltimoAdmin($username)) {
             return response()->json([
                 'error'   => 'last_admin',
-                'message' => 'No se puede degradar o desactivar al último administrador de sistema activo.',
+                'message' => 'No se puede degradar o desactivar al último administrador del sistema activo.',
             ], 409);
         }
-
-        $rolFinal = $data['rol'] ?? $user->rol;
-        $sectorId = $this->resolverGerenciaArea(
-            $request,
-            $rolFinal,
-            array_key_exists('sector_id', $data) ? $data['sector_id'] : $user->sector_id,
-        );
-        if ($sectorId instanceof JsonResponse) {
-            return $sectorId;
-        }
-        $data['sector_id'] = $sectorId;
 
         // Para usuarios LDAP, nombre y e-mail se sincronizan desde el directorio en cada login.
         if ($user->isLdap()) {
             unset($data['display_name'], $data['email']);
         }
 
+        $permisos = $data['permisos'] ?? null;
+        unset($data['permisos']);
+
         $user->fill($data);
         $user->save();
 
-        return response()->json(['data' => $user->load('gerenciaArea:sector_id,nombre')]);
+        if ($permisos !== null) {
+            $this->sincronizarPermisos($user, $permisos);
+        }
+
+        return response()->json(['data' => $user->fresh()->load('permisos.sector:sector_id,nombre')]);
     }
 
     /**
@@ -179,7 +178,7 @@ class UserRoleController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ])->validate();
 
-        $user = $this->buscarEnAlcance($request, $username);
+        $user = UserRole::where('username', $username)->first();
         if (!$user) {
             return $this->notFound();
         }
@@ -202,7 +201,7 @@ class UserRoleController extends Controller
      */
     public function destroy(Request $request, string $username): JsonResponse
     {
-        $user = $this->buscarEnAlcance($request, $username);
+        $user = UserRole::where('username', $username)->first();
         if (!$user) {
             return $this->notFound();
         }
@@ -215,91 +214,103 @@ class UserRoleController extends Controller
             ], 403);
         }
 
-        if ($user->isAdminSistema() && $this->isLastActiveAdmin($username)) {
+        if ($user->esAdmin() && $this->esUltimoAdmin($username)) {
             return response()->json([
                 'error'   => 'last_admin',
-                'message' => 'No se puede eliminar al último administrador de sistema activo.',
+                'message' => 'No se puede eliminar al último administrador del sistema activo.',
             ], 409);
         }
 
         $user->tokens()->delete();
         $user->delete();
 
-        return response()->json([
-            'message' => 'Usuario eliminado.',
-        ]);
+        return response()->json(['message' => 'Usuario eliminado.']);
     }
 
     // ------------------------------------------------------------------
-    // Alcance
+    // Permisos
     // ------------------------------------------------------------------
 
-    /** El administrador de gerencia sólo ve y toca operadores de su Gerencia de Área. */
-    private function limitarAGerencia($query, Request $request): void
+    /**
+     * Reemplaza los permisos del usuario por los indicados.
+     *
+     * Se descartan los redundantes: si una rama ya viene concedida desde un
+     * ancestro con el mismo nivel o con uno mayor, repetirla abajo no agrega
+     * nada y sólo confunde al leer la asignación.
+     *
+     * @param array<int, array{sector_id: ?int, nivel: string}> $permisos
+     */
+    private function sincronizarPermisos(UserRole $user, array $permisos): void
     {
-        $actual = $request->user();
-        if ($actual instanceof UserRole && !$actual->isAdminSistema()) {
-            // Los usuarios sin acceso no tienen gerencia todavía, así que sólo
-            // los ve el administrador de sistema, que es quien los asigna.
-            $query->where('sector_id', $actual->sector_id)
-                  ->where('rol', UserRole::ROL_OPERADOR_GERENCIA);
+        $utiles = [];
+        foreach ($permisos as $p) {
+            $sectorId = $p['sector_id'] ?? null;
+            if ($this->heredaDeUnAncestro($permisos, $sectorId, $p['nivel'])) {
+                continue;
+            }
+            // La clave evita duplicados sobre el mismo nodo.
+            $utiles[$sectorId === null ? 'raiz' : (string) $sectorId] = [
+                'sector_id' => $sectorId,
+                'nivel'     => $p['nivel'],
+            ];
         }
-    }
 
-    private function buscarEnAlcance(Request $request, string $username): ?UserRole
-    {
-        $q = UserRole::where('username', $username);
-        $this->limitarAGerencia($q, $request);
-        return $q->first();
+        DB::transaction(function () use ($user, $utiles) {
+            $user->permisos()->delete();
+            foreach ($utiles as $p) {
+                $user->permisos()->create($p);
+            }
+        });
     }
 
     /**
-     * Determina la Gerencia de Área final del usuario y valida que quien
-     * administra tenga permiso sobre ella.
+     * ¿Otro permiso de la misma lista, sobre un ancestro del nodo, ya alcanza a
+     * este con un nivel igual o mayor?
      *
-     * @return int|null|JsonResponse
+     * @param array<int, array{sector_id: ?int, nivel: string}> $permisos
      */
-    private function resolverGerenciaArea(Request $request, string $rol, ?int $sectorId)
+    private function heredaDeUnAncestro(array $permisos, ?int $sectorId, string $nivel): bool
     {
-        // Ni el administrador de sistema ni quien todavía no tiene permisos
-        // están acotados a una Gerencia de Área.
-        if ($rol === UserRole::ROL_ADMIN_SISTEMA || $rol === UserRole::ROL_SIN_ACCESO) {
-            return null;
+        if ($sectorId === null) {
+            return false; // la raíz no tiene ancestros
         }
 
-        $actual = $request->user();
-        if ($actual instanceof UserRole && !$actual->isAdminSistema()) {
-            // Un administrador de gerencia sólo da de alta en la suya.
-            return (int) $actual->sector_id;
+        $ancestros = $this->ancestrosDe($sectorId);
+        array_shift($ancestros); // el propio nodo no cuenta
+
+        foreach ($permisos as $otro) {
+            $otroSector = $otro['sector_id'] ?? null;
+            $alcanza    = $otroSector === null || in_array($otroSector, $ancestros, true);
+            $mandaMas   = $otro['nivel'] === UsuarioPermiso::NIVEL_ESCRITURA
+                       || $otro['nivel'] === $nivel;
+
+            if ($alcanza && $mandaMas) {
+                return true;
+            }
         }
 
-        if (!$sectorId) {
-            return response()->json([
-                'error'   => 'gerencia_requerida',
-                'message' => 'Los roles de gerencia requieren indicar la Gerencia de Área del usuario.',
-                'errors'  => ['sector_id' => ['Debe indicar la Gerencia de Área del usuario.']],
-            ], 422);
-        }
+        return false;
+    }
 
-        // El alcance se define sobre una Gerencia de Área, no sobre un subsector.
-        if (!$this->arbol->esRaiz($sectorId)) {
-            return response()->json([
-                'error'   => 'sector_no_raiz',
-                'message' => 'El usuario debe asociarse a una Gerencia de Área, no a un subsector.',
-                'errors'  => ['sector_id' => ['Debe elegir una Gerencia de Área (un sector sin dependencia).']],
-            ], 422);
+    /** El nodo y sus ancestros, del más profundo al más alto. @return array<int> */
+    private function ancestrosDe(int $sectorId): array
+    {
+        $ids    = [];
+        $actual = $sectorId;
+        while ($actual !== null && $this->arbol->existe($actual)) {
+            $ids[]  = $actual;
+            $actual = $this->arbol->padre($actual);
         }
-
-        return (int) $sectorId;
+        return $ids;
     }
 
     /**
      * Indica si, excluyendo al usuario dado, no quedan otros administradores
-     * de sistema activos.
+     * del sistema activos.
      */
-    private function isLastActiveAdmin(string $username): bool
+    private function esUltimoAdmin(string $username): bool
     {
-        return UserRole::where('rol', UserRole::ROL_ADMIN_SISTEMA)
+        return UserRole::where('es_admin', 1)
             ->where('activo', 1)
             ->where('username', '!=', $username)
             ->count() === 0;
@@ -309,8 +320,8 @@ class UserRoleController extends Controller
     private function mensajes(): array
     {
         return [
-            'rol.in'          => 'No tiene permisos para asignar ese rol.',
-            'sector_id.exists' => 'La Gerencia de Área indicada no existe.',
+            'permisos.*.nivel.in'          => 'El nivel del permiso debe ser lectura o escritura.',
+            'permisos.*.sector_id.exists'  => 'El nodo indicado no existe en la estructura.',
         ];
     }
 

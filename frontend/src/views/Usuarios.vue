@@ -2,8 +2,10 @@
     <div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 class="page-title">Usuarios y Roles</h1>
-                <p class="page-subtitle">Administración de usuarios (locales y LDAP), roles y estado</p>
+                <h1 class="page-title">Usuarios y Permisos</h1>
+                <p class="page-subtitle">
+                    Usuarios (locales y LDAP) y su alcance sobre el árbol de la estructura
+                </p>
             </div>
             <div>
                 <button class="btn btn-primary" @click="openNew">
@@ -20,23 +22,26 @@
                            @input="onSearch" />
                 </div>
                 <div class="field">
-                    <label>Rol</label>
-                    <select v-model="state.rol" class="select" @change="reload">
+                    <label>Tipo</label>
+                    <select v-model="state.es_admin" class="select" @change="reload">
                         <option value="">Todos</option>
-                        <option v-for="r in rolesAsignables" :key="r" :value="r">{{ ROL_LABELS[r] }}</option>
+                        <option value="1">Administradores del sistema</option>
+                        <option value="0">Resto</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdminSistema && pendientes > 0" class="field aviso-pendientes">
+                <div v-if="pendientes > 0" class="field aviso-pendientes">
                     <label>Pendientes de asignación</label>
                     <button type="button" class="btn btn-secondary" @click="verPendientes">
-                        {{ pendientes }} usuario{{ pendientes === 1 ? '' : 's' }} sin acceso
+                        {{ pendientes }} usuario{{ pendientes === 1 ? '' : 's' }} sin permisos
                     </button>
                 </div>
-                <div v-if="auth.isAdminSistema" class="field">
-                    <label>Gerencia de Área</label>
+                <div class="field">
+                    <label>Con permiso sobre</label>
                     <select v-model="state.sector_id" class="select" @change="reload">
-                        <option value="">Todas</option>
-                        <option v-for="g in areas" :key="g.sector_id" :value="g.sector_id">{{ g.nombre }}</option>
+                        <option value="">Cualquier rama</option>
+                        <option v-for="o in opcionesNodo" :key="o.sector_id" :value="o.sector_id">
+                            {{ o.etiqueta }}
+                        </option>
                     </select>
                 </div>
                 <div class="field">
@@ -68,8 +73,7 @@
                         <th>Usuario</th>
                         <th>Nombre</th>
                         <th>E-mail</th>
-                        <th>Rol</th>
-                        <th>Gerencia de Área</th>
+                        <th>Alcance</th>
                         <th>Origen</th>
                         <th>Activo</th>
                         <th>Último login</th>
@@ -81,8 +85,17 @@
                         <td>{{ u.username }}</td>
                         <td>{{ u.display_name || '—' }}</td>
                         <td>{{ u.email || '—' }}</td>
-                        <td><span class="badge" :class="rolBadge(u.rol)">{{ ROL_LABELS[u.rol] || u.rol }}</span></td>
-                        <td>{{ u.gerencia_area?.nombre || '—' }}</td>
+                        <td>
+                            <span v-if="u.es_admin" class="badge badge-warning">Administrador del sistema</span>
+                            <span v-else-if="!u.permisos?.length" class="badge badge-danger">Sin permisos</span>
+                            <template v-else>
+                                <span v-for="p in u.permisos" :key="p.id"
+                                      class="badge" :class="p.nivel === 'escritura' ? 'badge-info' : 'badge-default'"
+                                      style="margin-right:4px;">
+                                    {{ p.ruta }} · {{ NIVEL_LABELS[p.nivel] }}
+                                </span>
+                            </template>
+                        </td>
                         <td><span class="badge" :class="u.auth_source === 'local' ? 'badge-success' : 'badge-info'">{{ u.auth_source === 'local' ? 'Local' : 'LDAP' }}</span></td>
                         <td><span class="badge" :class="u.activo ? 'badge-success' : 'badge-default'">{{ u.activo ? 'Sí' : 'No' }}</span></td>
                         <td>{{ fmtDateTime(u.last_login) }}</td>
@@ -114,25 +127,12 @@
                         <div v-if="errors.username" class="error">{{ errors.username[0] }}</div>
                     </div>
                     <div class="field">
-                        <label>Rol <span style="color:var(--color-danger);">*</span></label>
-                        <select v-model="formData.rol" class="select" required>
-                            <option v-for="r in rolesAsignables" :key="r" :value="r">{{ ROL_LABELS[r] }}</option>
-                        </select>
-                        <div v-if="errors.rol" class="error">{{ errors.rol[0] }}</div>
-                    </div>
-                    <div class="field" v-if="requiereGerencia">
-                        <label>Gerencia de Área <span style="color:var(--color-danger);">*</span></label>
-                        <select v-if="auth.isAdminSistema" v-model="formData.sector_id" class="select" required>
-                            <option :value="null">—</option>
-                            <option v-for="g in areas" :key="g.sector_id" :value="g.sector_id">{{ g.nombre }}</option>
-                        </select>
-                        <input v-else class="input" :value="auth.gerenciaArea || '—'" readonly />
-                        <div class="hint">
-                            {{ auth.isAdminSistema
-                                ? 'El usuario ve los expedientes de toda la rama de esta Gerencia de Área.'
-                                : 'Sólo puede dar de alta usuarios en su propia Gerencia de Área.' }}
-                        </div>
-                        <div v-if="errors.sector_id" class="error">{{ errors.sector_id[0] }}</div>
+                        <label>Administrador del sistema</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+                            <input v-model="formData.es_admin" type="checkbox" style="width:auto;margin:0;" />
+                            Administra estructura, cuentas, catálogos y usuarios
+                        </label>
+                        <div class="hint">Ve y opera sobre toda la organización.</div>
                     </div>
                     <div class="field" v-if="!editing">
                         <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
@@ -175,6 +175,31 @@
                             <input v-model="formData.activo" type="checkbox" /> Activo
                         </label>
                     </div>
+
+                    <div class="field" style="grid-column:1 / -1;" v-if="!formData.es_admin">
+                        <label>Permisos sobre la estructura</label>
+                        <div class="hint" style="margin-bottom:8px;">
+                            Lo que se concede sobre un nodo alcanza todo lo que cuelga de él, y quien
+                            ejecuta también ve. Alcanza con marcar el nivel más alto de cada rama.
+                        </div>
+                        <div class="permisos-arbol">
+                            <div v-for="n in nodosPlanos" :key="n.clave" class="permiso-fila"
+                                 :style="{ paddingLeft: (n.nivel * 18) + 'px' }">
+                                <span class="permiso-nombre" :class="{ heredado: heredado(n) }">
+                                    {{ n.nombre }}
+                                    <small v-if="heredado(n)">— heredado</small>
+                                </span>
+                                <select class="select permiso-nivel" :value="nivelDe(n)"
+                                        :disabled="heredado(n)"
+                                        @change="setNivel(n, $event.target.value)">
+                                    <option value="">—</option>
+                                    <option value="lectura">Sólo ver</option>
+                                    <option value="escritura">Ejecutar</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div v-if="errors.permisos" class="error">{{ errors.permisos[0] }}</div>
+                    </div>
                 </div>
             </form>
             <template #footer>
@@ -215,8 +240,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { usuariosService } from '@/services/usuarios';
-import { listAll } from '@/services/catalogos';
-import { ROLES, ROL_LABELS, useAuthStore } from '@/stores/auth';
+import { contratosEjecucionService } from '@/services/contratosEjecucion';
+import { NIVEL_LABELS, useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { debounce, fmtDateTime } from '@/composables/useFormat';
@@ -227,30 +252,64 @@ import IconLib from '@/components/IconLib.vue';
 
 const toast = useToast();
 const auth = useAuthStore();
-const state = reactive({ search: '', rol: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
+const state = reactive({ search: '', es_admin: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
 const rows = ref([]);
 const total = ref(0);
-const sectores = ref([]);
-
-/** Los usuarios se asocian a una Gerencia de Área: un sector sin dependencia. */
-const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
+const arbol = ref(null);
 const loading = ref(false);
+
+/**
+ * El árbol aplanado, con la profundidad de cada nodo para sangrar la fila.
+ * La raíz es toda la organización: concederla da acceso a todo.
+ */
+const nodosPlanos = computed(() => {
+    const filas = [];
+    const recorrer = (nodo, nivel) => {
+        filas.push({
+            clave:     nodo.sector_id ?? 'raiz',
+            sector_id: nodo.sector_id,
+            nombre:    nodo.nombre,
+            nivel,
+        });
+        for (const h of nodo.hijos) recorrer(h, nivel + 1);
+    };
+    if (arbol.value) recorrer(arbol.value, 0);
+    return filas;
+});
+
+/** Para el filtro de la grilla, con la sangría en el texto. */
+const opcionesNodo = computed(() => nodosPlanos.value
+    .filter(n => n.sector_id !== null)
+    .map(n => ({ sector_id: n.sector_id, etiqueta: '\u00A0\u00A0'.repeat(n.nivel - 1) + n.nombre })));
 
 const onSearch = debounce(() => { state.page = 1; load(); }, 300);
 
-/**
- * El administrador de sistema asigna cualquier rol; el de gerencia sólo puede
- * dar de alta operadores, y siempre en su propia gerencia.
- */
-const rolesAsignables = computed(() => auth.isAdminSistema
-    ? [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA, ROLES.OPERADOR_GERENCIA, ROLES.SIN_ACCESO]
-    : [ROLES.OPERADOR_GERENCIA]);
+// ---- Edición de los permisos sobre el árbol ----
 
-function rolBadge(rol) {
-    if (rol === ROLES.ADMIN_SISTEMA) return 'badge-warning';
-    if (rol === ROLES.ADMIN_GERENCIA) return 'badge-info';
-    if (rol === ROLES.SIN_ACCESO) return 'badge-danger';
-    return 'badge-default';
+/** Nivel elegido para un nodo, o '' si no tiene permiso propio. */
+function nivelDe(nodo) {
+    const p = (formData.permisos || []).find(x => x.sector_id === nodo.sector_id);
+    return p ? p.nivel : '';
+}
+
+/**
+ * Un nodo está heredado cuando un ancestro ya tiene permiso: no hace falta
+ * —ni se puede— concederle uno propio, porque el de arriba ya lo alcanza.
+ */
+function heredado(nodo) {
+    if (nodo.sector_id === null) return false;
+    const indice = nodosPlanos.value.findIndex(n => n.clave === nodo.clave);
+    for (let i = indice - 1; i >= 0; i--) {
+        const otro = nodosPlanos.value[i];
+        if (otro.nivel < nodo.nivel && nivelDe(otro)) return true;
+        if (otro.nivel === 0) break;
+    }
+    return false;
+}
+
+function setNivel(nodo, nivel) {
+    const otros = (formData.permisos || []).filter(x => x.sector_id !== nodo.sector_id);
+    formData.permisos = nivel ? [...otros, { sector_id: nodo.sector_id, nivel }] : otros;
 }
 
 async function load() {
@@ -258,7 +317,7 @@ async function load() {
     try {
         const params = { page: state.page, per_page: state.per_page };
         if (state.search) params.search = state.search;
-        if (state.rol) params.rol = state.rol;
+        if (state.es_admin !== '') params.es_admin = state.es_admin;
         if (state.sector_id) params.sector_id = state.sector_id;
         if (state.auth_source) params.auth_source = state.auth_source;
         if (state.activo !== '') params.activo = state.activo;
@@ -273,21 +332,25 @@ async function load() {
 }
 
 /**
- * Usuarios que entraron por LDAP y todavía esperan que se les asigne rol y
- * Gerencia de Área. Se cuentan aparte para que no pasen inadvertidos.
+ * Usuarios que entraron por LDAP y todavía esperan que se les asignen permisos.
+ * Se cuentan aparte para que no pasen inadvertidos.
  */
 const pendientes = ref(0);
 
 async function contarPendientes() {
-    if (!auth.isAdminSistema) return;
     try {
-        const res = await usuariosService.list({ rol: ROLES.SIN_ACCESO, per_page: 1 });
-        pendientes.value = res.total || 0;
+        // El listado no filtra por "sin permisos", así que se cuenta acá sobre
+        // la nómina completa, que es chica.
+        const res = await usuariosService.list({ per_page: 200 });
+        pendientes.value = (res.data || [])
+            .filter(u => !u.es_admin && !(u.permisos?.length)).length;
     } catch { /* no-op */ }
 }
 
 function verPendientes() {
-    state.rol = ROLES.SIN_ACCESO;
+    state.search = '';
+    state.es_admin = '0';
+    state.sector_id = '';
     reload();
 }
 
@@ -303,10 +366,6 @@ const saving = ref(false);
 
 const formTitle = computed(() => editing.value ? `Editar — ${editing.value.username}` : 'Nuevo usuario');
 const isLdapEdit = computed(() => !!editing.value && editing.value.auth_source === 'ldap');
-/** Ni el administrador de sistema ni quien no tiene permisos llevan gerencia. */
-const requiereGerencia = computed(() =>
-    formData.rol !== ROLES.ADMIN_SISTEMA && formData.rol !== ROLES.SIN_ACCESO);
-
 function resetForm(values) {
     Object.keys(formData).forEach(k => delete formData[k]);
     Object.assign(formData, values);
@@ -317,8 +376,7 @@ function openNew() {
     editing.value = null;
     resetForm({
         username: '', display_name: '', email: '',
-        rol: ROLES.OPERADOR_GERENCIA,
-        sector_id: auth.isAdminSistema ? null : auth.sectorId,
+        es_admin: false, permisos: [],
         auth_source: 'local', activo: true,
         password: '', password_confirmation: '',
     });
@@ -331,8 +389,8 @@ function openEdit(u) {
         username: u.username,
         display_name: u.display_name || '',
         email: u.email || '',
-        rol: u.rol,
-        sector_id: u.sector_id ?? null,
+        es_admin: !!u.es_admin,
+        permisos: (u.permisos || []).map(p => ({ sector_id: p.sector_id, nivel: p.nivel })),
         activo: !!u.activo,
     });
     formOpen.value = true;
@@ -343,8 +401,12 @@ async function save() {
     saving.value = true;
     try {
         if (editing.value) {
-            const payload = { rol: formData.rol, activo: formData.activo };
-            if (requiereGerencia.value) payload.sector_id = formData.sector_id;
+            const payload = {
+                es_admin: formData.es_admin,
+                activo: formData.activo,
+                // El administrador no se acota: los permisos de rama se limpian.
+                permisos: formData.es_admin ? [] : formData.permisos,
+            };
             if (!isLdapEdit.value) {
                 payload.display_name = formData.display_name;
                 payload.email = formData.email;
@@ -356,11 +418,11 @@ async function save() {
                 username: formData.username,
                 display_name: formData.display_name,
                 email: formData.email,
-                rol: formData.rol,
+                es_admin: formData.es_admin,
                 auth_source: formData.auth_source,
                 activo: formData.activo,
+                permisos: formData.es_admin ? [] : formData.permisos,
             };
-            if (requiereGerencia.value) payload.sector_id = formData.sector_id;
             if (formData.auth_source === 'local') {
                 payload.password = formData.password;
                 payload.password_confirmation = formData.password_confirmation;
@@ -440,16 +502,33 @@ async function remove(u) {
 }
 
 onMounted(async () => {
-    if (auth.isAdminSistema) {
-        try { sectores.value = await listAll('sectores'); } catch { /* no-op */ }
-        contarPendientes();
-    }
+    try { arbol.value = await contratosEjecucionService.arbolEstructura(); } catch { /* no-op */ }
+    contarPendientes();
     load();
 });
 </script>
 
 <style scoped>
 .hint { font-size: 12px; color: var(--color-muted, #888); margin-top: 4px; }
+
+.permisos-arbol {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border, #e0e0e0);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+.permiso-fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+}
+.permiso-nombre { font-size: 13px; }
+.permiso-nombre.heredado { color: var(--color-muted, #888); }
+.permiso-nombre small { font-style: italic; }
+.permiso-nivel { width: 140px; flex: none; }
 .link-action {
     font-size: 12px;
     padding: 2px 6px;

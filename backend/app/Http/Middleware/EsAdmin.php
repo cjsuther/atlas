@@ -2,20 +2,25 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\UserRole;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Middleware que valida que el usuario autenticado tenga uno de los roles indicados.
+ * Reserva una ruta a los administradores del sistema.
+ *
+ * Ya no hay roles: el alcance sobre los expedientes sale de los permisos que
+ * el usuario tiene sobre el árbol. Lo que este atributo habilita es otra cosa,
+ * la configuración del sistema: estructura, cuentas, catálogos, usuarios y
+ * respaldos.
  *
  * Uso en rutas:
- *   Route::middleware(['auth:sanctum', 'role:admin_sistema'])->...
- *   Route::middleware(['auth:sanctum', 'role:admin_sistema,admin_gerencia'])->...
+ *   Route::middleware(['auth:sanctum', 'admin'])->...
  */
-class CheckRole
+class EsAdmin
 {
-    public function handle(Request $request, Closure $next, string ...$roles): Response
+    public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
 
@@ -33,15 +38,10 @@ class CheckRole
             ], 403);
         }
 
-        if (empty($roles)) {
-            return $next($request);
-        }
-
-        if (!$user->hasRole(...$roles)) {
+        if (!($user instanceof UserRole) || !$user->esAdmin()) {
             return response()->json([
                 'error'   => 'forbidden',
-                'message' => 'No tiene permisos suficientes para esta acción.',
-                'required_roles' => $roles,
+                'message' => 'Esta acción es exclusiva del administrador del sistema.',
             ], 403);
         }
 

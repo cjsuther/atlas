@@ -29,6 +29,8 @@ class DatabaseBackupSchema
             ['table' => 'uvt',                     'pk' => 'uvt_id',         'exclude' => []],
             ['table' => 'sector',                  'pk' => 'sector_id',      'exclude' => []],
             ['table' => 'user_roles',              'pk' => 'id',             'exclude' => ['password']],
+            ['table' => 'usuario_permisos',        'pk' => 'id',             'exclude' => []],
+            ['table' => 'cuentas_operativas',      'pk' => 'id',             'exclude' => []],
             ['table' => 'personal',                'pk' => 'legajo',         'exclude' => []],
             ['table' => 'contratos_principal',     'pk' => 'id',             'exclude' => []],
             ['table' => 'contratos_ejecucion',     'pk' => 'id',             'exclude' => []],

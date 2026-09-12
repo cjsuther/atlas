@@ -28,7 +28,7 @@
                                  class="btn btn-primary">
                         Ejecución
                     </router-link>
-                    <button v-if="auth.isAdminSistema && !c.deleted_at" class="btn btn-secondary"
+                    <button v-if="auth.isAdmin && !c.deleted_at" class="btn btn-secondary"
                             @click="abrirTransferencia">
                         Transferir a otra cuenta
                     </button>

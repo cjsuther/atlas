@@ -5,7 +5,7 @@
                 <h1 class="page-title">Expedientes</h1>
                 <p class="page-subtitle">
                     Expedientes por cuenta operativa de la estructura
-                    <template v-if="!auth.isAdminSistema && auth.gerenciaArea"> · {{ auth.gerenciaArea }}</template>
+                    <template v-if="!auth.veTodo"> · {{ auth.alcanceLabel }}</template>
                 </p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -39,7 +39,7 @@
                         <option v-for="t in tipos" :key="t.id" :value="t.id">{{ t.sigla }} — {{ t.nombre }}</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdminSistema" class="field">
+                <div v-if="auth.veTodo" class="field">
                     <label>Gerencia de Área</label>
                     <select v-model="filters.gerencia_area_id" class="select" @change="onFilter">
                         <option value="">Todas</option>
@@ -79,7 +79,7 @@
                         <option :value="'1'">Sí</option>
                     </select>
                 </div>
-                <div v-if="auth.isAdminSistema" class="field">
+                <div v-if="auth.veTodo" class="field">
                     <label>Mostrar dados de baja</label>
                     <select v-model="filters.mostrar_baja" class="select" @change="onFilter">
                         <option :value="''">No</option>

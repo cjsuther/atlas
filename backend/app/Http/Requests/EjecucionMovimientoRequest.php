@@ -90,11 +90,10 @@ class EjecucionMovimientoRequest extends FormRequest
                             'No se puede transferir un contrato a sí mismo.');
                     } else {
                         // La transferencia escribe un movimiento espejo dentro del
-                        // contrato contraparte, así que ese contrato también tiene
-                        // que estar dentro del alcance de quien la registra: si no,
-                        // se toca la ejecución de otra Gerencia de Área.
+                        // expediente contraparte, así que hace falta escritura sobre
+                        // él: si no, se toca la ejecución de otra rama.
                         $contraparte = ContratoEjecucion::find((int) $this->input('contrato_contraparte_id'));
-                        if ($contraparte && !app(AccessScopeService::class)->puedeVerContrato($contraparte)) {
+                        if ($contraparte && !app(AccessScopeService::class)->puedeEditarContrato($contraparte)) {
                             $v->errors()->add('contrato_contraparte_id',
                                 'No tiene permisos sobre el contrato de la contraparte.');
                         }

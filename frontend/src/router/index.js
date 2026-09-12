@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { ROLES, useAuthStore } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 
 const routes = [
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { public: true } },
@@ -41,16 +41,15 @@ const routes = [
             { path: 'catalogos/:slug', name: 'catalogo',
               component: () => import('@/views/catalogos/Catalogo.vue') },
 
-            // Usuarios (administradores de sistema y de gerencia)
+            // Usuarios y sus permisos sobre el árbol
             { path: 'usuarios', name: 'usuarios',
               component: () => import('@/views/Usuarios.vue'),
-              meta: { title: 'Usuarios y Roles',
-                      requiresRole: [ROLES.ADMIN_SISTEMA, ROLES.ADMIN_GERENCIA] } },
+              meta: { title: 'Usuarios y Permisos', requiresAdmin: true } },
 
             // Exportar / Importar base de datos
             { path: 'export-import', name: 'export-import',
               component: () => import('@/views/admin/ExportImport.vue'),
-              meta: { title: 'Exportar / Importar', requiresRole: [ROLES.ADMIN_SISTEMA] } },
+              meta: { title: 'Exportar / Importar', requiresAdmin: true } },
         ],
     },
 
@@ -78,7 +77,7 @@ router.beforeEach((to) => {
     if (to.name === 'sin-acceso' && auth.isAuthenticated && !auth.sinAcceso) {
         return { name: 'panel' };
     }
-    if (to.meta?.requiresRole && !to.meta.requiresRole.includes(auth.role)) {
+    if (to.meta?.requiresAdmin && !auth.isAdmin) {
         return { name: 'panel' };
     }
     if (to.meta?.requiresEdit && !auth.canEdit) {

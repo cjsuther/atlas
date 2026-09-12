@@ -23,17 +23,18 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Prefijo: /api  (configurado en bootstrap/app.php)
 |
-| La estructura organizativa es la tabla `sector`: los sectores sin dependencia
-| son las Gerencias de Área.
+| La estructura organizativa es la tabla `sector`, un árbol de tres niveles:
 |
-|   Gerencia de Área -> Subsector -> Contrato -> Movimiento
+|   Gerencia de Área -> Gerencia -> Contrato
 |
-| Roles:
-|   admin_sistema     : todas las Gerencias de Área y sus contratos; ABM de
-|                       usuarios de cualquier rol y Gerencia de Área.
-|   admin_gerencia    : contratos de su Gerencia de Área; ABM de operadores.
-|   operador_gerencia : contratos de su Gerencia de Área.
-|   sin_acceso        : se autentica y nada más; es el rol de alta por LDAP.
+| De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
+| imputan los expedientes con sus movimientos de ejecución.
+|
+| Permisos:
+|   Se asignan sobre el árbol, con nivel de lectura o de escritura, y se
+|   heredan hacia abajo. Un permiso sobre la raíz alcanza toda la organización.
+|   Aparte está el atributo de administrador del sistema, que habilita la
+|   configuración: estructura, cuentas, catálogos, usuarios y respaldos.
 |
 | El recorte lo aplica AccessScopeService dentro de cada servicio: las rutas
 | sólo distinguen quién puede ejecutar cada acción.
@@ -63,8 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get ('/auth/me',     [AuthController::class, 'me']);
 });
 
-// De acá en adelante hace falta tener permisos asignados: el rol `sin_acceso`
-// se autentica pero no ve nada.
+// De acá en adelante hace falta tener algún permiso asignado: quien no tiene
+// ninguno se autentica pero no ve nada.
 Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     Route::put('/auth/preferencias', [AuthController::class, 'preferencias']);
 
@@ -91,7 +92,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // Contratos
     //   GET    : todos los roles (sólo los de su alcance)
     //   POST/PUT/DELETE : todos los roles, sobre su propia gerencia
-    //   transferir      : sólo admin_sistema (puede cruzar Gerencias de Área)
+    //   transferir      : sólo el administrador (puede cruzar Gerencias de Área)
     // ------------------------------------------------------------------
     Route::get('/contratos-ejecucion',              [ContratoEjecucionController::class, 'index']);
     Route::get('/contratos-ejecucion/export/excel', [ContratoEjecucionController::class, 'export']);
@@ -101,7 +102,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     Route::put   ('/contratos-ejecucion/{id}',   [ContratoEjecucionController::class, 'update'])->whereNumber('id');
     Route::delete('/contratos-ejecucion/{id}',   [ContratoEjecucionController::class, 'destroy'])->whereNumber('id');
 
-    Route::middleware('role:admin_sistema')->group(function () {
+    Route::middleware('admin')->group(function () {
         Route::post('/contratos-ejecucion/{id}/transferir',
             [ContratoEjecucionController::class, 'transferir'])->whereNumber('id');
     });
@@ -135,7 +136,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // ------------------------------------------------------------------
     // Estructura organizativa (`sectores`) y entidades maestras.
     //   GET : todos (recortado al alcance del usuario)
-    //   ABM : sólo admin_sistema
+    //   ABM : sólo el administrador del sistema
     // ------------------------------------------------------------------
     foreach ([
         'tipos-contrato-ejecucion' => TipoContratoEjecucionController::class,
@@ -149,7 +150,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
         Route::get("/{$slug}",            [$controller, 'index']);
         Route::get("/{$slug}/{id}",       [$controller, 'show']);
 
-        Route::middleware('role:admin_sistema')->group(function () use ($slug, $controller) {
+        Route::middleware('admin')->group(function () use ($slug, $controller) {
             Route::post("/{$slug}",       [$controller, 'store']);
             Route::put("/{$slug}/{id}",   [$controller, 'update']);
             Route::delete("/{$slug}/{id}",[$controller, 'destroy']);
@@ -157,11 +158,10 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     }
 
     // ------------------------------------------------------------------
-    // Administración de usuarios
-    //   admin_sistema  : usuarios de cualquier rol y gerencia
-    //   admin_gerencia : operadores de su propia gerencia
+    // Administración de usuarios y de sus permisos sobre el árbol.
+    //   Exclusiva del administrador del sistema.
     // ------------------------------------------------------------------
-    Route::middleware('role:admin_sistema,admin_gerencia')->group(function () {
+    Route::middleware('admin')->group(function () {
         Route::get   ('/usuarios',                     [UserRoleController::class, 'index']);
         Route::post  ('/usuarios',                     [UserRoleController::class, 'store']);
         Route::get   ('/usuarios/{username}',          [UserRoleController::class, 'show']);
@@ -171,9 +171,9 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     });
 
     // ------------------------------------------------------------------
-    // Exportar / Importar toda la base de datos (Excel) — sólo admin_sistema
+    // Exportar / Importar toda la base de datos (Excel) — sólo el administrador
     // ------------------------------------------------------------------
-    Route::middleware('role:admin_sistema')->group(function () {
+    Route::middleware('admin')->group(function () {
         Route::get ('/admin/db/export', [DatabaseBackupController::class, 'export']);
         Route::post('/admin/db/import', [DatabaseBackupController::class, 'import']);
     });

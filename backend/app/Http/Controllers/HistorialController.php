@@ -62,7 +62,7 @@ class HistorialController extends Controller
             })(),
             // Los contratos principales ya no se gestionan: su historial queda
             // disponible sólo para el administrador de sistema.
-            'contratos_principal' => (bool) $this->scope->usuario()?->isAdminSistema(),
+            'contratos_principal' => (bool) $this->scope->usuario()?->esAdmin(),
             default => false,
         };
     }

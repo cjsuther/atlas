@@ -372,8 +372,7 @@ const exporting = ref(false);
 const guardandoPref = ref(false);
 
 const alcance = computed(() => {
-    if (auth.isAdminSistema) return 'Todas las Gerencias de Área';
-    return auth.gerenciaArea ? `Gerencia de Área ${auth.gerenciaArea}` : '';
+    return auth.veTodo ? 'Todas las Gerencias de Área' : auth.alcanceLabel;
 });
 
 /** Los sectores sin dependencia son las Gerencias de Área. */

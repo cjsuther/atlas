@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\EnsureHasAccess;
+use App\Http\Middleware\EsAdmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,7 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // Sanctum stateful no es necesario porque usamos token bearer puro
         $middleware->alias([
-            'role'       => CheckRole::class,
+            'admin'      => EsAdmin::class,
             'con_acceso' => EnsureHasAccess::class,
         ]);
 

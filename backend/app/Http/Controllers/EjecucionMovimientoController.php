@@ -34,7 +34,7 @@ class EjecucionMovimientoController extends Controller
     /** POST /api/contratos-ejecucion/{id}/movimientos */
     public function storeForContrato(EjecucionMovimientoRequest $request, int $contratoEjecucionId): JsonResponse
     {
-        if (!$this->contratoAccesible($contratoEjecucionId)) {
+        if (!$this->contratoEditable($contratoEjecucionId)) {
             return $this->notFoundContrato();
         }
         $m = $this->service->create($contratoEjecucionId, $request->validated(), $request->file('factura'));
@@ -54,7 +54,7 @@ class EjecucionMovimientoController extends Controller
     public function update(EjecucionMovimientoRequest $request, int $id): JsonResponse
     {
         $actual = $this->service->find($id);
-        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
+        if (!$actual || !$this->movimientoEditable($actual)) return $this->notFound();
         $m = $this->service->update(
             $id,
             $request->validated(),
@@ -68,7 +68,7 @@ class EjecucionMovimientoController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $actual = $this->service->find($id);
-        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
+        if (!$actual || !$this->movimientoEditable($actual)) return $this->notFound();
         if (!$this->service->softDelete($id)) return $this->notFound();
         return response()->json(['message' => 'Movimiento dado de baja.']);
     }
@@ -96,7 +96,7 @@ class EjecucionMovimientoController extends Controller
     }
 
     /**
-     * Los movimientos son tan reservados como el contrato al que pertenecen:
+     * Los movimientos son tan reservados como el expediente al que pertenecen:
      * fuera del alcance del usuario se responde "no encontrado".
      */
     private function contratoAccesible(int $contratoEjecucionId): bool
@@ -105,9 +105,21 @@ class EjecucionMovimientoController extends Controller
         return $contrato !== null && $this->scope->puedeVerContrato($contrato);
     }
 
+    /** Registrar, modificar o dar de baja un movimiento exige escritura. */
+    private function contratoEditable(int $contratoEjecucionId): bool
+    {
+        $contrato = ContratoEjecucion::withTrashed()->find($contratoEjecucionId);
+        return $contrato !== null && $this->scope->puedeEditarContrato($contrato);
+    }
+
     private function movimientoAccesible(EjecucionMovimiento $m): bool
     {
         return $this->contratoAccesible((int) $m->contrato_ejecucion_id);
+    }
+
+    private function movimientoEditable(EjecucionMovimiento $m): bool
+    {
+        return $this->contratoEditable((int) $m->contrato_ejecucion_id);
     }
 
     private function notFound(): JsonResponse

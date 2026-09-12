@@ -172,18 +172,36 @@ CREATE TABLE IF NOT EXISTS user_roles (
   email             VARCHAR(200),
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
-  rol               ENUM('admin_sistema','admin_gerencia','operador_gerencia','sin_acceso') NOT NULL DEFAULT 'sin_acceso',
-  sector_id         INT NULL,
+  es_admin          TINYINT(1) NOT NULL DEFAULT 0,   -- administra la configuración del sistema
   saldos_agrupacion ENUM('gerencia_area','subsector','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,
   last_login        TIMESTAMP NULL,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_username (username),
-  KEY idx_ur_sector (sector_id),
-  CONSTRAINT fk_ur_sector
+  UNIQUE KEY uq_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Tabla: usuario_permisos
+--
+--   Alcance del usuario sobre el árbol de la estructura. sector_id en NULL
+--   es la raíz: toda la organización. El permiso se hereda hacia abajo y la
+--   escritura incluye la lectura.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS usuario_permisos (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  user_role_id INT NOT NULL,
+  sector_id    INT NULL,                    -- NULL = toda la organización
+  nivel        ENUM('lectura','escritura') NOT NULL DEFAULT 'lectura',
+  created_at   TIMESTAMP NULL,
+  updated_at   TIMESTAMP NULL,
+  UNIQUE KEY uq_permiso_usuario_nodo (user_role_id, sector_id),
+  CONSTRAINT fk_permiso_usuario
+    FOREIGN KEY (user_role_id) REFERENCES user_roles(id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_permiso_sector
     FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
