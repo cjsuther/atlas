@@ -24,10 +24,11 @@ export const NIVEL_LABELS = {
     [NIVELES.ESCRITURA]: 'Ejecutar',
 };
 
+/** Hasta qué nivel del árbol se abre la tabla de saldos. */
 export const AGRUPACIONES_SALDO = [
     { value: 'gerencia_area', label: 'Por Gerencia de Área' },
     { value: 'gerencia',      label: 'Por Gerencia' },
-    { value: 'contrato',      label: 'Por Expediente' },
+    { value: 'contrato',      label: 'Por Contrato' },
 ];
 
 export const useAuthStore = defineStore('auth', {
