@@ -91,15 +91,20 @@
                 </thead>
                 <tbody>
                     <tr v-for="f in saldos?.filas || []" :key="f.clave"
-                        :class="['saldo-row', `nivel-${f.nivel}`]">
+                        :class="['saldo-row', `nivel-${f.nivel}`, `alcance-${f.alcance}`]">
                         <td>
                             <div :style="{ paddingLeft: `${f.nivel * 20}px` }">
-                                <span v-if="f.nivel > 0" class="rama">└</span>
-                                <span :class="{ raiz: f.nivel === 0 }">{{ f.etiqueta }}</span>
+                                <template v-if="f.alcance === 'propios'">
+                                    <span v-if="f.nivel > 0" class="rama">└</span>
+                                    <span :class="{ raiz: f.nivel === 0 }">{{ f.etiqueta }}</span>
+                                </template>
+                                <span v-else class="alcance-acumulado-label">Acumulado de la rama</span>
                             </div>
-                            <div v-if="f.detalle"
+                            <div v-if="f.alcance === 'propios'"
                                  :style="{ paddingLeft: `${f.nivel * 20 + (f.nivel > 0 ? 14 : 0)}px` }"
-                                 style="font-size:11px;color:var(--color-muted);">{{ f.detalle }}</div>
+                                 style="font-size:11px;color:var(--color-muted);">
+                                {{ NIVELES_ARBOL[f.tipo] || f.tipo }} · propios
+                            </div>
                         </td>
                         <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.saldo_inicial) }}</td>
@@ -356,6 +361,13 @@ const filters = reactive({
 });
 
 // Agrupación con la que se muestran los saldos; arranca en la preferencia del usuario.
+/** Etiquetas de los niveles del árbol, para la columna de saldos. */
+const NIVELES_ARBOL = {
+    gerencia_area: 'Gerencia de Área',
+    gerencia:      'Gerencia',
+    contrato:      'Contrato',
+};
+
 const agrupacion = ref(auth.saldosAgrupacion);
 
 const ind = ref(null);
@@ -380,8 +392,8 @@ const areas = computed(() => sectores.value.filter(s => s.dependencia_id === nul
 
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
-    subsector:     'Gerencia de Área / Gerencia',
-    contrato:      'Gerencia de Área / Gerencia / Expediente',
+    gerencia:      'Gerencia de Área / Gerencia',
+    contrato:      'Gerencia de Área / Gerencia / Contrato',
 }[agrupacion.value] || 'Gerencia de Área'));
 
 const subsectoresFiltrados = computed(() => {
@@ -500,4 +512,13 @@ onMounted(async () => {
 .saldo-row.nivel-0 { background: var(--color-surface-alt, rgba(0, 0, 0, 0.03)); font-weight: 600; }
 .saldo-row .raiz { font-weight: 600; }
 .saldo-row .rama { color: var(--color-muted, #888); margin-right: 4px; }
+
+/* La fila acumulada cierra el nodo: se distingue de la de importes propios. */
+.saldo-row.alcance-acumulado { font-weight: 600; }
+.saldo-row.alcance-acumulado td { border-bottom: 1px solid var(--color-border, #e0e0e0); }
+.alcance-acumulado-label {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--color-muted, #888);
+}
 </style>

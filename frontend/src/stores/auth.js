@@ -26,7 +26,7 @@ export const NIVEL_LABELS = {
 
 export const AGRUPACIONES_SALDO = [
     { value: 'gerencia_area', label: 'Por Gerencia de Área' },
-    { value: 'subsector',     label: 'Por Gerencia' },
+    { value: 'gerencia',      label: 'Por Gerencia' },
     { value: 'contrato',      label: 'Por Expediente' },
 ];
 

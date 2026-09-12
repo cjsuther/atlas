@@ -25,7 +25,10 @@ use Illuminate\Support\Facades\DB;
 class PanelService
 {
     /** Agrupaciones admitidas para la vista de saldos. */
-    public const AGRUPACIONES = ['gerencia_area', 'subsector', 'contrato'];
+    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'contrato'];
+
+    /** Hasta qué profundidad del árbol se abre cada agrupación. */
+    private const PROFUNDIDAD = ['gerencia_area' => 1, 'gerencia' => 2, 'contrato' => 3];
 
     public function __construct(
         protected AccessScopeService $scope,
@@ -147,12 +150,17 @@ class PanelService
     /** ---------------- Saldos configurables ---------------- */
 
     /**
-     * Saldos jerarquizados según lo que el usuario quiera ver: por Gerencia de
-     * Área, abriendo además sus subsectores, o bajando hasta el contrato.
+     * Saldos del árbol de la estructura, hasta el nivel que el usuario quiera
+     * ver: Gerencia de Área, Gerencia o Contrato.
      *
-     * Los importes de cada fila incluyen los de toda su rama: una Gerencia de
-     * Área suma lo de todos sus subsectores. Así los totales cierran en
-     * cualquier nivel al que se mire.
+     * Cada nodo aporta dos filas:
+     *
+     *   propios    : los expedientes imputados a las cuentas de ese nodo.
+     *   acumulado  : esos mismos más los de todo lo que cuelga de él.
+     *
+     * Las dos hacen falta porque un expediente puede imputarse a una cuenta de
+     * cualquier nivel: sin la fila de propios no se ve qué carga tiene el nodo
+     * en sí, y sin la de acumulado no cierra el total de la rama.
      *
      * El saldo es `saldo inicial + ingresos ejecutados - gastos ejecutados`.
      */
@@ -166,8 +174,6 @@ class PanelService
         $contratos = $this->ejecucionQuery($filters)
             ->select(
                 'contratos_ejecucion.id',
-                'contratos_ejecucion.nro_expediente',
-                'contratos_ejecucion.nombre_proyecto',
                 'contratos_ejecucion.sector_id',
                 'contratos_ejecucion.moneda',
                 'contratos_ejecucion.cotizacion',
@@ -177,37 +183,22 @@ class PanelService
 
         $sumas = $this->sumasPorContrato($contratos->pluck('id')->all());
 
-        // 1) Importes propios de cada sector y, si hace falta, de cada contrato.
-        $porSector   = [];
-        $porContrato = [];
+        // 1) Importes propios de cada nodo: lo imputado a sus cuentas.
+        $porSector = [];
         foreach ($contratos as $c) {
             $sectorId = (int) $c->sector_id;
             $factor   = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
 
-            $importes = [
+            $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, [
                 'contratos'          => 1,
                 'saldo_inicial'      => ((float) ($c->saldo_inicial ?? 0)) * $factor,
                 // Los movimientos ya están expresados en pesos.
                 'ejecutado_ingresos' => (float) ($sumas[$c->id]['ingreso'] ?? 0),
                 'ejecutado_gastos'   => (float) ($sumas[$c->id]['gasto']   ?? 0),
-            ];
-
-            $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, $importes);
-
-            if ($agrupacion === 'contrato') {
-                $porContrato[$sectorId][] = [
-                    'clave'    => 'c-' . $c->id,
-                    'tipo'     => 'contrato',
-                    'id'       => (int) $c->id,
-                    // El proyecto es cómo se conoce al contrato; el expediente
-                    // queda debajo para poder identificarlo sin ambigüedad.
-                    'etiqueta' => $c->nombre_proyecto ?: $c->nro_expediente,
-                    'detalle'  => "#{$c->id} — {$c->nro_expediente}",
-                ] + $importes;
-            }
+            ]);
         }
 
-        // 2) Cada sector acumula además lo de sus descendientes.
+        // 2) Se recorre cada rama emitiendo las dos filas de cada nodo.
         $ramas = [];
         foreach (array_keys($porSector) as $sectorId) {
             $raiz = $this->arbol->raizDe($sectorId) ?? $sectorId;
@@ -216,14 +207,20 @@ class PanelService
 
         $filas = [];
         foreach (array_keys($ramas) as $raiz) {
-            $this->emitirRama($raiz, 0, null, $agrupacion, $porSector, $porContrato, $filas, true);
+            $this->emitirRama($raiz, 0, null, self::PROFUNDIDAD[$agrupacion], $porSector, $filas);
         }
 
-        $rows = collect($filas)->map(fn ($f) => $this->redondear($f))->values();
+        $rows = collect($filas)
+            ->reject(fn ($f) => $f['descartar'] ?? false)
+            ->map(function ($f) {
+                unset($f['descartar']);
+                return $this->redondear($f);
+            })
+            ->values();
 
-        // Los totales se toman sólo del nivel superior: sumar todos los niveles
-        // contaría dos veces lo que ya está acumulado en la Gerencia de Área.
-        $raices = $rows->where('nivel', 0);
+        // Los totales salen de las filas acumuladas del nivel superior: sumar
+        // todos los niveles contaría dos veces lo que ya está acumulado arriba.
+        $raices = $rows->where('nivel', 0)->where('alcance', 'acumulado');
 
         return [
             'agrupacion'  => $agrupacion,
@@ -240,73 +237,72 @@ class PanelService
     }
 
     /**
-     * Emite la fila de un sector con los importes de toda su rama y, según la
-     * agrupación pedida, sigue bajando por sus subsectores y contratos.
+     * Emite las filas de un nodo —propios y acumulado— y sigue bajando por sus
+     * hijos mientras la agrupación lo permita.
      *
-     * Con la agrupación por Gerencia de Área igual se recorre la rama completa,
-     * pero sólo se emite la fila de la raíz: los subsectores se suman sin
-     * mostrarse.
+     * La rama se recorre entera aunque no se muestre: un nodo que no se emite
+     * igual aporta sus importes al acumulado de su padre.
      *
-     * @param  array<int, array<string, float|int>>        $porSector
-     * @param  array<int, array<int, array<string, mixed>>> $porContrato
-     * @param  array<int, array<string, mixed>>            $filas
+     * Un nodo sin nada en toda su rama no se emite: la tabla mostraría dos
+     * filas en cero por cada uno.
+     *
+     * @param  array<int, array<string, float|int>> $porSector
+     * @param  array<int, array<string, mixed>>     $filas
      * @return array<string, float|int> importes acumulados de la rama
      */
     private function emitirRama(
         int $sectorId,
         int $nivel,
         ?string $padre,
-        string $agrupacion,
+        int $profundidad,
         array $porSector,
-        array $porContrato,
         array &$filas,
-        bool $emitir,
     ): array {
-        $clave    = 's-' . $sectorId;
-        $esRaiz   = $this->arbol->raizDe($sectorId) === $sectorId;
-        $posicion = null;
+        $clave  = 's-' . $sectorId;
+        $emitir = $nivel < $profundidad;
 
+        // Se reservan los dos lugares antes de recorrer la rama: el acumulado
+        // se completa recién cuando volvieron todos los hijos.
+        $posPropios = $posAcumulado = null;
         if ($emitir) {
-            // Se reserva el lugar de la fila: sus importes se completan después
-            // de recorrer la rama, para que incluyan lo de los subsectores.
-            $posicion = count($filas);
-            $filas[$posicion] = [
-                'clave'       => $clave,
-                'tipo'        => $esRaiz ? 'gerencia_area' : 'subsector',
+            $base = [
+                'tipo'        => $this->arbol->nivelDe($sectorId),
                 'id'          => $sectorId,
-                'etiqueta'    => $this->arbol->nombre($sectorId) ?? "Sector #{$sectorId}",
-                'detalle'     => $esRaiz ? 'Gerencia de Área' : $this->arbol->nombre($this->arbol->padre($sectorId)),
+                'etiqueta'    => $this->arbol->nombre($sectorId) ?? "Nodo #{$sectorId}",
                 'nivel'       => $nivel,
                 'padre_clave' => $padre,
             ];
+
+            $posPropios = count($filas);
+            $filas[$posPropios] = $base + [
+                'clave'   => $clave . '-propios',
+                'alcance' => 'propios',
+                'detalle' => 'Imputado a sus cuentas',
+            ];
+
+            $posAcumulado = count($filas);
+            $filas[$posAcumulado] = $base + [
+                'clave'   => $clave . '-acumulado',
+                'alcance' => 'acumulado',
+                'detalle' => 'Incluye lo que depende de él',
+            ];
         }
 
-        $acumulado = $this->acumular(null, $porSector[$sectorId] ?? []);
+        $propios   = $this->acumular(null, $porSector[$sectorId] ?? []);
+        $acumulado = $propios;
 
-        // Los subsectores sólo se muestran si la agrupación baja de nivel.
-        $emitirHijos = $agrupacion !== 'gerencia_area';
         foreach ($this->arbol->hijosDe($sectorId) as $hijo) {
-            $deHijo = $this->emitirRama(
-                $hijo,
-                $nivel + 1,
-                $clave,
-                $agrupacion,
-                $porSector,
-                $porContrato,
-                $filas,
-                $emitirHijos,
-            );
+            $deHijo = $this->emitirRama($hijo, $nivel + 1, $clave, $profundidad, $porSector, $filas);
             $acumulado = $this->acumular($acumulado, $deHijo);
         }
 
-        if ($emitir && $agrupacion === 'contrato') {
-            foreach ($porContrato[$sectorId] ?? [] as $contrato) {
-                $filas[] = $contrato + ['nivel' => $nivel + 1, 'padre_clave' => $clave];
-            }
-        }
+        if ($posPropios !== null) {
+            // Una rama vacía se marca en lugar de borrarse: las posiciones ya
+            // reservadas se siguen usando mientras se recorre el resto.
+            $vacia = (int) $acumulado['contratos'] === 0;
 
-        if ($posicion !== null) {
-            $filas[$posicion] += $acumulado;
+            $filas[$posPropios]   += $propios   + ['descartar' => $vacia];
+            $filas[$posAcumulado] += $acumulado + ['descartar' => $vacia];
         }
 
         return $acumulado;

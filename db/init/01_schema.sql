@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
   es_admin          TINYINT(1) NOT NULL DEFAULT 0,   -- administra la configuración del sistema
-  saldos_agrupacion ENUM('gerencia_area','subsector','contrato') NOT NULL DEFAULT 'gerencia_area',
+  saldos_agrupacion ENUM('gerencia_area','gerencia','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,
   last_login        TIMESTAMP NULL,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

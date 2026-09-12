@@ -24,8 +24,8 @@ class PanelController extends Controller
     /**
      * GET /api/panel/saldos
      *
-     * La agrupación (Gerencia de Área / Gerencia / Contrato) llega por query;
-     * si no viene, se usa la que el usuario tenga configurada.
+     * La agrupación —hasta qué nivel del árbol se abre la tabla— llega por
+     * query; si no viene, se usa la que el usuario tenga configurada.
      */
     public function saldos(Request $request): JsonResponse
     {
