@@ -8,10 +8,12 @@ use Illuminate\Support\Facades\DB;
  * Jerarquía de sectores resuelta en memoria.
  *
  * La estructura organizativa vive en la tabla `sector`, que se referencia a sí
- * misma: los sectores sin dependencia son las Gerencias de Área y el resto son
- * sus subsectores.
+ * misma. El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
  *
- *   Gerencia de Área (raíz)  ->  Subsector  ->  Contrato  ->  Movimiento
+ *   Gerencia de Área (raíz)  ->  Gerencia  ->  Contrato
+ *
+ * De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
+ * imputan los expedientes.
  *
  * La tabla es chica (decenas de filas) y se consulta muchas veces por request
  * —alcance del usuario, agrupaciones del panel—, así que se carga una sola vez
@@ -166,5 +168,77 @@ class SectorTree
         }
         $this->cargar();
         return $this->hijos[$sectorId] ?? [];
+    }
+
+    /** Niveles del árbol, por profundidad. */
+    public const NIVELES = ['gerencia_area', 'gerencia', 'contrato'];
+
+    public const NIVEL_ORGANIZACION = 'organizacion';
+
+    /** @var array<string, string> etiquetas para pantalla */
+    public const ETIQUETAS = [
+        self::NIVEL_ORGANIZACION => 'Toda la organización',
+        'gerencia_area'          => 'Gerencia de Área',
+        'gerencia'               => 'Gerencia',
+        'contrato'               => 'Contrato',
+    ];
+
+    /**
+     * Profundidad del nodo: 1 para una Gerencia de Área, 2 para una Gerencia,
+     * 3 para un Contrato. 0 es la raíz del árbol (toda la organización).
+     */
+    public function profundidadDe(?int $sectorId): int
+    {
+        if ($sectorId === null) {
+            return 0;
+        }
+        $this->cargar();
+        if (!array_key_exists($sectorId, $this->padres)) {
+            return 0;
+        }
+
+        $profundidad = 1;
+        $actual      = $this->padres[$sectorId];
+        $visitados   = [$sectorId => true];
+        while ($actual !== null && array_key_exists($actual, $this->padres)) {
+            if (isset($visitados[$actual])) {
+                break; // ciclo en los datos
+            }
+            $visitados[$actual] = true;
+            $profundidad++;
+            $actual = $this->padres[$actual];
+        }
+
+        return $profundidad;
+    }
+
+    /** Nivel del árbol en el que está el nodo. */
+    public function nivelDe(?int $sectorId): string
+    {
+        $p = $this->profundidadDe($sectorId);
+        return self::NIVELES[$p - 1] ?? self::NIVEL_ORGANIZACION;
+    }
+
+    /** Camino desde la Gerencia de Área hasta el nodo, para mostrar en pantalla. */
+    public function rutaDe(?int $sectorId, string $separador = ' › '): string
+    {
+        if ($sectorId === null) {
+            return self::ETIQUETAS[self::NIVEL_ORGANIZACION];
+        }
+        $this->cargar();
+
+        $nombres   = [];
+        $actual    = $sectorId;
+        $visitados = [];
+        while ($actual !== null && array_key_exists($actual, $this->padres)) {
+            if (isset($visitados[$actual])) {
+                break;
+            }
+            $visitados[$actual] = true;
+            array_unshift($nombres, $this->nombres[$actual] ?? (string) $actual);
+            $actual = $this->padres[$actual];
+        }
+
+        return implode($separador, $nombres);
     }
 }

@@ -82,9 +82,11 @@ CREATE TABLE IF NOT EXISTS solicitantes (
 --   * Un sector sin dependencia es una Gerencia de Área. Es el nivel al que se
 --     asocian los administradores y operadores de gerencia, y el límite de
 --     confidencialidad: la información no sale de la Gerencia de Área.
---   * Los sectores dependientes son sus subsectores.
+--   * Los sectores dependientes son las Gerencias y, bajo ellas, los Contratos.
 --
---   Gerencia de Área -> Subsector -> Contrato -> Movimiento de ejecución
+--   El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
+--
+--   Gerencia de Área -> Gerencia -> Contrato
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sector (
   sector_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -97,6 +99,28 @@ CREATE TABLE IF NOT EXISTS sector (
   CONSTRAINT fk_sector_dep
     FOREIGN KEY (dependencia_id) REFERENCES sector(sector_id)
     ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Tabla: cuentas_operativas
+--
+--   Una cuenta operativa cuelga de cualquier nodo del árbol y un nodo puede
+--   tener varias. Con sector_id en NULL es la cuenta de toda la organización.
+--   Los expedientes se imputan a una cuenta, y de ella se deduce su rama.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cuentas_operativas (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  nombre       VARCHAR(200) NOT NULL,
+  sector_id    INT NULL,                  -- nodo del árbol; NULL = organización
+  descripcion  VARCHAR(500) NULL,
+  activo       TINYINT(1) NOT NULL DEFAULT 1,
+  created_at   TIMESTAMP NULL,
+  updated_at   TIMESTAMP NULL,
+  KEY idx_cuenta_sector (sector_id),
+  UNIQUE KEY uq_cuenta_nodo_nombre (sector_id, nombre),
+  CONSTRAINT fk_cuenta_sector
+    FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
@@ -242,6 +266,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   descripcion_objeto          TEXT         NULL,
   contrato_principal_id       INT          NULL,
   sector_id                   INT          NOT NULL,
+  cuenta_operativa_id         INT          NULL,   -- cuenta a la que se imputa
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,
@@ -285,6 +310,9 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
     ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_ce_sector
     FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT fk_ce_cuenta
+    FOREIGN KEY (cuenta_operativa_id) REFERENCES cuentas_operativas(id)
     ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT fk_ce_solic
     FOREIGN KEY (solicitante_id) REFERENCES solicitantes(solicitante_id)

@@ -9,6 +9,7 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\HistorialController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\PersonalController;
+use App\Http\Controllers\CuentaOperativaController;
 use App\Http\Controllers\SectorController;
 use App\Http\Controllers\SolicitanteController;
 use App\Http\Controllers\TipoContratoEjecucionController;
@@ -127,6 +128,10 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // ------------------------------------------------------------------
     Route::get('/historial/{tabla}/{id}', [HistorialController::class, 'show'])->whereNumber('id');
 
+    // El árbol de la estructura con las cuentas de cada nodo: lo consumen el
+    // selector de cuenta del expediente y la asignación de permisos.
+    Route::get('/estructura/arbol', [CuentaOperativaController::class, 'arbol']);
+
     // ------------------------------------------------------------------
     // Estructura organizativa (`sectores`) y entidades maestras.
     //   GET : todos (recortado al alcance del usuario)
@@ -137,6 +142,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
         'estados-ejecucion'        => EstadoEjecucionController::class,
         'solicitantes'             => SolicitanteController::class,
         'sectores'                 => SectorController::class,
+        'cuentas-operativas'       => CuentaOperativaController::class,
         'uvt'                      => UvtController::class,
         'personal'                 => PersonalController::class,
     ] as $slug => $controller) {

@@ -79,6 +79,7 @@ const NAV_SECTIONS = [
         title: 'Estructura',
         items: [
             { label: 'Sectores y Gerencias', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
+            { label: 'Cuentas Operativas',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } }, roles: TODOS },
         ],
     },
     {

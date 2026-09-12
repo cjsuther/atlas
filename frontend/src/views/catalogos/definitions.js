@@ -1,3 +1,11 @@
+/** Etiquetas de los niveles del árbol de la estructura. */
+const NIVELES = {
+    organizacion:  'Toda la organización',
+    gerencia_area: 'Gerencia de Área',
+    gerencia:      'Gerencia',
+    contrato:      'Contrato',
+};
+
 /**
  * Definiciones de cada catálogo para el ABM genérico:
  *   - title, endpoint slug, keyField
@@ -76,6 +84,29 @@ export const ENTITY_DEFS = {
             { name: 'responsable',    label: 'Responsable', type: 'text', max: 200 },
             { name: 'web',            label: 'Web',         type: 'text', max: 300 },
             { name: 'ubicacion',      label: 'Ubicación',   type: 'text', max: 200 },
+        ],
+    },
+    'cuentas-operativas': {
+        title: 'Cuentas Operativas',
+        subtitle: 'Cada cuenta cuelga de un nodo de la estructura —Gerencia de Área, Gerencia o '
+                + 'Contrato— y a ella se imputan los expedientes. Sin nodo, la cuenta es de toda '
+                + 'la organización.',
+        endpoint: 'cuentas-operativas',
+        keyField: 'id',
+        columns: [
+            { key: 'id',          label: 'ID' },
+            { key: 'nombre',      label: 'Nombre' },
+            { key: 'nivel',       label: 'Nivel', render: (r) => NIVELES[r.nivel] || r.nivel },
+            { key: 'ruta',        label: 'Ubicación en la estructura' },
+            { key: 'descripcion', label: 'Descripción' },
+            { key: 'activo',      label: 'Activa', render: (r) => (r.activo ? 'Sí' : 'No') },
+        ],
+        formFields: [
+            { name: 'nombre',      label: 'Nombre', type: 'text', required: true, max: 200 },
+            { name: 'sector_id',   label: 'Cuelga de (vacío = toda la organización)',
+              type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
+            { name: 'descripcion', label: 'Descripción', type: 'textarea', max: 500 },
+            { name: 'activo',      label: 'Activa', type: 'checkbox' },
         ],
     },
     'uvt': {

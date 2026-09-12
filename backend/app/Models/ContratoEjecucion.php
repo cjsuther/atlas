@@ -23,6 +23,7 @@ class ContratoEjecucion extends Model
         'descripcion_objeto',
         'contrato_principal_id',
         'sector_id',
+        'cuenta_operativa_id',
         'solicitante_id',
         'resp1_id',
         'resp2_id',
@@ -81,6 +82,12 @@ class ContratoEjecucion extends Model
     public function sector()
     {
         return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
+    }
+
+    /** Cuenta operativa a la que se imputa el expediente. */
+    public function cuentaOperativa()
+    {
+        return $this->belongsTo(CuentaOperativa::class, 'cuenta_operativa_id');
     }
 
     public function solicitante()

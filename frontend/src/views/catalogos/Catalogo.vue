@@ -76,6 +76,12 @@
                             <option v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</option>
                         </select>
 
+                        <label v-else-if="f.type === 'checkbox'"
+                               style="display:flex;align-items:center;gap:8px;font-weight:400;">
+                            <input type="checkbox" v-model="formData[f.name]" style="width:auto;margin:0;" />
+                            <span>{{ f.checkboxLabel || 'Sí' }}</span>
+                        </label>
+
                         <select v-else-if="f.type === 'select-async'"
                                 v-model="formData[f.name]" class="select">
                             <option :value="null">— Sin selección —</option>
@@ -164,6 +170,13 @@ async function load() {
 
 function goto(p) { state.page = p; load(); }
 
+/** Valor inicial de un campo vacío, según su tipo. */
+function VACIO_POR_TIPO(f) {
+    if (f.type === 'select-async') return null;
+    if (f.type === 'checkbox')     return f.default ?? true;
+    return '';
+}
+
 async function loadAsyncOptions() {
     asyncOptions && Object.keys(asyncOptions).forEach(k => delete asyncOptions[k]);
     for (const f of def.value.formFields) {
@@ -180,7 +193,7 @@ async function openNew() {
     errors.value = {};
     for (const k of Object.keys(formData)) delete formData[k];
     for (const f of def.value.formFields) {
-        formData[f.name] = f.type === 'select-async' ? null : '';
+        formData[f.name] = VACIO_POR_TIPO(f);
     }
     await loadAsyncOptions();
     formOpen.value = true;
@@ -191,7 +204,7 @@ async function openEdit(r) {
     errors.value = {};
     for (const k of Object.keys(formData)) delete formData[k];
     for (const f of def.value.formFields) {
-        formData[f.name] = r[f.name] ?? (f.type === 'select-async' ? null : '');
+        formData[f.name] = r[f.name] ?? VACIO_POR_TIPO(f);
     }
     await loadAsyncOptions();
     formOpen.value = true;
