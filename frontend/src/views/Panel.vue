@@ -4,7 +4,7 @@
             <div>
                 <h1 class="page-title">Panel de Control</h1>
                 <p class="page-subtitle">
-                    Indicadores, saldos y distribución de contratos
+                    Indicadores, saldos y distribución de expedientes
                     <template v-if="alcance"> · {{ alcance }}</template>
                 </p>
             </div>
@@ -43,7 +43,7 @@
                     </select>
                 </div>
                 <div class="field">
-                    <label>Subsector</label>
+                    <label>Gerencia</label>
                     <select v-model="filters.sector_id" class="select">
                         <option value="">Todos</option>
                         <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
@@ -82,7 +82,7 @@
                 <thead>
                     <tr>
                         <th>{{ tituloColumnaSaldos }}</th>
-                        <th style="text-align:right;">Contratos</th>
+                        <th style="text-align:right;">Expedientes</th>
                         <th style="text-align:right;">Saldo inicial</th>
                         <th style="text-align:right;">Ingresos</th>
                         <th style="text-align:right;">Gastos</th>
@@ -129,7 +129,7 @@
         <h3 style="margin:24px 0 10px;">Indicadores principales</h3>
         <div class="kpi-grid">
             <div class="kpi-card info">
-                <div class="label">Contratos</div>
+                <div class="label">Expedientes</div>
                 <div class="value">{{ fmtInt(ind?.totales?.contratos) }}</div>
             </div>
             <div class="kpi-card warning">
@@ -202,16 +202,16 @@
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por Gerencia de Área
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de contratos
+                        · saldo y cantidad de expedientes
                     </span>
                 </h4>
                 <BarChart :rows="rowsPorArea" money />
             </div>
             <div class="card">
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
-                    Por Subsector
+                    Por Gerencia
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de contratos
+                        · saldo y cantidad de expedientes
                     </span>
                 </h4>
                 <BarChart :rows="rowsPorSector" money />
@@ -220,7 +220,7 @@
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por UVT
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de contratos
+                        · saldo y cantidad de expedientes
                     </span>
                 </h4>
                 <BarChart :rows="rowsPorUvt" money />
@@ -282,7 +282,7 @@
         <h3 style="margin:24px 0 10px;">Rankings</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
             <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Gerencias de Área con más contratos</h4>
+                <h4 style="margin:0 0 10px;color:var(--color-primary);">Gerencias de Área con más expedientes</h4>
                 <table class="atlas-table">
                     <thead><tr><th>Gerencia de Área</th><th style="text-align:right;">Cantidad</th></tr></thead>
                     <tbody>
@@ -339,7 +339,7 @@ import IconLib from '@/components/IconLib.vue';
 
 const ACCION_LABELS = {
     factura:       'Factura',
-    transferencia: 'Transferencia entre contratos',
+    transferencia: 'Transferencia entre expedientes',
     incentivo:     'Incentivos',
     mch:           'MCH (Mayor Carga Horaria)',
 };
@@ -381,8 +381,8 @@ const areas = computed(() => sectores.value.filter(s => s.dependencia_id === nul
 
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
-    subsector:     'Gerencia de Área / Subsector',
-    contrato:      'Gerencia de Área / Subsector / Contrato',
+    subsector:     'Gerencia de Área / Gerencia',
+    contrato:      'Gerencia de Área / Gerencia / Expediente',
 }[agrupacion.value] || 'Gerencia de Área'));
 
 const subsectoresFiltrados = computed(() => {
@@ -473,7 +473,7 @@ function pctOrDash(v) {
 
 /**
  * La barra se dimensiona por el saldo, que es lo que interesa comparar entre
- * gerencias; la cantidad de contratos acompaña al costado.
+ * gerencias; la cantidad de expedientes acompaña al costado.
  */
 function conImporte(filas, etiqueta) {
     return (filas || []).map(r => ({
@@ -484,8 +484,8 @@ function conImporte(filas, etiqueta) {
 }
 
 const rowsPorUvt    = computed(() => conImporte(dUvt.value?.contratos, r => r.siglas));
-// Se muestran todos los subsectores: recortar a los primeros hacía que la suma
-// del gráfico no coincidiera con el total de contratos del panel.
+// Se muestran todas las gerencias: recortar a las primeras hacía que la suma
+// del gráfico no coincidiera con el total de expedientes del panel.
 const rowsPorSector = computed(() => conImporte(dGer.value?.sectores, r => r.nombre));
 const rowsPorArea   = computed(() => conImporte(dGer.value?.gerencias_area, r => r.nombre));
 

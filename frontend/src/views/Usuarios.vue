@@ -129,7 +129,7 @@
                         <input v-else class="input" :value="auth.gerenciaArea || '—'" readonly />
                         <div class="hint">
                             {{ auth.isAdminSistema
-                                ? 'El usuario ve los contratos de todos los subsectores de esta Gerencia de Área.'
+                                ? 'El usuario ve los expedientes de toda la rama de esta Gerencia de Área.'
                                 : 'Sólo puede dar de alta usuarios en su propia Gerencia de Área.' }}
                         </div>
                         <div v-if="errors.sector_id" class="error">{{ errors.sector_id[0] }}</div>

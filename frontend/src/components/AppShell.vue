@@ -72,20 +72,20 @@ const NAV_SECTIONS = [
         title: 'Principal',
         items: [
             { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' }, roles: TODOS },
-            { label: 'Contratos',        icon: 'contratos', to: { name: 'contratos-ejecucion' }, roles: TODOS },
+            { label: 'Expedientes',      icon: 'contratos', to: { name: 'contratos-ejecucion' }, roles: TODOS },
         ],
     },
     {
         title: 'Estructura',
         items: [
-            { label: 'Sectores y Gerencias', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
+            { label: 'Estructura',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } }, roles: TODOS },
             { label: 'Cuentas Operativas',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } }, roles: TODOS },
         ],
     },
     {
         title: 'Catálogos',
         items: [
-            { label: 'Tipos de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
+            { label: 'Tipos de expediente', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } }, roles: TODOS },
             { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } }, roles: TODOS },
             { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } }, roles: TODOS },
             { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } }, roles: TODOS },

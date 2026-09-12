@@ -1,7 +1,7 @@
 <template>
     <div>
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
-        <div v-else-if="!c" class="empty-state">Contrato no encontrado.</div>
+        <div v-else-if="!c" class="empty-state">Expediente no encontrado.</div>
 
         <div v-else>
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
@@ -27,7 +27,7 @@
                 </div>
             </div>
 
-            <!-- Situación del contrato: el saldo es lo que estos movimientos modifican. -->
+            <!-- Situación del expediente: el saldo es lo que estos movimientos modifican. -->
             <div class="kpi-grid" style="margin-top:16px;">
                 <div class="kpi-card">
                     <div class="label">Saldo inicial</div>

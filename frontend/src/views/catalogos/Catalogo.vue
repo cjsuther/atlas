@@ -83,8 +83,9 @@
                         </label>
 
                         <select v-else-if="f.type === 'select-async'"
-                                v-model="formData[f.name]" class="select">
-                            <option :value="null">— Sin selección —</option>
+                                v-model="formData[f.name]" class="select" :required="f.required">
+                            <option v-if="!f.required" :value="null">— Sin selección —</option>
+                            <option v-else :value="null" disabled>— Elegir —</option>
                             <option v-for="o in (asyncOptions[f.name] || [])" :key="o[f.valueKey]" :value="o[f.valueKey]">
                                 {{ o[f.labelKey] }}
                             </option>

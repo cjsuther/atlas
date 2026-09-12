@@ -14,7 +14,7 @@ const NIVELES = {
  */
 export const ENTITY_DEFS = {
     'tipos-contrato-ejecucion': {
-        title: 'Tipos de contrato',
+        title: 'Tipos de expediente',
         endpoint: 'tipos-contrato-ejecucion',
         keyField: 'id',
         columns: [
@@ -28,7 +28,7 @@ export const ENTITY_DEFS = {
         ],
     },
     'estados-ejecucion': {
-        title: 'Estados de contrato',
+        title: 'Estados de expediente',
         endpoint: 'estados-ejecucion',
         keyField: 'id',
         columns: [
@@ -63,16 +63,17 @@ export const ENTITY_DEFS = {
         ],
     },
     'sectores': {
-        title: 'Sectores y Gerencias',
-        subtitle: 'Los sectores que no dependen de ningún otro son las Gerencias de Área: '
-                + 'definen el alcance de los usuarios y el límite de confidencialidad.',
+        title: 'Estructura',
+        subtitle: 'El árbol tiene tres niveles: Gerencia de Área, Gerencia y Contrato. '
+                + 'Los nodos que no dependen de ningún otro son las Gerencias de Área, que '
+                + 'definen el límite de confidencialidad.',
         endpoint: 'sectores',
         keyField: 'sector_id',
         columns: [
             { key: 'sector_id',   label: 'ID' },
             { key: 'nombre',      label: 'Nombre' },
             { key: 'nivel',       label: 'Nivel',
-              render: (r) => (r.es_gerencia_area ? 'Gerencia de Área' : 'Subsector') },
+              render: (r) => NIVELES[r.nivel] || (r.es_gerencia_area ? 'Gerencia de Área' : 'Gerencia') },
             { key: 'dependencia', label: 'Depende de', render: (r) => r.dependencia?.nombre || '—' },
             { key: 'responsable', label: 'Responsable' },
             { key: 'ubicacion',   label: 'Ubicación' },
@@ -80,6 +81,7 @@ export const ENTITY_DEFS = {
         formFields: [
             { name: 'nombre',         label: 'Nombre',      type: 'text', required: true, max: 200 },
             { name: 'dependencia_id', label: 'Depende de (vacío = Gerencia de Área)',
+
               type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
             { name: 'responsable',    label: 'Responsable', type: 'text', max: 200 },
             { name: 'web',            label: 'Web',         type: 'text', max: 300 },
@@ -89,8 +91,7 @@ export const ENTITY_DEFS = {
     'cuentas-operativas': {
         title: 'Cuentas Operativas',
         subtitle: 'Cada cuenta cuelga de un nodo de la estructura —Gerencia de Área, Gerencia o '
-                + 'Contrato— y a ella se imputan los expedientes. Sin nodo, la cuenta es de toda '
-                + 'la organización.',
+                + 'Contrato— y a ella se imputan los expedientes.',
         endpoint: 'cuentas-operativas',
         keyField: 'id',
         columns: [
@@ -103,8 +104,8 @@ export const ENTITY_DEFS = {
         ],
         formFields: [
             { name: 'nombre',      label: 'Nombre', type: 'text', required: true, max: 200 },
-            { name: 'sector_id',   label: 'Cuelga de (vacío = toda la organización)',
-              type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
+            { name: 'sector_id',   label: 'Cuelga de', required: true,
+              type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre' },
             { name: 'descripcion', label: 'Descripción', type: 'textarea', max: 500 },
             { name: 'activo',      label: 'Activa', type: 'checkbox' },
         ],

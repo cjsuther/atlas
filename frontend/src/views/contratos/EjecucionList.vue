@@ -2,9 +2,9 @@
     <div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 class="page-title">Contratos</h1>
+                <h1 class="page-title">Expedientes</h1>
                 <p class="page-subtitle">
-                    Contratos por Gerencia de Área y sector
+                    Expedientes por cuenta operativa de la estructura
                     <template v-if="!auth.isAdminSistema && auth.gerenciaArea"> · {{ auth.gerenciaArea }}</template>
                 </p>
             </div>
@@ -90,7 +90,7 @@
         </div>
 
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
-        <div v-else-if="!rows.length" class="empty-state">No hay contratos de ejecución.</div>
+        <div v-else-if="!rows.length" class="empty-state">No hay expedientes.</div>
 
         <div v-else class="table-wrapper">
             <table class="atlas-table">
@@ -274,7 +274,7 @@ async function load() {
         total.value = res.total || 0;
         perPage.value = Number(res.per_page) || perPage.value;
     } catch (err) {
-        toast.error(extractError(err, 'No se pudieron cargar los contratos.'));
+        toast.error(extractError(err, 'No se pudieron cargar los expedientes.'));
     } finally {
         loading.value = false;
     }
@@ -285,14 +285,14 @@ function goto(p) { page.value = p; load(); }
 async function darBaja(r) {
     const ok = await confirmRef.value.show({
         title: 'Dar de baja',
-        message: `¿Confirma dar de baja el contrato #${r.id}? Queda registrado en el historial.`,
+        message: `¿Confirma dar de baja el expediente #${r.id}? Queda registrado en el historial.`,
         confirmText: 'Dar de baja',
         danger: true,
     });
     if (!ok) return;
     try {
         await contratosEjecucionService.remove(r.id);
-        toast.success('Contrato dado de baja.');
+        toast.success('Expediente dado de baja.');
         load();
     } catch (err) {
         toast.error(extractError(err, 'No se pudo dar de baja.'));

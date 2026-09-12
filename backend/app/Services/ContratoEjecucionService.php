@@ -232,9 +232,6 @@ class ContratoEjecucionService
      * La rama del expediente no se carga: sale del nodo de su cuenta operativa.
      * Se guarda igual en `sector_id` porque el alcance, el panel y las consultas
      * filtran por ahí; la cuenta sigue siendo la única fuente de verdad.
-     *
-     * Queda en null cuando la cuenta es la de toda la organización, que no
-     * cuelga de ningún sector.
      */
     private function conRamaDerivada(array $data): array
     {

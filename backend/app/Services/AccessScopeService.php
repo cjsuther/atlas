@@ -112,7 +112,7 @@ class AccessScopeService
 
     /**
      * Cuentas operativas con las que el usuario puede trabajar: las que cuelgan
-     * de su rama. La cuenta de toda la organización sólo la usa quien ve todo.
+     * de su rama.
      *
      * @return array<int>|null  null = sin recorte
      */

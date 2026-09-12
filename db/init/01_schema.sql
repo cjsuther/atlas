@@ -104,14 +104,14 @@ CREATE TABLE IF NOT EXISTS sector (
 -- ---------------------------------------------------------------------
 -- Tabla: cuentas_operativas
 --
---   Una cuenta operativa cuelga de cualquier nodo del árbol y un nodo puede
---   tener varias. Con sector_id en NULL es la cuenta de toda la organización.
---   Los expedientes se imputan a una cuenta, y de ella se deduce su rama.
+--   Una cuenta operativa cuelga siempre de un nodo del árbol y un nodo puede
+--   tener varias. Los expedientes se imputan a una cuenta, y de ella se
+--   deduce a qué rama pertenecen.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cuentas_operativas (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   nombre       VARCHAR(200) NOT NULL,
-  sector_id    INT NULL,                  -- nodo del árbol; NULL = organización
+  sector_id    INT NOT NULL,              -- nodo del árbol del que cuelga
   descripcion  VARCHAR(500) NULL,
   activo       TINYINT(1) NOT NULL DEFAULT 1,
   created_at   TIMESTAMP NULL,
@@ -266,7 +266,7 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
   descripcion_objeto          TEXT         NULL,
   contrato_principal_id       INT          NULL,
   sector_id                   INT          NOT NULL,
-  cuenta_operativa_id         INT          NULL,   -- cuenta a la que se imputa
+  cuenta_operativa_id         INT          NOT NULL, -- cuenta a la que se imputa
   solicitante_id              INT          NULL,
   resp1_id                    INT          NULL,
   resp2_id                    INT          NULL,

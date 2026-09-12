@@ -20,8 +20,8 @@ class CuentaOperativaController extends CrudController
             'nombre'      => ['required', 'string', 'max:200',
                               Rule::unique('cuentas_operativas', 'nombre')
                                   ->where(fn ($q) => $q->where('sector_id', $request->input('sector_id')))],
-            // Null = cuenta de toda la organización.
-            'sector_id'   => ['nullable', 'integer', 'exists:sector,sector_id'],
+            // Toda cuenta cuelga de un nodo del árbol; no hay cuentas sueltas.
+            'sector_id'   => ['required', 'integer', 'exists:sector,sector_id'],
             'descripcion' => ['nullable', 'string', 'max:500'],
             'activo'      => ['nullable', 'boolean'],
         ];
@@ -39,7 +39,9 @@ class CuentaOperativaController extends CrudController
     protected function validationMessages(): array
     {
         return [
-            'nombre.unique' => 'Ya existe una cuenta operativa con ese nombre en el mismo nodo.',
+            'nombre.unique'      => 'Ya existe una cuenta operativa con ese nombre en el mismo nodo.',
+            'sector_id.required' => 'Debe indicar de qué nodo de la estructura cuelga la cuenta.',
+            'sector_id.exists'   => 'El nodo indicado no existe.',
         ];
     }
 

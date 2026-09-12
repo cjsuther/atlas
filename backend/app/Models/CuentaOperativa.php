@@ -8,9 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Cuenta operativa: la unidad a la que se imputan los expedientes.
  *
- * Cuelga de un nodo del árbol de la estructura —Gerencia de Área, Gerencia o
- * Contrato— y un nodo puede tener varias. Con `sector_id` en null es la cuenta
- * de toda la organización.
+ * Cuelga siempre de un nodo del árbol de la estructura —Gerencia de Área,
+ * Gerencia o Contrato— y un nodo puede tener varias.
  *
  * La rama de un expediente no se guarda: se deduce del nodo de su cuenta.
  */

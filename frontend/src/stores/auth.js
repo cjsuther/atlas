@@ -27,7 +27,7 @@ export const ROL_LABELS = {
 
 export const AGRUPACIONES_SALDO = [
     { value: 'gerencia_area', label: 'Por Gerencia de Área' },
-    { value: 'subsector',     label: 'Por Subsector' },
+    { value: 'subsector',     label: 'Por Gerencia' },
     { value: 'contrato',      label: 'Por Contrato' },
 ];
 

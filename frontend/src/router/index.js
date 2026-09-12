@@ -18,23 +18,24 @@ const routes = [
             { path: 'panel', name: 'panel', component: () => import('@/views/Panel.vue'),
               meta: { title: 'Panel de Control' } },
 
-            // Contratos (antes "contratos de ejecución"). El endpoint conserva el
-            // nombre histórico; en la interfaz son, simplemente, los contratos.
+            // Expedientes (antes "contratos de ejecución"). Las rutas y el endpoint
+            // conservan el nombre histórico; en la interfaz son los expedientes.
+            // "Contrato" pasó a ser un nivel de la estructura, no este registro.
             { path: 'contratos', name: 'contratos-ejecucion',
               component: () => import('@/views/contratos/EjecucionList.vue'),
-              meta: { title: 'Contratos' } },
+              meta: { title: 'Expedientes' } },
             { path: 'contratos/nuevo', name: 'contratos-ejecucion-nuevo',
               component: () => import('@/views/contratos/EjecucionForm.vue'),
-              meta: { title: 'Nuevo Contrato', requiresEdit: true } },
+              meta: { title: 'Nuevo Expediente', requiresEdit: true } },
             { path: 'contratos/:id', name: 'contratos-ejecucion-detalle',
               component: () => import('@/views/contratos/EjecucionDetail.vue'),
-              meta: { title: 'Detalle de Contrato' } },
+              meta: { title: 'Detalle de Expediente' } },
             { path: 'contratos/:id/ejecucion', name: 'contratos-ejecucion-movimientos',
               component: () => import('@/views/contratos/EjecucionMovimientos.vue'),
-              meta: { title: 'Ejecución del Contrato' } },
+              meta: { title: 'Ejecución del Expediente' } },
             { path: 'contratos/:id/editar', name: 'contratos-ejecucion-editar',
               component: () => import('@/views/contratos/EjecucionForm.vue'),
-              meta: { title: 'Editar Contrato', requiresEdit: true } },
+              meta: { title: 'Editar Expediente', requiresEdit: true } },
 
             // Estructura organizativa y catálogos
             { path: 'catalogos/:slug', name: 'catalogo',
