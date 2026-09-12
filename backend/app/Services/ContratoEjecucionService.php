@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ContratoEjecucion;
+use App\Models\CuentaOperativa;
 use App\Models\HistorialCambio;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,6 +39,7 @@ class ContratoEjecucionService
             'tipoContrato:id,sigla,nombre',
             'sector:sector_id,nombre,dependencia_id',
             'sector.dependencia:sector_id,nombre',
+            'cuentaOperativa:id,nombre,sector_id',
             'solicitante:solicitante_id,razon_social',
             'uvt:uvt_id,siglas,nombre',
             'resp1:legajo,apellido,nombre',
@@ -212,7 +214,7 @@ class ContratoEjecucionService
     public function create(array $data): ContratoEjecucion
     {
         $c = new ContratoEjecucion();
-        $c->fill($data);
+        $c->fill($this->conRamaDerivada($data));
         $c->save();
         return $c->fresh();
     }
@@ -221,9 +223,29 @@ class ContratoEjecucionService
     {
         $c = $this->findEditable($id);
         if (!$c) return null;
-        $c->fill($data);
+        $c->fill($this->conRamaDerivada($data));
         $c->save();
         return $c->fresh();
+    }
+
+    /**
+     * La rama del expediente no se carga: sale del nodo de su cuenta operativa.
+     * Se guarda igual en `sector_id` porque el alcance, el panel y las consultas
+     * filtran por ahí; la cuenta sigue siendo la única fuente de verdad.
+     *
+     * Queda en null cuando la cuenta es la de toda la organización, que no
+     * cuelga de ningún sector.
+     */
+    private function conRamaDerivada(array $data): array
+    {
+        if (!array_key_exists('cuenta_operativa_id', $data)) {
+            return $data;
+        }
+
+        $cuenta = CuentaOperativa::find($data['cuenta_operativa_id']);
+        $data['sector_id'] = $cuenta?->sector_id;
+
+        return $data;
     }
 
     public function softDelete(int $id): bool
@@ -234,25 +256,26 @@ class ContratoEjecucionService
     }
 
     /**
-     * Transfiere el contrato completo a otro sector. Los movimientos de
-     * ejecución acompañan al contrato, porque cuelgan de él.
+     * Transfiere el expediente completo a otra cuenta operativa. Los movimientos
+     * de ejecución lo acompañan, porque cuelgan de él.
      *
-     * Sólo el administrador de sistema puede hacerlo: la transferencia puede
-     * cruzar el límite de la Gerencia de Área.
+     * Sólo el administrador de sistema puede hacerlo: la cuenta de destino
+     * puede estar en otra Gerencia de Área.
      */
-    public function transferirASector(int $id, int $sectorId, ?string $motivo = null): ?ContratoEjecucion
+    public function transferirACuenta(int $id, int $cuentaId, ?string $motivo = null): ?ContratoEjecucion
     {
         $c = ContratoEjecucion::find($id);
         if (!$c) return null;
 
-        if ((int) $c->sector_id === $sectorId) {
+        if ((int) $c->cuenta_operativa_id === $cuentaId) {
             return $c;
         }
 
-        DB::transaction(function () use ($c, $sectorId, $motivo) {
-            // El observer de historial ya registra el cambio de sector_id; el
+        DB::transaction(function () use ($c, $cuentaId, $motivo) {
+            // El observer de historial ya registra el cambio de cuenta; el
             // motivo se guarda como una entrada adicional para dejarlo asentado.
-            $c->sector_id = $sectorId;
+            $c->cuenta_operativa_id = $cuentaId;
+            $c->sector_id           = CuentaOperativa::find($cuentaId)?->sector_id;
             $c->save();
 
             if ($motivo) {

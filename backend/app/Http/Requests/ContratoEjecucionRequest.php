@@ -26,7 +26,9 @@ class ContratoEjecucionRequest extends FormRequest
 
             // Todo contrato cuelga de un sector; su Gerencia de Área es la
             // raíz de ese sector.
-            'sector_id'                  => ['required', 'integer', 'exists:sector,sector_id'],
+            // El expediente se imputa a una cuenta operativa; su rama se deduce
+            // del nodo del que cuelga esa cuenta.
+            'cuenta_operativa_id'        => ['required', 'integer', 'exists:cuentas_operativas,id'],
             'solicitante_id'             => ['nullable', 'integer', 'exists:solicitantes,solicitante_id'],
             'resp1_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
             'resp2_id'                   => ['nullable', 'integer', 'exists:personal,legajo'],
@@ -55,8 +57,8 @@ class ContratoEjecucionRequest extends FormRequest
             'nro_expediente.required'           => 'El número de expediente es obligatorio.',
             'nro_expediente.regex'              => 'El expediente debe tener el formato EX-AAAA-NNNN--APN-REPARTICIÓN (ej. EX-2026-1234--APN-GVTYEA#CNEA).',
             'tipo_contrato_id.required'         => 'Debe seleccionar el tipo de contrato.',
-            'sector_id.required'                => 'Debe indicar el sector al que pertenece el contrato.',
-            'sector_id.exists'                  => 'El sector indicado no existe.',
+            'cuenta_operativa_id.required'      => 'Debe indicar la cuenta operativa a la que se imputa el expediente.',
+            'cuenta_operativa_id.exists'        => 'La cuenta operativa indicada no existe.',
             'estado_id.required'                => 'Debe indicar el estado.',
             'fecha_inicio.after_or_equal'       => 'La fecha de inicio debe ser igual o posterior a la fecha de apertura del expediente.',
             'fecha_vencimiento.after_or_equal'  => 'La fecha de vencimiento debe ser igual o posterior a la fecha de inicio.',
@@ -68,11 +70,11 @@ class ContratoEjecucionRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $v) {
-            // Un usuario acotado sólo imputa contratos dentro de su Gerencia de Área.
-            $sectorId = $this->input('sector_id');
-            if ($sectorId && !app(AccessScopeService::class)->puedeUsarSector((int) $sectorId)) {
-                $v->errors()->add('sector_id',
-                    'No tiene permisos para cargar contratos en ese sector.');
+            // Un usuario acotado sólo imputa expedientes a cuentas de su rama.
+            $cuentaId = $this->input('cuenta_operativa_id');
+            if ($cuentaId && !app(AccessScopeService::class)->puedeUsarCuenta((int) $cuentaId)) {
+                $v->errors()->add('cuenta_operativa_id',
+                    'No tiene permisos sobre esa cuenta operativa.');
             }
 
             $estadoId = $this->input('estado_id');

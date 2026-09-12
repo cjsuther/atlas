@@ -9,8 +9,11 @@ export const contratosEjecucionService = {
     update: (id, data) => http.put(`${BASE}/${id}`, data).then(r => r.data),
     remove: (id) => http.delete(`${BASE}/${id}`).then(r => r.data),
 
-    /** Transfiere el contrato completo a otra gerencia (sólo admin_sistema). */
+    /** Transfiere el expediente completo a otra cuenta operativa (sólo admin_sistema). */
     transferir: (id, data) => http.post(`${BASE}/${id}/transferir`, data).then(r => r.data),
+
+    /** Árbol de la estructura con las cuentas de cada nodo, para los selectores. */
+    arbolEstructura: () => http.get('/estructura/arbol').then(r => r.data.data),
     exportExcel: (params) => downloadBlob(`${BASE}/export/excel`, params,
-        `atlas-contratos-${new Date().toISOString().slice(0,10)}.xlsx`),
+        `atlas-expedientes-${new Date().toISOString().slice(0,10)}.xlsx`),
 };

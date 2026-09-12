@@ -1,34 +1,30 @@
 <template>
     <div>
-        <h1 class="page-title">{{ isEdit ? 'Editar' : 'Nuevo' }} contrato</h1>
+        <h1 class="page-title">{{ isEdit ? 'Editar' : 'Nuevo' }} expediente</h1>
         <p class="page-subtitle">
-            Todo contrato pertenece a una gerencia, y ésta a una Gerencia de Área
+            Todo expediente se imputa a una cuenta operativa de la estructura
         </p>
 
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
 
         <form v-else class="card" @submit.prevent="submit">
             <div class="form-grid">
-                <div class="field">
-                    <label>Gerencia de Área *</label>
-                    <select v-model="areaSeleccionada" class="select" :disabled="!auth.isAdminSistema" required>
+                <div class="field" style="grid-column:1 / -1;">
+                    <label>Cuenta operativa *</label>
+                    <select v-model="data.cuenta_operativa_id" class="select" required>
                         <option :value="null">—</option>
-                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
+                        <template v-for="o in opcionesCuenta" :key="o.key">
+                            <option v-if="o.tipo === 'nodo'" disabled>{{ o.etiqueta }}</option>
+                            <option v-else :value="o.id" :disabled="!o.permitida">
+                                {{ o.etiqueta }}<template v-if="!o.permitida"> — sin permisos</template>
+                            </option>
+                        </template>
                     </select>
-                    <div v-if="!auth.isAdminSistema" class="hint">
-                        Sólo puede cargar contratos en su Gerencia de Área.
+                    <div class="hint">
+                        El expediente se imputa a una cuenta. La rama a la que pertenece sale
+                        de dónde cuelga esa cuenta.
                     </div>
-                </div>
-                <div class="field">
-                    <label>Sector *</label>
-                    <select v-model="data.sector_id" class="select" required :disabled="!areaSeleccionada">
-                        <option :value="null">—</option>
-                        <option v-for="g in sectoresDisponibles" :key="g.sector_id" :value="g.sector_id">
-                            {{ g.nombre }}<template v-if="g.sector_id === areaSeleccionada"> (la Gerencia de Área)</template>
-                        </option>
-                    </select>
-                    <div class="hint">Subsector al que se imputa el contrato.</div>
-                    <div v-if="errors.sector_id" class="error">{{ errors.sector_id[0] }}</div>
+                    <div v-if="errors.cuenta_operativa_id" class="error">{{ errors.cuenta_operativa_id[0] }}</div>
                 </div>
 
                 <div class="field">
@@ -221,7 +217,7 @@ const data = reactive({
     tipo_contrato_id: '',
     nombre_proyecto: '',
     descripcion_objeto: '',
-    sector_id: null,
+    cuenta_operativa_id: null,
     solicitante_id: null,
     resp1_id: null,
     resp2_id: null,
@@ -246,40 +242,51 @@ const tipos = ref([]);
 const solicitantes = ref([]);
 const uvts = ref([]);
 const personal = ref([]);
-const sectores = ref([]);
-const areaSeleccionada = ref(null);
+const arbol = ref(null);
 
-/** Los sectores sin dependencia son las Gerencias de Área. */
-const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
-
-/** La Gerencia de Área elegida, más sus subsectores. */
-const sectoresDisponibles = computed(() => {
-    if (!areaSeleccionada.value) return [];
-    return sectores.value.filter(s =>
-        s.sector_id === areaSeleccionada.value
-        || String(s.dependencia_id) === String(areaSeleccionada.value));
-});
-
-// Al cambiar de Gerencia de Área, se descarta el sector si ya no pertenece a ella.
-watch(areaSeleccionada, () => {
-    if (!data.sector_id) return;
-    const sigue = sectoresDisponibles.value.some(s => s.sector_id === data.sector_id);
-    if (!sigue) data.sector_id = null;
+/**
+ * El árbol aplanado para el desplegable: cada nodo como encabezado y sus
+ * cuentas debajo, sangradas según el nivel. El servidor marca cuáles puede
+ * usar el usuario; el resto se muestran deshabilitadas, para que se vea la
+ * estructura completa sin poder imputar fuera de la propia rama.
+ */
+const opcionesCuenta = computed(() => {
+    const filas = [];
+    const recorrer = (nodo, nivel) => {
+        const sangria = '\u00A0\u00A0'.repeat(nivel);
+        filas.push({
+            key: `n-${nodo.sector_id ?? 'raiz'}`,
+            tipo: 'nodo',
+            etiqueta: `${sangria}${nodo.nombre}`,
+        });
+        for (const c of nodo.cuentas) {
+            filas.push({
+                key: `c-${c.id}`,
+                tipo: 'cuenta',
+                id: c.id,
+                permitida: c.permitida,
+                etiqueta: `${sangria}\u00A0\u00A0· ${c.nombre}`,
+            });
+        }
+        for (const h of nodo.hijos) recorrer(h, nivel + 1);
+    };
+    if (arbol.value) recorrer(arbol.value, 0);
+    return filas;
 });
 
 watch(() => data.moneda, (v) => { if (v === 'Peso') data.cotizacion = null; });
 
 async function loadCatalogs() {
-    const [e, t, s, u, p, sec] = await Promise.all([
+    const [e, t, s, u, p, arb] = await Promise.all([
         listAll('estados-ejecucion'),
         listAll('tipos-contrato-ejecucion'),
         listAll('solicitantes'),
         listAll('uvt'),
         listAll('personal'),
-        listAll('sectores'),
+        contratosEjecucionService.arbolEstructura(),
     ]);
     estados.value = e; tipos.value = t; solicitantes.value = s;
-    uvts.value = u; personal.value = p; sectores.value = sec;
+    uvts.value = u; personal.value = p; arbol.value = arb;
 }
 
 async function loadContrato() {
@@ -324,16 +331,6 @@ onMounted(async () => {
     try {
         await loadCatalogs();
         await loadContrato();
-
-        // Un usuario acotado sólo carga contratos en su propia Gerencia de Área.
-        if (!isEdit.value && !auth.isAdminSistema && auth.sectorId) {
-            areaSeleccionada.value = auth.sectorId;
-        } else {
-            const sector = sectores.value.find(s => s.sector_id === data.sector_id);
-            areaSeleccionada.value = sector
-                ? (sector.dependencia_id ?? sector.sector_id)
-                : null;
-        }
     } catch (err) {
         toast.error(extractError(err, 'Error al cargar el formulario.'));
     } finally {

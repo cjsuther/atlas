@@ -27,7 +27,7 @@ class ContratoEjecucionController extends Controller
         if (!$c) {
             return response()->json([
                 'error'   => 'not_found',
-                'message' => 'Contrato no encontrado.',
+                'message' => 'Expediente no encontrado.',
             ], 404);
         }
         return response()->json(['data' => $c]);
@@ -44,7 +44,7 @@ class ContratoEjecucionController extends Controller
         if (!$this->service->find($id)) {
             return response()->json([
                 'error'   => 'not_found',
-                'message' => 'Contrato no encontrado.',
+                'message' => 'Expediente no encontrado.',
             ], 404);
         }
         $this->service->update($id, $request->validated());
@@ -56,7 +56,7 @@ class ContratoEjecucionController extends Controller
         if (!$this->service->softDelete($id)) {
             return response()->json([
                 'error'   => 'not_found',
-                'message' => 'Contrato no encontrado.',
+                'message' => 'Expediente no encontrado.',
             ], 404);
         }
         return response()->json([
@@ -68,31 +68,31 @@ class ContratoEjecucionController extends Controller
     /**
      * POST /api/contratos-ejecucion/{id}/transferir
      *
-     * Transfiere el contrato completo a otro sector. Los movimientos de
-     * estructura —sectores que se dan de baja y otros que se crean— hacen que
-     * un contrato deba cambiar de gerencia sin perder su historia.
+     * Transfiere el expediente completo a otra cuenta operativa. Los movimientos
+     * de estructura —nodos que se dan de baja y otros que se crean— hacen que un
+     * expediente deba cambiar de rama sin perder su historia.
      */
     public function transferir(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'sector_id' => ['required', 'integer', 'exists:sector,sector_id'],
-            'motivo'    => ['nullable', 'string', 'max:500'],
+            'cuenta_operativa_id' => ['required', 'integer', 'exists:cuentas_operativas,id'],
+            'motivo'              => ['nullable', 'string', 'max:500'],
         ], [
-            'sector_id.required' => 'Debe indicar el sector de destino.',
-            'sector_id.exists'   => 'El sector de destino no existe.',
+            'cuenta_operativa_id.required' => 'Debe indicar la cuenta operativa de destino.',
+            'cuenta_operativa_id.exists'   => 'La cuenta operativa de destino no existe.',
         ]);
 
         if (!ContratoEjecucion::find($id)) {
             return response()->json([
                 'error'   => 'not_found',
-                'message' => 'Contrato no encontrado.',
+                'message' => 'Expediente no encontrado.',
             ], 404);
         }
 
-        $c = $this->service->transferirASector($id, (int) $data['sector_id'], $data['motivo'] ?? null);
+        $c = $this->service->transferirACuenta($id, (int) $data['cuenta_operativa_id'], $data['motivo'] ?? null);
 
         return response()->json([
-            'message' => 'Contrato transferido al nuevo sector.',
+            'message' => 'Expediente transferido a la nueva cuenta.',
             'data'    => $this->service->find($c->id, true),
         ]);
     }

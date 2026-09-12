@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ContratoEjecucion;
+use App\Models\CuentaOperativa;
 use App\Models\UserRole;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
@@ -107,6 +108,38 @@ class AccessScopeService
     public function puedeEditarContrato(ContratoEjecucion $contrato, ?UserRole $user = null): bool
     {
         return $this->puedeVerContrato($contrato, $user);
+    }
+
+    /**
+     * Cuentas operativas con las que el usuario puede trabajar: las que cuelgan
+     * de su rama. La cuenta de toda la organización sólo la usa quien ve todo.
+     *
+     * @return array<int>|null  null = sin recorte
+     */
+    public function cuentasVisibles(?UserRole $user = null): ?array
+    {
+        $sectores = $this->sectoresVisibles($user);
+        if ($sectores === null) {
+            return null;
+        }
+
+        return CuentaOperativa::whereIn('sector_id', $sectores ?: [0])
+            ->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /** Valida que el usuario pueda imputar un expediente a la cuenta indicada. */
+    public function puedeUsarCuenta(?int $cuentaId, ?UserRole $user = null): bool
+    {
+        if ($cuentaId === null) {
+            return false;
+        }
+
+        $ids = $this->cuentasVisibles($user);
+        if ($ids === null) {
+            return CuentaOperativa::whereKey($cuentaId)->exists();
+        }
+
+        return in_array((int) $cuentaId, $ids, true);
     }
 
     /** Valida que el usuario pueda imputar un contrato al sector indicado. */

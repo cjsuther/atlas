@@ -30,7 +30,7 @@
                     </router-link>
                     <button v-if="auth.isAdminSistema && !c.deleted_at" class="btn btn-secondary"
                             @click="abrirTransferencia">
-                        Transferir a otro sector
+                        Transferir a otra cuenta
                     </button>
                     <router-link :to="{ name: 'contratos-ejecucion' }" class="btn btn-secondary">Volver</router-link>
                 </div>
@@ -51,7 +51,8 @@
                     <h4>Áreas y responsables</h4>
                     <div class="detail-grid">
                         <Field label="Gerencia de Área" :value="c.gerencia_area?.nombre" />
-                        <Field label="Sector" :value="c.sector?.nombre" />
+                        <Field label="Cuenta operativa" :value="c.cuenta_operativa?.nombre" />
+                        <Field label="Ubicación en la estructura" :value="c.cuenta_operativa?.ruta" />
                         <Field label="Solicitante" :value="c.solicitante?.razon_social" />
                         <Field label="UVT" :value="c.uvt ? `${c.uvt.siglas} — ${c.uvt.nombre}` : '—'" />
                         <Field label="Resp. 1" :value="responsable(c.resp1)" />
@@ -92,23 +93,28 @@
             </div>
 
 
-            <!-- Transferencia completa del contrato a otra gerencia -->
-            <BaseModal v-model="transferOpen" title="Transferir contrato a otro sector">
+            <!-- Transferencia completa del expediente a otra cuenta operativa -->
+            <BaseModal v-model="transferOpen" title="Transferir expediente a otra cuenta">
                 <form @submit.prevent="transferir">
                     <p style="margin-top:0;font-size:13px;color:var(--color-muted);">
-                        El contrato y todos sus movimientos de ejecución pasan al sector de destino,
+                        El expediente y todos sus movimientos de ejecución pasan a la cuenta de destino,
                         que puede estar en otra Gerencia de Área. El cambio queda asentado en el historial.
                     </p>
                     <div class="form-grid">
                         <div class="field" style="grid-column:1 / -1;">
-                            <label>Sector de destino <span style="color:var(--color-danger);">*</span></label>
-                            <select v-model="transferData.sector_id" class="select" required>
+                            <label>Cuenta de destino <span style="color:var(--color-danger);">*</span></label>
+                            <select v-model="transferData.cuenta_operativa_id" class="select" required>
                                 <option :value="null">—</option>
-                                <option v-for="g in sectoresDestino" :key="g.sector_id" :value="g.sector_id">
-                                    {{ g.nombre }}<template v-if="g.dependencia"> · {{ g.dependencia.nombre }}</template>
-                                </option>
+                                <template v-for="o in opcionesCuenta" :key="o.key">
+                                    <option v-if="o.tipo === 'nodo'" disabled>{{ o.etiqueta }}</option>
+                                    <option v-else :value="o.id" :disabled="o.id === c?.cuenta_operativa_id">
+                                        {{ o.etiqueta }}
+                                    </option>
+                                </template>
                             </select>
-                            <div v-if="transferErrors.sector_id" class="error">{{ transferErrors.sector_id[0] }}</div>
+                            <div v-if="transferErrors.cuenta_operativa_id" class="error">
+                                {{ transferErrors.cuenta_operativa_id[0] }}
+                            </div>
                         </div>
                         <div class="field" style="grid-column:1 / -1;">
                             <label>Motivo</label>
@@ -119,7 +125,7 @@
                 </form>
                 <template #footer>
                     <button type="button" class="btn btn-secondary" @click="transferOpen = false">Cancelar</button>
-                    <button type="button" class="btn btn-primary" :disabled="transfiriendo || !transferData.sector_id"
+                    <button type="button" class="btn btn-primary" :disabled="transfiriendo || !transferData.cuenta_operativa_id"
                             @click="transferir">
                         {{ transfiriendo ? 'Transfiriendo…' : 'Transferir' }}
                     </button>
@@ -133,7 +139,6 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { contratosEjecucionService } from '@/services/contratosEjecucion';
-import { listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
@@ -165,18 +170,31 @@ async function refrescar() {
 const transferOpen = ref(false);
 const transfiriendo = ref(false);
 const transferErrors = ref({});
-const transferData = reactive({ sector_id: null, motivo: '' });
-const sectores = ref([]);
+const transferData = reactive({ cuenta_operativa_id: null, motivo: '' });
+const arbol = ref(null);
 
-const sectoresDestino = computed(() =>
-    sectores.value.filter(s => s.sector_id !== c.value?.sector_id));
+/** El árbol aplanado: cada nodo como encabezado y sus cuentas debajo. */
+const opcionesCuenta = computed(() => {
+    const filas = [];
+    const recorrer = (nodo, nivel) => {
+        const sangria = '\u00A0\u00A0'.repeat(nivel);
+        filas.push({ key: `n-${nodo.sector_id ?? 'raiz'}`, tipo: 'nodo', etiqueta: `${sangria}${nodo.nombre}` });
+        for (const cta of nodo.cuentas) {
+            filas.push({ key: `c-${cta.id}`, tipo: 'cuenta', id: cta.id,
+                         etiqueta: `${sangria}\u00A0\u00A0· ${cta.nombre}` });
+        }
+        for (const h of nodo.hijos) recorrer(h, nivel + 1);
+    };
+    if (arbol.value) recorrer(arbol.value, 0);
+    return filas;
+});
 
 async function abrirTransferencia() {
-    transferData.sector_id = null;
+    transferData.cuenta_operativa_id = null;
     transferData.motivo = '';
     transferErrors.value = {};
-    if (!sectores.value.length) {
-        try { sectores.value = await listAll('sectores'); } catch { /* no-op */ }
+    if (!arbol.value) {
+        try { arbol.value = await contratosEjecucionService.arbolEstructura(); } catch { /* no-op */ }
     }
     transferOpen.value = true;
 }
@@ -186,17 +204,17 @@ async function transferir() {
     transfiriendo.value = true;
     try {
         await contratosEjecucionService.transferir(route.params.id, {
-            sector_id: transferData.sector_id,
+            cuenta_operativa_id: transferData.cuenta_operativa_id,
             motivo: transferData.motivo || undefined,
         });
-        toast.success('Contrato transferido.');
+        toast.success('Expediente transferido.');
         transferOpen.value = false;
         await refrescar();
     } catch (err) {
         if (err?.response?.status === 422 && err.response.data?.errors) {
             transferErrors.value = err.response.data.errors;
         } else {
-            toast.error(extractError(err, 'No se pudo transferir el contrato.'));
+            toast.error(extractError(err, 'No se pudo transferir el expediente.'));
         }
     } finally {
         transfiriendo.value = false;
