@@ -155,8 +155,8 @@ class PanelService
      *
      * Cada nodo aporta dos filas:
      *
-     *   propios    : los expedientes imputados a las cuentas de ese nodo.
-     *   acumulado  : esos mismos más los de todo lo que cuelga de él.
+     *   acumulado  : todo lo de la rama, incluido lo que cuelga del nodo.
+     *   propios    : sólo los expedientes imputados a las cuentas del nodo.
      *
      * Las dos hacen falta porque un expediente puede imputarse a una cuenta de
      * cualquier nivel: sin la fila de propios no se ve qué carga tiene el nodo
@@ -237,8 +237,8 @@ class PanelService
     }
 
     /**
-     * Emite las filas de un nodo —propios y acumulado— y sigue bajando por sus
-     * hijos mientras la agrupación lo permita.
+     * Emite las filas de un nodo —primero el acumulado de la rama y debajo lo
+     * propio— y sigue bajando por sus hijos mientras la agrupación lo permita.
      *
      * La rama se recorre entera aunque no se muestre: un nodo que no se emite
      * igual aporta sus importes al acumulado de su padre.
@@ -263,7 +263,7 @@ class PanelService
 
         // Se reservan los dos lugares antes de recorrer la rama: el acumulado
         // se completa recién cuando volvieron todos los hijos.
-        $posPropios = $posAcumulado = null;
+        $posAcumulado = $posPropios = null;
         if ($emitir) {
             $base = [
                 'tipo'        => $this->arbol->nivelDe($sectorId),
@@ -273,18 +273,18 @@ class PanelService
                 'padre_clave' => $padre,
             ];
 
-            $posPropios = count($filas);
-            $filas[$posPropios] = $base + [
-                'clave'   => $clave . '-propios',
-                'alcance' => 'propios',
-                'detalle' => 'Imputado a sus cuentas',
-            ];
-
             $posAcumulado = count($filas);
             $filas[$posAcumulado] = $base + [
                 'clave'   => $clave . '-acumulado',
                 'alcance' => 'acumulado',
                 'detalle' => 'Incluye lo que depende de él',
+            ];
+
+            $posPropios = count($filas);
+            $filas[$posPropios] = $base + [
+                'clave'   => $clave . '-propios',
+                'alcance' => 'propios',
+                'detalle' => 'Imputado a sus cuentas',
             ];
         }
 
@@ -296,7 +296,7 @@ class PanelService
             $acumulado = $this->acumular($acumulado, $deHijo);
         }
 
-        if ($posPropios !== null) {
+        if ($posAcumulado !== null) {
             // Una rama vacía se marca en lugar de borrarse: las posiciones ya
             // reservadas se siguen usando mientras se recorre el resto.
             $vacia = (int) $acumulado['contratos'] === 0;

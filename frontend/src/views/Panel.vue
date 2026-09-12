@@ -94,16 +94,16 @@
                         :class="['saldo-row', `nivel-${f.nivel}`, `alcance-${f.alcance}`]">
                         <td>
                             <div :style="{ paddingLeft: `${f.nivel * 20}px` }">
-                                <template v-if="f.alcance === 'propios'">
+                                <template v-if="f.alcance === 'acumulado'">
                                     <span v-if="f.nivel > 0" class="rama">└</span>
                                     <span :class="{ raiz: f.nivel === 0 }">{{ f.etiqueta }}</span>
                                 </template>
-                                <span v-else class="alcance-acumulado-label">Acumulado de la rama</span>
+                                <span v-else class="alcance-propios-label">Sólo lo propio</span>
                             </div>
-                            <div v-if="f.alcance === 'propios'"
+                            <div v-if="f.alcance === 'acumulado'"
                                  :style="{ paddingLeft: `${f.nivel * 20 + (f.nivel > 0 ? 14 : 0)}px` }"
                                  style="font-size:11px;color:var(--color-muted);">
-                                {{ NIVELES_ARBOL[f.tipo] || f.tipo }} · propios
+                                {{ NIVELES_ARBOL[f.tipo] || f.tipo }} · acumulado de la rama
                             </div>
                         </td>
                         <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
@@ -513,10 +513,10 @@ onMounted(async () => {
 .saldo-row .raiz { font-weight: 600; }
 .saldo-row .rama { color: var(--color-muted, #888); margin-right: 4px; }
 
-/* La fila acumulada cierra el nodo: se distingue de la de importes propios. */
+/* El acumulado encabeza el nodo; lo propio va debajo y cierra el bloque. */
 .saldo-row.alcance-acumulado { font-weight: 600; }
-.saldo-row.alcance-acumulado td { border-bottom: 1px solid var(--color-border, #e0e0e0); }
-.alcance-acumulado-label {
+.saldo-row.alcance-propios td { border-bottom: 1px solid var(--color-border, #e0e0e0); }
+.alcance-propios-label {
     font-size: 12px;
     font-style: italic;
     color: var(--color-muted, #888);
