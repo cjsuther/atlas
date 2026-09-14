@@ -49,6 +49,9 @@ class ImportadorTablas
     /** @var array<int, string> */
     private array $avisos = [];
 
+    /** @var array<int, int> sector_id => id de la cuenta que se usa para imputar */
+    private array $cuentaPorNodo = [];
+
     /** @return array<int, string> */
     public function avisos(): array
     {
@@ -111,6 +114,8 @@ class ImportadorTablas
 
             // Los contratos principales no se importan: el módulo fue retirado.
             $fila['contrato_principal_id'] = null;
+
+            $fila = $this->asignarCuenta($fila);
         }
 
         if ($tabla === 'user_roles') {
@@ -140,6 +145,88 @@ class ImportadorTablas
         }
 
         return $fila;
+    }
+
+    /**
+     * En el formato anterior el expediente no tenía cuenta operativa, sólo
+     * nodo. Se hace lo mismo que hizo la migración que las creó: el expediente
+     * va a la cuenta homónima de su nodo. Si el expediente ya existe y su
+     * cuenta sigue en ese nodo se respeta, porque pudo haberse reasignado a
+     * mano. A la inversa, si el archivo trae la cuenta pero no el nodo, el
+     * nodo sale de la cuenta.
+     *
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function asignarCuenta(array $fila): array
+    {
+        $cuenta = $this->entero($fila['cuenta_operativa_id'] ?? null);
+        $nodo   = $this->entero($fila['sector_id'] ?? null);
+
+        if ($cuenta !== null) {
+            if ($nodo === null) {
+                $fila['sector_id'] = DB::table('cuentas_operativas')->where('id', $cuenta)->value('sector_id');
+            }
+            return $fila;
+        }
+
+        if ($nodo === null) {
+            return $fila; // falta el nodo: lo reporta la validación de obligatorios
+        }
+
+        $id = $this->entero($fila['id'] ?? null);
+        $actual = $id === null ? null : DB::table('contratos_ejecucion as c')
+            ->join('cuentas_operativas as co', 'co.id', '=', 'c.cuenta_operativa_id')
+            ->where('c.id', $id)
+            ->where('co.sector_id', $nodo)
+            ->value('c.cuenta_operativa_id');
+
+        $fila['cuenta_operativa_id'] = $actual ?? $this->cuentaDelNodo($nodo);
+
+        return $fila;
+    }
+
+    /**
+     * Cuenta del nodo a la que se imputan los expedientes que no traen una: la
+     * que se llama como el nodo o, si no hay, la más antigua. Si el nodo no
+     * tiene ninguna se crea con su nombre.
+     */
+    private function cuentaDelNodo(int $nodo): int
+    {
+        if (isset($this->cuentaPorNodo[$nodo])) {
+            return $this->cuentaPorNodo[$nodo];
+        }
+
+        $nombre = DB::table('sector')->where('sector_id', $nodo)->value('nombre');
+        if ($nombre === null) {
+            throw new RuntimeException(
+                "el expediente pertenece al sector {$nodo}, que no existe en la estructura. "
+                . 'Revise la solapa "sector" del archivo.'
+            );
+        }
+
+        $cuenta = DB::table('cuentas_operativas')
+            ->where('sector_id', $nodo)
+            ->orderByRaw('nombre = ? DESC', [$nombre])
+            ->orderBy('id')
+            ->value('id');
+
+        if ($cuenta === null) {
+            $cuenta = DB::table('cuentas_operativas')->insertGetId([
+                'nombre'     => $nombre,
+                'sector_id'  => $nodo,
+                'activo'     => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $this->avisos[] = "cuentas_operativas: se creó la cuenta \"{$nombre}\" para imputar los "
+                            . 'expedientes de ese nodo, que no tenía ninguna.';
+        }
+
+        $this->avisos[] = 'contratos_ejecucion: el archivo no trae cuenta operativa; cada expediente '
+                        . 'se imputó a la cuenta de su nodo.';
+
+        return $this->cuentaPorNodo[$nodo] = (int) $cuenta;
     }
 
     public function entero(mixed $v): ?int
