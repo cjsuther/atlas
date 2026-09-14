@@ -22,6 +22,15 @@ class DatabaseBackupController extends Controller
     private array $avisos = [];
 
     /**
+     * Id de cada usuario en el archivo => id que quedó en la base. Difieren
+     * cuando el usuario ya existía aquí con otro id, o cuando el id del archivo
+     * lo ocupa otra persona.
+     *
+     * @var array<int|string, int>
+     */
+    private array $idsUsuario = [];
+
+    /**
      * GET /api/admin/db/export — backup técnico round-trip (una solapa por tabla).
      */
     public function export(): BinaryFileResponse
@@ -124,6 +133,13 @@ class DatabaseBackupController extends Controller
                     // completa lo que la tabla exige y el archivo no trae.
                     $row = $this->importador->prepararFila($table, $row, $allowed, $pk);
 
+                    $idArchivo = $row[$pk] ?? null;
+                    $row = match ($table) {
+                        'user_roles'       => $this->ubicarUsuario($row),
+                        'usuario_permisos' => $this->ubicarPermiso($row),
+                        default            => $row,
+                    };
+
                     $pkValue = $row[$pk] ?? null;
 
                     // Sin clave primaria propia la fila no identifica a nada:
@@ -140,8 +156,13 @@ class DatabaseBackupController extends Controller
                         DB::table($table)->updateOrInsert([$pk => $pkValue], $attrs);
                         $exists ? $actualizados++ : $insertados++;
                     } else {
-                        DB::table($table)->insert($row);
+                        unset($row[$pk]);
+                        $pkValue = DB::table($table)->insertGetId($row, $pk);
                         $insertados++;
+                    }
+
+                    if ($table === 'user_roles' && $idArchivo !== null && $idArchivo !== '') {
+                        $this->idsUsuario[$idArchivo] = (int) $pkValue;
                     }
                 } catch (Throwable $e) {
                     // Número de fila en el Excel: +2 (encabezado + base 0)
@@ -163,13 +184,67 @@ class DatabaseBackupController extends Controller
                 $this->avisos[] = "{$table}: {$omitidas} fila(s) omitida(s) por no traer {$pk}.";
             }
             if ($table === 'user_roles' && $actualizados > 0) {
-                // El upsert va por id: una fila del archivo puede caer sobre un
-                // usuario que ya existía y cambiarle nombre y rol.
+                // Los usuarios se identifican por nombre de usuario: los que ya
+                // existían toman los datos del archivo, incluido si son admin.
                 $this->avisos[] = "user_roles: {$actualizados} usuario(s) existente(s) fueron "
-                                . 'sobrescritos porque el archivo trae su mismo id. Verifique que '
-                                . 'sigue habiendo un administrador de sistema con acceso.';
+                                . 'actualizados con los datos del archivo. Verifique que sigue '
+                                . 'habiendo un administrador de sistema con acceso.';
             }
         }
+    }
+
+    /**
+     * Un usuario se identifica por su nombre de usuario, no por el id: entre
+     * dos instalaciones el mismo id puede ser otra persona. Si ya existe se
+     * actualiza ése; si no, se conserva el id del archivo sólo cuando está
+     * libre, y si no se le asigna uno nuevo.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function ubicarUsuario(array $row): array
+    {
+        $existente = isset($row['username'])
+            ? DB::table('user_roles')->where('username', $row['username'])->value('id')
+            : null;
+
+        if ($existente !== null) {
+            $row['id'] = $existente;
+        } elseif (isset($row['id']) && DB::table('user_roles')->where('id', $row['id'])->exists()) {
+            unset($row['id']);
+        }
+
+        return $row;
+    }
+
+    /**
+     * El permiso apunta al id que el usuario tomó en esta base, y se reconoce
+     * por usuario y nodo, que es lo que lo hace único.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function ubicarPermiso(array $row): array
+    {
+        $usuario = $row['user_role_id'] ?? null;
+        if ($usuario !== null && isset($this->idsUsuario[$usuario])) {
+            $row['user_role_id'] = $this->idsUsuario[$usuario];
+        }
+
+        $existente = DB::table('usuario_permisos')
+            ->where('user_role_id', $row['user_role_id'] ?? null)
+            ->where(fn ($q) => ($row['sector_id'] ?? null) === null
+                ? $q->whereNull('sector_id')
+                : $q->where('sector_id', $row['sector_id']))
+            ->value('id');
+
+        if ($existente !== null) {
+            $row['id'] = $existente;
+        } elseif (isset($row['id']) && DB::table('usuario_permisos')->where('id', $row['id'])->exists()) {
+            unset($row['id']);
+        }
+
+        return $row;
     }
 
     /**
@@ -186,7 +261,7 @@ class DatabaseBackupController extends Controller
     {
         // Además de las columnas de la tabla se conservan las del formato
         // anterior, porque el importador las necesita para traducirlas.
-        $legadas = ['gerencia', 'gerencia_area'];
+        $legadas = ['gerencia', 'gerencia_area', 'rol'];
         $row = [];
         $hasValue = false;
 
