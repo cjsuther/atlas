@@ -3,6 +3,7 @@ const NIVELES = {
     organizacion:  'Toda la organización',
     gerencia_area: 'Gerencia de Área',
     gerencia:      'Gerencia',
+    plan:          'Plan',
     contrato:      'Contrato',
 };
 
@@ -64,7 +65,7 @@ export const ENTITY_DEFS = {
     },
     'sectores': {
         title: 'Estructura',
-        subtitle: 'El árbol tiene tres niveles: Gerencia de Área, Gerencia y Contrato. '
+        subtitle: 'El árbol tiene cuatro niveles: Gerencia de Área, Gerencia, Plan y Contrato. '
                 + 'Los nodos que no dependen de ningún otro son las Gerencias de Área, que '
                 + 'definen el límite de confidencialidad.',
         endpoint: 'sectores',
@@ -90,8 +91,8 @@ export const ENTITY_DEFS = {
     },
     'cuentas-operativas': {
         title: 'Cuentas Operativas',
-        subtitle: 'Cada cuenta cuelga de un nodo de la estructura —Gerencia de Área, Gerencia o '
-                + 'Contrato— y a ella se imputan los expedientes.',
+        subtitle: 'Cada cuenta cuelga de un nodo de la estructura —Gerencia de Área, Gerencia, '
+                + 'Plan o Contrato— y a ella se imputan los expedientes.',
         endpoint: 'cuentas-operativas',
         keyField: 'id',
         columns: [

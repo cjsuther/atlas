@@ -21,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  *   - moneda_base           : 'Peso' por defecto, para conversión de montos
  *   - gerencia_area_id      : acota a una Gerencia de Área y su rama
  *   - sector_id             : acota a una Gerencia y su rama
- *   - nodo_id               : acota a un Contrato (tercer nivel) y su rama
+ *   - plan_id               : acota a un Plan y su rama
+ *   - nodo_id               : acota a un Contrato y su rama
  *   - cuenta_operativa_id   : acota a los expedientes de una cuenta
  *
  * Los de estructura se combinan: cada uno recorta sobre el anterior.
@@ -29,10 +30,10 @@ use Illuminate\Support\Facades\DB;
 class PanelService
 {
     /** Agrupaciones admitidas para la vista de saldos. */
-    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'contrato'];
+    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'plan', 'contrato'];
 
     /** Hasta qué profundidad del árbol se abre cada agrupación. */
-    private const PROFUNDIDAD = ['gerencia_area' => 1, 'gerencia' => 2, 'contrato' => 3];
+    private const PROFUNDIDAD = ['gerencia_area' => 1, 'gerencia' => 2, 'plan' => 3, 'contrato' => 4];
 
     public function __construct(
         protected AccessScopeService $scope,
@@ -59,6 +60,9 @@ class PanelService
         }
         if (!empty($filters['gerencia_area_id'])) {
             $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['gerencia_area_id']) ?: [0]);
+        }
+        if (!empty($filters['plan_id'])) {
+            $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['plan_id']) ?: [0]);
         }
         if (!empty($filters['nodo_id'])) {
             $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['nodo_id']) ?: [0]);
@@ -162,7 +166,7 @@ class PanelService
 
     /**
      * Saldos del árbol de la estructura, hasta el nivel que el usuario quiera
-     * ver: Gerencia de Área, Gerencia o Contrato.
+     * ver: Gerencia de Área, Gerencia, Plan o Contrato.
      *
      * Cada nodo aporta dos filas:
      *
@@ -454,8 +458,9 @@ class PanelService
     }
 
     /**
-     * Distribución por sector y por Gerencia de Área, con cantidad de contratos
-     * e importes. La de Gerencia de Área acumula la de todos sus subsectores.
+     * Distribución por Gerencia y por Gerencia de Área, con cantidad de
+     * contratos e importes. Lo imputado a un Plan o a un Contrato suma a la
+     * Gerencia de la que depende, y la Gerencia de Área acumula toda su rama.
      */
     public function porGerencia(array $filters): array
     {
@@ -463,8 +468,9 @@ class PanelService
         $porArea   = [];
 
         foreach ($this->importesPorContrato($filters) as $c) {
-            $sectorId = $c['sector_id'];
-            $raiz     = $this->arbol->raizDe($sectorId) ?? $sectorId;
+            $raiz     = $this->arbol->raizDe($c['sector_id']) ?? $c['sector_id'];
+            // Lo imputado a la propia Gerencia de Área no tiene Gerencia: queda en su nodo.
+            $sectorId = $this->arbol->ancestrosPorNivel($c['sector_id'])['gerencia'] ?? $c['sector_id'];
 
             $porSector[$sectorId] ??= [
                 'sector_id'     => $sectorId,

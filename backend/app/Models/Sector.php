@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Estructura organizativa. La tabla se referencia a sí misma y arma un árbol de
- * tres niveles fijos, dados por la profundidad del nodo:
+ * cuatro niveles fijos, dados por la profundidad del nodo:
  *
- *   Gerencia de Área  ->  Gerencia  ->  Contrato
+ *   Gerencia de Área  ->  Gerencia  ->  Plan  ->  Contrato
  *
  * De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
  * imputan los expedientes. La Gerencia de Área sigue siendo el límite de

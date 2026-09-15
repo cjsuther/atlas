@@ -57,6 +57,15 @@
                     </select>
                 </div>
                 <div class="field">
+                    <label>Plan</label>
+                    <select v-model="filters.plan_id" class="select">
+                        <option value="">Todos</option>
+                        <option v-for="p in planesFiltrados" :key="p.sector_id" :value="p.sector_id">
+                            {{ p.nombre }}
+                        </option>
+                    </select>
+                </div>
+                <div class="field">
                     <label>Contrato</label>
                     <select v-model="filters.nodo_id" class="select">
                         <option value="">Todos</option>
@@ -382,6 +391,7 @@ const filters = reactive({
     moneda_base: 'Peso',
     gerencia_area_id: '',
     sector_id: '',
+    plan_id: '',
     nodo_id: '',
     cuenta_operativa_id: '',
 });
@@ -391,6 +401,7 @@ const filters = reactive({
 const NIVELES_ARBOL = {
     gerencia_area: 'Gerencia de Área',
     gerencia:      'Gerencia',
+    plan:          'Plan',
     contrato:      'Contrato',
 };
 
@@ -420,22 +431,20 @@ const alcance = computed(() => {
  */
 const nodos = computed(() => {
     const filas = [];
-    const recorrer = (nodo, nivel, padre, raiz) => {
+    const recorrer = (nodo, nivel, ancestros) => {
         if (nodo.sector_id !== null) {
             filas.push({
                 sector_id: nodo.sector_id,
                 nombre:    nodo.nombre,
                 nivel,
-                padre,
-                raiz,
+                ancestros,
                 cuentas:   nodo.cuentas,
             });
         }
-        for (const h of nodo.hijos) {
-            recorrer(h, nivel + 1, nodo.sector_id, nodo.sector_id === null ? h.sector_id : raiz);
-        }
+        const deLosHijos = nodo.sector_id === null ? ancestros : [...ancestros, String(nodo.sector_id)];
+        for (const h of nodo.hijos) recorrer(h, nivel + 1, deLosHijos);
     };
-    if (arbol.value) recorrer(arbol.value, 0, null, null);
+    if (arbol.value) recorrer(arbol.value, 0, []);
     return filas;
 });
 
@@ -444,38 +453,52 @@ const areas = computed(() => nodos.value.filter(n => n.nivel === 1));
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
     gerencia:      'Gerencia de Área / Gerencia',
-    contrato:      'Gerencia de Área / Gerencia / Contrato',
+    plan:          'Gerencia de Área / Gerencia / Plan',
+    contrato:      'Gerencia de Área / Gerencia / Plan / Contrato',
 }[agrupacion.value] || 'Gerencia de Área'));
 
+/** Selectores de la estructura, de arriba hacia abajo, con su nivel en el árbol. */
+const FILTROS_ESTRUCTURA = [
+    ['gerencia_area_id', 1],
+    ['sector_id',        2],
+    ['plan_id',          3],
+    ['nodo_id',          4],
+];
+
+/** Nodos de un nivel que caen dentro de lo elegido en los selectores de arriba. */
+function nodosDelNivel(nivel) {
+    const elegidos = FILTROS_ESTRUCTURA
+        .filter(([campo, n]) => n < nivel && filters[campo])
+        .map(([campo]) => String(filters[campo]));
+    return nodos.value.filter(n => n.nivel === nivel && elegidos.every(id => n.ancestros.includes(id)));
+}
+
 /** Gerencias: segundo nivel, acotado a la Gerencia de Área elegida. */
-const gerenciasFiltradas = computed(() => nodos.value.filter(n => n.nivel === 2
-    && (!filters.gerencia_area_id || String(n.padre) === String(filters.gerencia_area_id))));
+const gerenciasFiltradas = computed(() => nodosDelNivel(2));
 
-/** Contratos: tercer nivel, acotado a la Gerencia elegida. */
-const contratosFiltrados = computed(() => nodos.value.filter(n => n.nivel === 3
-    && (!filters.sector_id || String(n.padre) === String(filters.sector_id))
-    && (!filters.gerencia_area_id || String(n.raiz) === String(filters.gerencia_area_id))));
+/** Planes: tercer nivel, acotado a la Gerencia elegida. */
+const planesFiltrados = computed(() => nodosDelNivel(3));
 
-/** Cuentas del nodo más profundo que se haya elegido, o de toda la rama. */
+/** Contratos: cuarto nivel, acotado al Plan elegido. */
+const contratosFiltrados = computed(() => nodosDelNivel(4));
+
+/** Cuentas de la rama del nodo más profundo que se haya elegido. */
 const cuentasFiltradas = computed(() => {
-    const dentroDe = (n) => {
-        if (filters.nodo_id)          return String(n.sector_id) === String(filters.nodo_id);
-        if (filters.sector_id)        return String(n.sector_id) === String(filters.sector_id)
-                                          || String(n.padre) === String(filters.sector_id);
-        if (filters.gerencia_area_id) return String(n.raiz) === String(filters.gerencia_area_id);
-        return true;
-    };
-    return nodos.value.filter(dentroDe).flatMap(n => n.cuentas);
+    const elegido = [...FILTROS_ESTRUCTURA].reverse().find(([campo]) => filters[campo]);
+    if (!elegido) return nodos.value.flatMap(n => n.cuentas);
+    const id = String(filters[elegido[0]]);
+    return nodos.value
+        .filter(n => String(n.sector_id) === id || n.ancestros.includes(id))
+        .flatMap(n => n.cuentas);
 });
 
 // Al cambiar un nivel se descartan los de abajo, que ya no le pertenecen.
-watch(() => filters.gerencia_area_id, () => {
-    filters.sector_id = ''; filters.nodo_id = ''; filters.cuenta_operativa_id = '';
+FILTROS_ESTRUCTURA.forEach(([campo], i) => {
+    watch(() => filters[campo], () => {
+        for (const [abajo] of FILTROS_ESTRUCTURA.slice(i + 1)) filters[abajo] = '';
+        filters.cuenta_operativa_id = '';
+    });
 });
-watch(() => filters.sector_id, () => {
-    filters.nodo_id = ''; filters.cuenta_operativa_id = '';
-});
-watch(() => filters.nodo_id, () => { filters.cuenta_operativa_id = ''; });
 
 /**
  * Descripción de los filtros aplicados, para que el PDF diga de qué recorte
@@ -489,6 +512,7 @@ function descripcionFiltros() {
     if (filters.moneda_base) partes.push(`moneda base ${filters.moneda_base}`);
     if (filters.gerencia_area_id) partes.push(`Gerencia de Área: ${nombre(filters.gerencia_area_id)}`);
     if (filters.sector_id) partes.push(`Gerencia: ${nombre(filters.sector_id)}`);
+    if (filters.plan_id) partes.push(`Plan: ${nombre(filters.plan_id)}`);
     if (filters.nodo_id) partes.push(`Contrato: ${nombre(filters.nodo_id)}`);
     if (filters.cuenta_operativa_id) {
         const cta = cuentasFiltradas.value.find(c => String(c.id) === String(filters.cuenta_operativa_id));
@@ -597,7 +621,7 @@ async function loadAll() {
 
 function clearFilters() {
     filters.desde = ''; filters.hasta = ''; filters.moneda_base = 'Peso';
-    filters.gerencia_area_id = ''; filters.sector_id = '';
+    filters.gerencia_area_id = ''; filters.sector_id = ''; filters.plan_id = '';
     filters.nodo_id = ''; filters.cuenta_operativa_id = '';
     loadAll();
 }

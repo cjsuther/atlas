@@ -26,7 +26,7 @@ class UserRole extends Authenticatable
     use HasApiTokens, Notifiable;
 
     /** Niveles del árbol a los que puede abrirse la tabla de saldos. */
-    public const AGRUPACIONES_SALDO = ['gerencia_area', 'gerencia', 'contrato'];
+    public const AGRUPACIONES_SALDO = ['gerencia_area', 'gerencia', 'plan', 'contrato'];
 
     protected $table = 'user_roles';
 

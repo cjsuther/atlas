@@ -24,7 +24,7 @@ class SectorService extends BaseCrudService
     /**
      * Alta de un nodo de la estructura.
      *
-     * El árbol tiene tres niveles fijos —Gerencia de Área, Gerencia, Contrato—
+     * El árbol tiene cuatro niveles fijos —Gerencia de Área, Gerencia, Plan, Contrato—
      * así que no se admite colgar nada de un Contrato. Junto con el nodo se
      * crea su cuenta operativa homónima: toda rama nace con una cuenta a la
      * que imputar expedientes.
@@ -53,8 +53,8 @@ class SectorService extends BaseCrudService
     }
 
     /**
-     * Un nodo sólo puede colgar de una Gerencia de Área o de una Gerencia, y
-     * moverlo no puede dejar a sus descendientes por debajo del tercer nivel.
+     * Un nodo sólo puede colgar de una Gerencia de Área, una Gerencia o un Plan,
+     * y moverlo no puede dejar a sus descendientes por debajo del cuarto nivel.
      */
     private function validarProfundidad(?int $dependenciaId, ?int $sectorId = null): void
     {
@@ -62,8 +62,8 @@ class SectorService extends BaseCrudService
 
         if ($profundidadPadre >= count(SectorTree::NIVELES)) {
             throw ValidationException::withMessages([
-                'dependencia_id' => 'La estructura tiene tres niveles: '
-                    . 'Gerencia de Área, Gerencia y Contrato. No se puede colgar nada de un Contrato.',
+                'dependencia_id' => 'La estructura tiene cuatro niveles: '
+                    . 'Gerencia de Área, Gerencia, Plan y Contrato. No se puede colgar nada de un Contrato.',
             ]);
         }
 
@@ -72,7 +72,7 @@ class SectorService extends BaseCrudService
             if ($profundidadPadre + $propia > count(SectorTree::NIVELES)) {
                 throw ValidationException::withMessages([
                     'dependencia_id' => 'Mover la gerencia acá dejaría a las que dependen de ella '
-                        . 'por debajo del tercer nivel de la estructura.',
+                        . 'por debajo del cuarto nivel de la estructura.',
                 ]);
             }
         }

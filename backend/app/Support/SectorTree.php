@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
  * Jerarquía de sectores resuelta en memoria.
  *
  * La estructura organizativa vive en la tabla `sector`, que se referencia a sí
- * misma. El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
+ * misma. El árbol tiene cuatro niveles fijos, dados por la profundidad del nodo:
  *
- *   Gerencia de Área (raíz)  ->  Gerencia  ->  Contrato
+ *   Gerencia de Área (raíz)  ->  Gerencia  ->  Plan  ->  Contrato
  *
  * De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
  * imputan los expedientes.
@@ -171,7 +171,7 @@ class SectorTree
     }
 
     /** Niveles del árbol, por profundidad. */
-    public const NIVELES = ['gerencia_area', 'gerencia', 'contrato'];
+    public const NIVELES = ['gerencia_area', 'gerencia', 'plan', 'contrato'];
 
     public const NIVEL_ORGANIZACION = 'organizacion';
 
@@ -180,12 +180,14 @@ class SectorTree
         self::NIVEL_ORGANIZACION => 'Toda la organización',
         'gerencia_area'          => 'Gerencia de Área',
         'gerencia'               => 'Gerencia',
+        'plan'                   => 'Plan',
         'contrato'               => 'Contrato',
     ];
 
     /**
      * Profundidad del nodo: 1 para una Gerencia de Área, 2 para una Gerencia,
-     * 3 para un Contrato. 0 es la raíz del árbol (toda la organización).
+     * 3 para un Plan y 4 para un Contrato. 0 es la raíz del árbol (toda la
+     * organización).
      */
     public function profundidadDe(?int $sectorId): int
     {
@@ -217,6 +219,42 @@ class SectorTree
     {
         $p = $this->profundidadDe($sectorId);
         return self::NIVELES[$p - 1] ?? self::NIVEL_ORGANIZACION;
+    }
+
+    /**
+     * El nodo y sus ancestros, cada uno en el nivel que ocupa. Los niveles por
+     * debajo del nodo quedan en null: un expediente imputado a una Gerencia no
+     * tiene Plan ni Contrato.
+     *
+     * @return array<string, int|null> nivel => sector_id
+     */
+    public function ancestrosPorNivel(?int $sectorId): array
+    {
+        $niveles = array_fill_keys(self::NIVELES, null);
+        if ($sectorId === null) {
+            return $niveles;
+        }
+        $this->cargar();
+
+        $camino    = [];
+        $actual    = $sectorId;
+        $visitados = [];
+        while ($actual !== null && array_key_exists($actual, $this->padres)) {
+            if (isset($visitados[$actual])) {
+                break; // ciclo en los datos
+            }
+            $visitados[$actual] = true;
+            array_unshift($camino, $actual);
+            $actual = $this->padres[$actual];
+        }
+
+        foreach ($camino as $i => $id) {
+            if (isset(self::NIVELES[$i])) {
+                $niveles[self::NIVELES[$i]] = $id;
+            }
+        }
+
+        return $niveles;
     }
 
     /** Camino desde la Gerencia de Área hasta el nodo, para mostrar en pantalla. */

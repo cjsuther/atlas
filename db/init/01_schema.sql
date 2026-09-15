@@ -82,11 +82,12 @@ CREATE TABLE IF NOT EXISTS solicitantes (
 --   * Un sector sin dependencia es una Gerencia de Área. Es el nivel al que se
 --     asocian los administradores y operadores de gerencia, y el límite de
 --     confidencialidad: la información no sale de la Gerencia de Área.
---   * Los sectores dependientes son las Gerencias y, bajo ellas, los Contratos.
+--   * Los sectores dependientes son las Gerencias; bajo ellas, los Planes, y
+--     bajo los Planes, los Contratos.
 --
---   El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
+--   El árbol tiene cuatro niveles fijos, dados por la profundidad del nodo:
 --
---   Gerencia de Área -> Gerencia -> Contrato
+--   Gerencia de Área -> Gerencia -> Plan -> Contrato
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sector (
   sector_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -163,7 +164,7 @@ CREATE TABLE IF NOT EXISTS personal (
 -- `sector_id` apunta a la Gerencia de Área (un sector sin dependencia) y es
 -- obligatorio para los roles acotados.
 -- `saldos_agrupacion` es la configuración con la que el usuario ve los saldos
--- del panel (por Gerencia de Área, por Subsector o por Contrato).
+-- del panel (por Gerencia de Área, Gerencia, Plan o Contrato).
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_roles (
   id                INT AUTO_INCREMENT PRIMARY KEY,
@@ -173,7 +174,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
   es_admin          TINYINT(1) NOT NULL DEFAULT 0,   -- administra la configuración del sistema
-  saldos_agrupacion ENUM('gerencia_area','gerencia','contrato') NOT NULL DEFAULT 'gerencia_area',
+  saldos_agrupacion ENUM('gerencia_area','gerencia','plan','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,
   last_login        TIMESTAMP NULL,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

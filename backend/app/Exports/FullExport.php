@@ -151,9 +151,10 @@ class FullExport implements WithMultipleSheets
                 $rama = $this->scope->sectoresVisibles();
                 return $rama === null ? $q : $q->whereIn('sector_id', $rama ?: [0]);
             },
-            ['ID', 'Nombre', 'Depende de', 'Gerencia de Área', 'Responsable', 'Web', 'Ubicación'],
+            ['ID', 'Nombre', 'Nivel', 'Depende de', 'Gerencia de Área', 'Responsable', 'Web', 'Ubicación'],
             fn ($r) => [
                 $r->sector_id, $r->nombre,
+                SectorTree::ETIQUETAS[$r->nivel] ?? $r->nivel,
                 optional($r->dependencia)->nombre,
                 $r->es_gerencia_area ? 'Sí (es una)' : app(SectorTree::class)->nombre($r->gerenciaAreaId()),
                 $r->responsable, $r->web, $r->ubicacion,
@@ -296,7 +297,7 @@ class FullExport implements WithMultipleSheets
                 'ID', 'Expediente', 'F. Apertura',
                 'Tipo', 'Proyecto', 'Descripción',
                 'Contrato Principal (histórico)',
-                'Gerencia de Área', 'Gerencia',
+                'Gerencia de Área', 'Gerencia', 'Plan', 'Contrato',
                 'Solicitante', 'Resp. 1', 'Resp. 2',
                 'UVT', 'Estado', 'Cliente',
                 'F. Inicio', 'F. Vencimiento', 'F. Finalización',
@@ -316,8 +317,10 @@ class FullExport implements WithMultipleSheets
                 $r->nombre_proyecto,
                 $r->descripcion_objeto,
                 $r->principal ? "#{$r->principal->id} — " . $r->principal->nro_expediente : null,
-                optional($r->gerencia_area)['nombre'] ?? null,
-                optional($r->sector)->nombre,
+                $r->estructura['gerencia_area']['nombre'] ?? null,
+                $r->estructura['gerencia']['nombre'] ?? null,
+                $r->estructura['plan']['nombre'] ?? null,
+                $r->estructura['contrato']['nombre'] ?? null,
                 optional($r->solicitante)->razon_social,
                 $r->resp1 ? trim($r->resp1->apellido . ', ' . $r->resp1->nombre) : null,
                 $r->resp2 ? trim($r->resp2->apellido . ', ' . $r->resp2->nombre) : null,

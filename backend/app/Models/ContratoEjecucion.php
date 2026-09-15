@@ -57,7 +57,7 @@ class ContratoEjecucion extends Model
     protected $appends = [
         'duracion_meses', 'atraso_meses',
         'monto_ejecutado_ingresos', 'monto_ejecutado_gastos',
-        'saldo', 'gerencia_area',
+        'saldo', 'gerencia_area', 'estructura',
     ];
 
     // ----------------------------------------------------------------------
@@ -139,6 +139,24 @@ class ContratoEjecucion extends Model
         }
 
         return ['sector_id' => $raiz, 'nombre' => (string) $arbol->nombre($raiz)];
+    }
+
+    /**
+     * Dónde está el expediente en cada nivel de la estructura: Gerencia de
+     * Área, Gerencia, Plan y Contrato. Los niveles por debajo del nodo al que
+     * se imputa quedan en null.
+     *
+     * @return array<string, array{sector_id: int, nombre: string}|null>
+     */
+    public function getEstructuraAttribute(): array
+    {
+        $arbol = app(SectorTree::class);
+        $ids   = $arbol->ancestrosPorNivel($this->sector_id !== null ? (int) $this->sector_id : null);
+
+        return array_map(
+            fn ($id) => $id === null ? null : ['sector_id' => $id, 'nombre' => (string) $arbol->nombre($id)],
+            $ids,
+        );
     }
 
     public function getDuracionMesesAttribute(): ?float

@@ -49,9 +49,27 @@
                 <div class="field">
                     <label>Gerencia</label>
                     <select v-model="filters.sector_id" class="select" @change="onFilter">
-                        <option value="">Todos</option>
-                        <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
+                        <option value="">Todas</option>
+                        <option v-for="g in nodosDelNivel(2)" :key="g.sector_id" :value="g.sector_id">
                             {{ g.nombre }}
+                        </option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Plan</label>
+                    <select v-model="filters.plan_id" class="select" @change="onFilter">
+                        <option value="">Todos</option>
+                        <option v-for="p in nodosDelNivel(3)" :key="p.sector_id" :value="p.sector_id">
+                            {{ p.nombre }}
+                        </option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Contrato</label>
+                    <select v-model="filters.nodo_id" class="select" @change="onFilter">
+                        <option value="">Todos</option>
+                        <option v-for="c in nodosDelNivel(4)" :key="c.sector_id" :value="c.sector_id">
+                            {{ c.nombre }}
                         </option>
                     </select>
                 </div>
@@ -117,7 +135,10 @@
                         <td>{{ r.nombre_proyecto }}</td>
                         <td><span :class="['badge', badgeForEstado(r.estado)]">{{ r.estado?.nombre || '—' }}</span></td>
                         <td>
-                            <div>{{ r.sector?.nombre || '—' }}</div>
+                            <div>{{ r.estructura?.gerencia?.nombre || r.sector?.nombre || '—' }}</div>
+                            <div v-if="bajoLaGerencia(r)" style="font-size:12px;">
+                                {{ bajoLaGerencia(r) }}
+                            </div>
                             <div v-if="r.gerencia_area" style="font-size:11px;color:var(--color-muted);">
                                 {{ r.gerencia_area.nombre }}
                             </div>
@@ -167,7 +188,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { contratosEjecucionService } from '@/services/contratosEjecucion';
 import { listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
@@ -194,6 +215,8 @@ const filters = reactive({
     tipo_contrato_id: '',
     gerencia_area_id: '',
     sector_id: '',
+    plan_id: '',
+    nodo_id: '',
     uvt_id: '',
     moneda: '',
     vencidos: '',
@@ -205,14 +228,53 @@ const tipos = ref([]);
 const uvts = ref([]);
 const sectores = ref([]);
 
-/** Los sectores sin dependencia son las Gerencias de Área. */
-const areas = computed(() => sectores.value.filter(s => s.dependencia_id === null));
+/** Selectores de la estructura, de arriba hacia abajo, con su nivel en el árbol. */
+const FILTROS_ESTRUCTURA = [
+    ['gerencia_area_id', 1],
+    ['sector_id',        2],
+    ['plan_id',          3],
+    ['nodo_id',          4],
+];
 
-const subsectoresFiltrados = computed(() => {
-    const hijos = sectores.value.filter(s => s.dependencia_id !== null);
-    if (!filters.gerencia_area_id) return hijos;
-    return hijos.filter(s => String(s.dependencia_id) === String(filters.gerencia_area_id));
+/** Cada nodo con su nivel y sus ancestros, deducidos de la dependencia. */
+const nodos = computed(() => {
+    const porId = new Map(sectores.value.map(s => [String(s.sector_id), s]));
+    return sectores.value.map(s => {
+        const ancestros = [];
+        const visitados = new Set([String(s.sector_id)]);
+        let padre = s.dependencia_id;
+        while (padre !== null && padre !== undefined && porId.has(String(padre))
+               && !visitados.has(String(padre))) {
+            visitados.add(String(padre));
+            ancestros.unshift(String(padre));
+            padre = porId.get(String(padre)).dependencia_id;
+        }
+        return { ...s, nivel: ancestros.length + 1, ancestros };
+    });
 });
+
+/** Las Gerencias de Área: los nodos que no dependen de ningún otro. */
+const areas = computed(() => nodos.value.filter(n => n.nivel === 1));
+
+/** Nodos de un nivel que caen dentro de lo elegido en los selectores de arriba. */
+function nodosDelNivel(nivel) {
+    const elegidos = FILTROS_ESTRUCTURA
+        .filter(([campo, n]) => n < nivel && filters[campo])
+        .map(([campo]) => String(filters[campo]));
+    return nodos.value.filter(n => n.nivel === nivel && elegidos.every(id => n.ancestros.includes(id)));
+}
+
+// Al cambiar un nivel se descartan los de abajo, que ya no le pertenecen.
+FILTROS_ESTRUCTURA.forEach(([campo], i) => {
+    watch(() => filters[campo], () => {
+        for (const [abajo] of FILTROS_ESTRUCTURA.slice(i + 1)) filters[abajo] = '';
+    });
+});
+
+/** Plan y Contrato del expediente, cuando se imputa por debajo de la Gerencia. */
+function bajoLaGerencia(r) {
+    return [r.estructura?.plan?.nombre, r.estructura?.contrato?.nombre].filter(Boolean).join(' › ');
+}
 
 /**
  * Columnas de la grilla. `campo` es lo que se manda al backend para ordenar;

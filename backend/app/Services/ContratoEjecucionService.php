@@ -59,13 +59,12 @@ class ContratoEjecucionService
         if (!empty($filters['tipo_contrato_id'])) {
             $q->where('tipo_contrato_id', (int) $filters['tipo_contrato_id']);
         }
-        if (!empty($filters['sector_id'])) {
-            $q->where('sector_id', (int) $filters['sector_id']);
-        }
-        // Filtrar por Gerencia de Área alcanza a todos sus subsectores.
-        if (!empty($filters['gerencia_area_id'])) {
-            $rama = $this->arbol->ramaDe((int) $filters['gerencia_area_id']);
-            $q->whereIn('sector_id', $rama ?: [0]);
+        // Cada filtro de la estructura alcanza a toda la rama del nodo elegido,
+        // y se combinan: cada uno recorta sobre el anterior.
+        foreach (['gerencia_area_id', 'sector_id', 'plan_id', 'nodo_id'] as $filtro) {
+            if (!empty($filters[$filtro])) {
+                $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters[$filtro]) ?: [0]);
+            }
         }
         if (!empty($filters['uvt_id'])) {
             $q->where('uvt_id', (int) $filters['uvt_id']);
