@@ -23,7 +23,7 @@ const routes = [
             // "Contrato" pasó a ser un nivel de la estructura, no este registro.
             { path: 'contratos', name: 'contratos-ejecucion',
               component: () => import('@/views/contratos/EjecucionList.vue'),
-              meta: { title: 'Expedientes' } },
+              meta: { title: 'Ejecución' } },
             { path: 'contratos/nuevo', name: 'contratos-ejecucion-nuevo',
               component: () => import('@/views/contratos/EjecucionForm.vue'),
               meta: { title: 'Nuevo Expediente', requiresEdit: true } },

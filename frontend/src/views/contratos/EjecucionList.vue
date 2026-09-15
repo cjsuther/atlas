@@ -2,7 +2,7 @@
     <div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 class="page-title">Expedientes</h1>
+                <h1 class="page-title">Ejecución</h1>
                 <p class="page-subtitle">
                     Expedientes por cuenta operativa de la estructura
                     <template v-if="!auth.veTodo"> · {{ auth.alcanceLabel }}</template>

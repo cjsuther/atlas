@@ -69,7 +69,7 @@ const NAV_SECTIONS = [
         title: 'Principal',
         items: [
             { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' } },
-            { label: 'Expedientes',      icon: 'contratos', to: { name: 'contratos-ejecucion' } },
+            { label: 'Ejecución',        icon: 'contratos', to: { name: 'contratos-ejecucion' } },
         ],
     },
     {
