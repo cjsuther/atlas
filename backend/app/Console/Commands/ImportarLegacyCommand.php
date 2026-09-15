@@ -25,7 +25,7 @@ class ImportarLegacyCommand extends Command
                             {--reemplazar : Vacía las tablas antes de cargar (import completo)}
                             {--dry-run    : Analiza el archivo y muestra el resumen sin escribir nada}';
 
-    protected $description = 'Importa un Excel con una solapa por tabla, traduciendo el formato anterior al modelo de sectores.';
+    protected $description = 'Importa un Excel con una solapa por tabla, traduciendo el formato anterior al modelo de gerencias.';
 
     /** Tablas en orden de dependencia: las padres antes que las hijas. */
     private const TABLAS = [
@@ -61,11 +61,11 @@ class ImportarLegacyCommand extends Command
         // contratos: si falta alguno, no se inventa.
         $faltantes = $this->sectoresFaltantes($hojas, $importador);
         if ($faltantes) {
-            $this->error('Hay contratos que apuntan a sectores inexistentes en la solapa `sector`:');
+            $this->error('Hay contratos que apuntan a gerencias inexistentes en la solapa `sector`:');
             foreach ($faltantes as $id => $cantidad) {
                 $this->line("  sector_id {$id}: {$cantidad} contrato(s)");
             }
-            $this->line('Agregue esos sectores a la solapa `sector` y vuelva a importar.');
+            $this->line('Agregue esas gerencias a la solapa `sector` y vuelva a importar.');
             return self::FAILURE;
         }
 

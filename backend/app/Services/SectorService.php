@@ -71,7 +71,7 @@ class SectorService extends BaseCrudService
             $propia = $this->alturaDe($sectorId);
             if ($profundidadPadre + $propia > count(SectorTree::NIVELES)) {
                 throw ValidationException::withMessages([
-                    'dependencia_id' => 'Mover el sector acá dejaría a los que dependen de él '
+                    'dependencia_id' => 'Mover la gerencia acá dejaría a las que dependen de ella '
                         . 'por debajo del tercer nivel de la estructura.',
                 ]);
             }
@@ -97,11 +97,11 @@ class SectorService extends BaseCrudService
     {
         $msgs = [];
         if (Sector::where('dependencia_id', $id)->exists()) {
-            $msgs[] = 'Existen sectores que dependen de éste.';
+            $msgs[] = 'Existen gerencias que dependen de ésta.';
         }
         $pers = Personal::where('lugar_trabajo_id', $id)->count();
         if ($pers > 0) {
-            $msgs[] = "Existen {$pers} persona(s) con lugar de trabajo en este sector.";
+            $msgs[] = "Existen {$pers} persona(s) con lugar de trabajo en esta gerencia.";
         }
         return $msgs;
     }

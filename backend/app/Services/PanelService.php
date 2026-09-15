@@ -468,14 +468,14 @@ class PanelService
 
             $porSector[$sectorId] ??= [
                 'sector_id'     => $sectorId,
-                'nombre'        => $this->arbol->nombre($sectorId) ?? "Sector #{$sectorId}",
+                'nombre'        => $this->arbol->nombre($sectorId) ?? "Gerencia #{$sectorId}",
                 'gerencia_area' => $this->arbol->nombre($raiz),
             ];
             $porSector[$sectorId] = $this->acumular($porSector[$sectorId], $c['importes']) + $porSector[$sectorId];
 
             $porArea[$raiz] ??= [
                 'gerencia_area_id' => $raiz,
-                'nombre'           => $this->arbol->nombre($raiz) ?? "Sector #{$raiz}",
+                'nombre'           => $this->arbol->nombre($raiz) ?? "Gerencia #{$raiz}",
             ];
             $porArea[$raiz] = $this->acumular($porArea[$raiz], $c['importes']) + $porArea[$raiz];
         }
@@ -546,7 +546,7 @@ class PanelService
             $raiz = $this->arbol->raizDe((int) $r->sector_id) ?? (int) $r->sector_id;
             $porArea[$raiz] ??= [
                 'gerencia_area_id' => $raiz,
-                'gerencia_area'    => $this->arbol->nombre($raiz) ?? "Sector #{$raiz}",
+                'gerencia_area'    => $this->arbol->nombre($raiz) ?? "Gerencia #{$raiz}",
                 'cantidad'         => 0,
             ];
             $porArea[$raiz]['cantidad'] += (int) $r->cantidad;

@@ -47,7 +47,7 @@
                     </select>
                 </div>
                 <div class="field">
-                    <label>Sector</label>
+                    <label>Gerencia</label>
                     <select v-model="filters.sector_id" class="select" @change="onFilter">
                         <option value="">Todos</option>
                         <option v-for="g in subsectoresFiltrados" :key="g.sector_id" :value="g.sector_id">
@@ -224,7 +224,7 @@ const columnas = [
     { label: 'Tipo',              campo: 'tipo' },
     { label: 'Proyecto',          campo: 'nombre_proyecto' },
     { label: 'Estado',            campo: 'estado' },
-    { label: 'Sector',            campo: 'sector' },
+    { label: 'Gerencia',          campo: 'sector' },
     { label: 'UVT',               campo: 'uvt' },
     { label: 'F. Inicio',         campo: 'fecha_inicio' },
     { label: 'F. Venc.',          campo: 'fecha_vencimiento' },

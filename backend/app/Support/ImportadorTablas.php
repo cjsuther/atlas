@@ -200,7 +200,7 @@ class ImportadorTablas
         $nombre = DB::table('sector')->where('sector_id', $nodo)->value('nombre');
         if ($nombre === null) {
             throw new RuntimeException(
-                "el expediente pertenece al sector {$nodo}, que no existe en la estructura. "
+                "el expediente pertenece a la gerencia {$nodo}, que no existe en la estructura. "
                 . 'Revise la solapa "sector" del archivo.'
             );
         }

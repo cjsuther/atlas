@@ -145,7 +145,7 @@ class FullExport implements WithMultipleSheets
     private function sectores(): TableSheet
     {
         return new TableSheet(
-            'Sectores',
+            'Gerencias',
             function () {
                 $q = Sector::query()->with('dependencia:sector_id,nombre')->orderBy('sector_id');
                 $rama = $this->scope->sectoresVisibles();
@@ -296,7 +296,7 @@ class FullExport implements WithMultipleSheets
                 'ID', 'Expediente', 'F. Apertura',
                 'Tipo', 'Proyecto', 'Descripción',
                 'Contrato Principal (histórico)',
-                'Gerencia de Área', 'Sector',
+                'Gerencia de Área', 'Gerencia',
                 'Solicitante', 'Resp. 1', 'Resp. 2',
                 'UVT', 'Estado', 'Cliente',
                 'F. Inicio', 'F. Vencimiento', 'F. Finalización',

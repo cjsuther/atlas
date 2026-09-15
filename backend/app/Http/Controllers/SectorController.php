@@ -28,7 +28,7 @@ class SectorController extends CrudController
         $rules = $this->rulesForStore($request);
         $rules['dependencia_id'][] = function ($attribute, $value, $fail) use ($id) {
             if ($value !== null && (int) $value === (int) $id) {
-                $fail('Un sector no puede depender de sí mismo.');
+                $fail('Una gerencia no puede depender de sí misma.');
             }
         };
         return $rules;

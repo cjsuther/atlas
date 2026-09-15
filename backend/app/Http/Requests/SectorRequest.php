@@ -24,7 +24,7 @@ class SectorRequest extends FormRequest
         $validator->after(function ($v) {
             $id = $this->route('id');
             if ($id && $this->input('dependencia_id') && (int)$this->input('dependencia_id') === (int)$id) {
-                $v->errors()->add('dependencia_id', 'Un sector no puede depender de sí mismo.');
+                $v->errors()->add('dependencia_id', 'Una gerencia no puede depender de sí misma.');
             }
         });
     }

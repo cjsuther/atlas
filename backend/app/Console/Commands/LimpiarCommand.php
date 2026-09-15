@@ -22,7 +22,7 @@ class LimpiarCommand extends Command
 
     public function handle(SectorTree $arbol): int
     {
-        $this->warn('Esto borra contratos, movimientos, historial, sectores, personal y catálogos.');
+        $this->warn('Esto borra contratos, movimientos, historial, gerencias, personal y catálogos.');
         $this->line('Se conservan los usuarios y sus sesiones, pero pierden la Gerencia de Área asignada.');
 
         if (!$this->option('force') && !$this->confirm('¿Continuar?', false)) {
