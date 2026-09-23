@@ -144,10 +144,15 @@ class ContratoService
         return $ids === null || in_array($sectorId, $ids, true);
     }
 
+    /**
+     * La ficha y los archivos del contrato los mantiene el administrador del
+     * sistema, igual que las cuentas y la estructura: el contrato es un nodo
+     * del árbol, no un registro de la operatoria diaria. El resto lo ve, dentro
+     * de su rama, pero no lo modifica.
+     */
     public function puedeEditar(int $sectorId): bool
     {
-        $ids = $this->scope->sectoresEditables();
-        return $ids === null || in_array($sectorId, $ids, true);
+        return (bool) $this->scope->usuario()?->esAdmin();
     }
 
     private function baseQuery(): Builder

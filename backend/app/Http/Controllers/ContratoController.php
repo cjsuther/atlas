@@ -166,7 +166,7 @@ class ContratoController extends Controller
     {
         return response()->json([
             'error'   => 'forbidden',
-            'message' => 'No tiene permiso de escritura sobre este contrato.',
+            'message' => 'La ficha del contrato la mantiene el administrador del sistema.',
         ], 403);
     }
 
