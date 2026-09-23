@@ -220,6 +220,46 @@ class AccessScopeService
         return in_array((int) $cuentaId, $ids, true);
     }
 
+    /**
+     * Si el usuario puede ver un nodo del árbol, y por lo tanto nombrarlo. Se
+     * usa para recortar la ubicación que se muestra de un expediente, una
+     * cuenta o un contrato: los nodos de arriba, sobre los que no tiene
+     * permiso, no se nombran.
+     *
+     * Sin usuario autenticado —consola, tareas— no hay recorte que aplicar.
+     */
+    public function veSector(?int $sectorId): bool
+    {
+        if ($sectorId === null) {
+            return false;
+        }
+        if (!$this->usuario()) {
+            return true;
+        }
+        $ids = $this->sectoresVisibles();
+        return $ids === null || in_array($sectorId, $ids, true);
+    }
+
+    /**
+     * El nodo más alto de la rama que el usuario puede ver, partiendo de uno
+     * suyo: se sube mientras el padre siga siendo visible. Es el punto donde
+     * arranca su árbol, su panel y la ubicación que se le muestra.
+     */
+    public function topeVisible(int $sectorId): int
+    {
+        $actual    = $sectorId;
+        $visitados = [];
+
+        while (true) {
+            $padre = $this->arbol->padre($actual);
+            if ($padre === null || isset($visitados[$padre]) || !$this->veSector($padre)) {
+                return $actual;
+            }
+            $visitados[$actual] = true;
+            $actual = $padre;
+        }
+    }
+
     /** Valida que el usuario pueda operar sobre el nodo indicado. */
     public function puedeUsarSector(?int $sectorId, ?UserRole $user = null): bool
     {

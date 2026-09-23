@@ -165,9 +165,15 @@ class CuentaOperativaService extends BaseCrudService
             return false;
         };
 
-        $nodo = function (?int $sectorId) use (&$nodo, $arbol, $cuentas, $permitidas, $deLectura, $alcanzado): array {
+        // De la raíz cuelgan las Gerencias de Área o, si el usuario tiene un
+        // alcance acotado, los nodos más altos que puede ver.
+        $topes = $visibles === null
+            ? $arbol->raices()
+            : array_values(array_unique(array_map(fn ($id) => $scope->topeVisible($id), $visibles)));
+
+        $nodo = function (?int $sectorId) use (&$nodo, $arbol, $cuentas, $permitidas, $deLectura, $alcanzado, $topes): array {
             $clave = $sectorId === null ? 'raiz' : (string) $sectorId;
-            $hijos = $sectorId === null ? $arbol->raices() : $arbol->hijosDe($sectorId);
+            $hijos = $sectorId === null ? $topes : $arbol->hijosDe($sectorId);
             $hijos = array_values(array_filter($hijos, $alcanzado));
 
             return [

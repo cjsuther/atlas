@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AccessScopeService;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Model;
 
@@ -108,9 +109,23 @@ class CuentaOperativa extends Model
         return app(SectorTree::class)->nivelDe($this->sector_id);
     }
 
-    /** Camino desde la Gerencia de Área hasta el nodo, para mostrar en pantalla. */
+    /**
+     * Camino hasta el nodo, para mostrar en pantalla. Se nombran sólo los
+     * nodos que el usuario puede ver: quien tiene permiso sobre un Contrato no
+     * se entera de qué Gerencia cuelga.
+     */
     public function getRutaAttribute(): string
     {
-        return app(SectorTree::class)->rutaDe($this->sector_id);
+        $arbol = app(SectorTree::class);
+        $scope = app(AccessScopeService::class);
+
+        $nombres = [];
+        foreach ($arbol->ancestrosPorNivel($this->sector_id) as $id) {
+            if ($id !== null && $scope->veSector($id)) {
+                $nombres[] = (string) $arbol->nombre($id);
+            }
+        }
+
+        return $nombres ? implode(' › ', $nombres) : $arbol->rutaDe($this->sector_id);
     }
 }

@@ -247,8 +247,10 @@ class ContratoService
         return [
             'sector_id'     => $id,
             'nombre'        => $s->nombre,
-            'gerencia_area' => $this->arbol->nombre($ramas['gerencia_area']),
-            'gerencia'      => $this->arbol->nombre($ramas['gerencia']),
+            'gerencia_area' => $this->scope->veSector($ramas['gerencia_area'])
+                ? $this->arbol->nombre($ramas['gerencia_area']) : null,
+            'gerencia'      => $this->scope->veSector($ramas['gerencia'])
+                ? $this->arbol->nombre($ramas['gerencia']) : null,
             ...$campos,
             'monto_pesos'   => $ficha?->monto_pesos,
             'tipo'          => $ficha?->tipo?->sigla,

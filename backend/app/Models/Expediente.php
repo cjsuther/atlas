@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AccessScopeService;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -74,7 +75,7 @@ class Expediente extends Model
 
         $arbol = app(SectorTree::class);
         $raiz  = $arbol->raizDe((int) $this->sector_id);
-        if ($raiz === null) {
+        if ($raiz === null || !app(AccessScopeService::class)->veSector($raiz)) {
             return null;
         }
 
@@ -93,8 +94,12 @@ class Expediente extends Model
         $arbol = app(SectorTree::class);
         $ids   = $arbol->ancestrosPorNivel($this->sector_id !== null ? (int) $this->sector_id : null);
 
+        $scope = app(AccessScopeService::class);
+
         return array_map(
-            fn ($id) => $id === null ? null : ['sector_id' => $id, 'nombre' => (string) $arbol->nombre($id)],
+            fn ($id) => $id === null || !$scope->veSector($id)
+                ? null
+                : ['sector_id' => $id, 'nombre' => (string) $arbol->nombre($id)],
             $ids,
         );
     }

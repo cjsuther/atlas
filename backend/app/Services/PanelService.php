@@ -250,10 +250,11 @@ class PanelService
         }
 
         // 2) Se recorre cada rama emitiendo las dos filas de cada nodo.
+        // La rama arranca en el nodo más alto que el usuario puede ver: quien
+        // tiene permiso sobre un Contrato no ve el nombre de su Gerencia.
         $ramas = [];
         foreach (array_keys($porSector) as $sectorId) {
-            $raiz = $this->arbol->raizDe($sectorId) ?? $sectorId;
-            $ramas[$raiz] = true;
+            $ramas[$this->scope->topeVisible($sectorId)] = true;
         }
 
         $filas = [];
@@ -489,9 +490,11 @@ class PanelService
         };
 
         foreach ($this->importesPorCuenta($filters) as $c) {
-            $raiz     = $this->arbol->raizDe($c['sector_id']) ?? $c['sector_id'];
+            // Se agrupa por el nodo más alto que el usuario puede ver.
+            $raiz     = $this->scope->topeVisible($c['sector_id']);
             // Lo de la propia Gerencia de Área no tiene Gerencia: queda en su nodo.
-            $sectorId = $this->arbol->ancestrosPorNivel($c['sector_id'])['gerencia'] ?? $c['sector_id'];
+            $gerencia = $this->arbol->ancestrosPorNivel($c['sector_id'])['gerencia'] ?? null;
+            $sectorId = $gerencia !== null && $this->scope->veSector($gerencia) ? $gerencia : $raiz;
 
             $acumularEn($porSector, $sectorId, [
                 'sector_id'     => $sectorId,

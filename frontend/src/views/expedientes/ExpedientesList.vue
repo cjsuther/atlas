@@ -79,8 +79,8 @@
                             </router-link>
                         </td>
                         <td>
-                            <div>{{ r.estructura?.gerencia?.nombre || r.sector?.nombre || '—' }}</div>
-                            <div v-if="bajoLaGerencia(r)" style="font-size:12px;">
+                            <div>{{ r.estructura?.gerencia?.nombre || bajoLaGerencia(r) || r.sector?.nombre || '—' }}</div>
+                            <div v-if="bajoLaGerencia(r) && r.estructura?.gerencia?.nombre" style="font-size:12px;">
                                 {{ bajoLaGerencia(r) }}
                             </div>
                             <div v-if="r.gerencia_area" style="font-size:11px;color:var(--color-muted);">
@@ -208,6 +208,10 @@ FILTROS_ESTRUCTURA.forEach(([campo], i) => {
 });
 
 /** Contrato del expediente, cuando se imputa por debajo de la Gerencia. */
+/**
+ * El Contrato del expediente. Puede venir vacío: los niveles sobre los que el
+ * usuario no tiene permiso no se nombran.
+ */
 function bajoLaGerencia(r) {
     return r.estructura?.contrato?.nombre || '';
 }
