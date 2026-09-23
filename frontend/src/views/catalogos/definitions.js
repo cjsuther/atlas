@@ -30,6 +30,8 @@ const persona = (p) => [p.apellido, p.nombre].filter(Boolean).join(', ');
  */
 export const ENTITY_DEFS = {
     'tipos-contrato-ejecucion': {
+        // Los catálogos generales son del administrador del sistema.
+        soloAdmin: true,
         title: 'Tipos de contrato',
         endpoint: 'tipos-contrato-ejecucion',
         keyField: 'id',
@@ -44,6 +46,8 @@ export const ENTITY_DEFS = {
         ],
     },
     'estados-ejecucion': {
+        // Los catálogos generales son del administrador del sistema.
+        soloAdmin: true,
         title: 'Estados de contrato',
         endpoint: 'estados-ejecucion',
         keyField: 'id',
@@ -58,6 +62,8 @@ export const ENTITY_DEFS = {
         ],
     },
     'solicitantes': {
+        // Los catálogos generales son del administrador del sistema.
+        soloAdmin: true,
         title: 'Solicitantes',
         endpoint: 'solicitantes',
         keyField: 'solicitante_id',
@@ -204,6 +210,8 @@ export const ENTITY_DEFS = {
         ],
     },
     'uvt': {
+        // Los catálogos generales son del administrador del sistema.
+        soloAdmin: true,
         title: 'UVTs',
         endpoint: 'uvt',
         keyField: 'uvt_id',
@@ -220,6 +228,8 @@ export const ENTITY_DEFS = {
         ],
     },
     'personal': {
+        // Los catálogos generales son del administrador del sistema.
+        soloAdmin: true,
         title: 'Personal',
         endpoint: 'personal',
         keyField: 'legajo',

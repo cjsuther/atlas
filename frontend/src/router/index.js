@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { ENTITY_DEFS } from '@/views/catalogos/definitions';
 
 const routes = [
     { path: '/login', name: 'login', component: () => import('@/views/Login.vue'), meta: { public: true } },
@@ -82,6 +83,10 @@ router.beforeEach((to) => {
         return { name: 'panel' };
     }
     if (to.meta?.requiresAdmin && !auth.isAdmin) {
+        return { name: 'panel' };
+    }
+    // Los catálogos generales son del administrador, aunque se escriba la dirección.
+    if (to.name === 'catalogo' && ENTITY_DEFS[to.params.slug]?.soloAdmin && !auth.isAdmin) {
         return { name: 'panel' };
     }
     if (to.meta?.requiresEdit && !auth.canEdit) {

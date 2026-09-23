@@ -81,13 +81,14 @@ const NAV_SECTIONS = [
         ],
     },
     {
+        // Los catálogos generales los administra el administrador del sistema.
         title: 'Catálogos',
         items: [
-            { label: 'Tipos de contrato',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } } },
-            { label: 'Estados de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } } },
-            { label: 'Solicitantes',        icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } } },
-            { label: 'UVTs',                icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } } },
-            { label: 'Personal',            icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } } },
+            { label: 'Tipos de contrato',   icon: 'catalogos', soloAdmin: true, to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } } },
+            { label: 'Estados de contrato', icon: 'catalogos', soloAdmin: true, to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } } },
+            { label: 'Solicitantes',        icon: 'catalogos', soloAdmin: true, to: { name: 'catalogo', params: { slug: 'solicitantes' } } },
+            { label: 'UVTs',                icon: 'catalogos', soloAdmin: true, to: { name: 'catalogo', params: { slug: 'uvt' } } },
+            { label: 'Personal',            icon: 'catalogos', soloAdmin: true, to: { name: 'catalogo', params: { slug: 'personal' } } },
         ],
     },
     {
