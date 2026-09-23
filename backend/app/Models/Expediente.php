@@ -5,57 +5,30 @@ namespace App\Models;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
-class ContratoEjecucion extends Model
+/**
+ * Expediente: lo que se imputa a una cuenta operativa.
+ *
+ * Guarda su número y la cuenta; la rama (`sector_id`) se deduce de esa cuenta y
+ * queda como copia derivada, que es por donde filtran el alcance y el panel.
+ *
+ * «Contrato» no es esto: es el tercer nivel de la estructura.
+ */
+class Expediente extends Model
 {
     use SoftDeletes;
 
-    protected $table      = 'contratos_ejecucion';
+    protected $table      = 'expedientes';
     protected $primaryKey = 'id';
     public $timestamps    = true;
 
     protected $fillable = [
         'nro_expediente',
-        'fecha_apertura_expediente',
-        'tipo_contrato_id',
-        'nombre_proyecto',
-        'descripcion_objeto',
-        'contrato_principal_id',
         'sector_id',
         'cuenta_operativa_id',
-        'solicitante_id',
-        'resp1_id',
-        'resp2_id',
-        'estado_id',
-        'observaciones',
-        'uvt_id',
-        'cliente',
-        'fecha_inicio',
-        'fecha_vencimiento',
-        'fecha_finalizacion',
-        'acta_finalizacion',
-        'prorroga',
-        'renovacion_automatica',
-        'caja_bas',
-        'moneda',
-        'cotizacion',
-        'saldo_inicial',
-    ];
-
-    protected $casts = [
-        'fecha_apertura_expediente'    => 'date:Y-m-d',
-        'fecha_inicio'                 => 'date:Y-m-d',
-        'fecha_vencimiento'            => 'date:Y-m-d',
-        'fecha_finalizacion'           => 'date:Y-m-d',
-        'prorroga'                     => 'boolean',
-        'renovacion_automatica'        => 'boolean',
-        'cotizacion'                   => 'decimal:4',
-        'saldo_inicial'                => 'decimal:2',
     ];
 
     protected $appends = [
-        'duracion_meses', 'atraso_meses',
         'monto_ejecutado_ingresos', 'monto_ejecutado_gastos',
         'saldo', 'gerencia_area', 'estructura',
     ];
@@ -63,22 +36,8 @@ class ContratoEjecucion extends Model
     // ----------------------------------------------------------------------
     // Relaciones
     // ----------------------------------------------------------------------
-    public function tipoContrato()
-    {
-        return $this->belongsTo(TipoContratoEjecucion::class, 'tipo_contrato_id', 'id');
-    }
 
-    public function estado()
-    {
-        return $this->belongsTo(EstadoEjecucion::class, 'estado_id', 'id');
-    }
-
-    public function principal()
-    {
-        return $this->belongsTo(ContratoPrincipal::class, 'contrato_principal_id', 'id');
-    }
-
-    /** Sector del que cuelga el contrato: normalmente un subsector. */
+    /** Rama del árbol a la que pertenece, deducida de la cuenta. */
     public function sector()
     {
         return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
@@ -90,29 +49,10 @@ class ContratoEjecucion extends Model
         return $this->belongsTo(CuentaOperativa::class, 'cuenta_operativa_id');
     }
 
-    public function solicitante()
-    {
-        return $this->belongsTo(Solicitante::class, 'solicitante_id', 'solicitante_id');
-    }
-
-    public function uvt()
-    {
-        return $this->belongsTo(Uvt::class, 'uvt_id', 'uvt_id');
-    }
-
-    public function resp1()
-    {
-        return $this->belongsTo(Personal::class, 'resp1_id', 'legajo');
-    }
-
-    public function resp2()
-    {
-        return $this->belongsTo(Personal::class, 'resp2_id', 'legajo');
-    }
 
     public function movimientos()
     {
-        return $this->hasMany(EjecucionMovimiento::class, 'contrato_ejecucion_id', 'id');
+        return $this->hasMany(EjecucionMovimiento::class, 'expediente_id', 'id');
     }
 
     // ----------------------------------------------------------------------
@@ -120,7 +60,7 @@ class ContratoEjecucion extends Model
     // ----------------------------------------------------------------------
 
     /**
-     * Gerencia de Área del contrato: el ancestro raíz de su sector. Se expone
+     * Gerencia de Área del expediente: el ancestro raíz de su sector. Se expone
      * como atributo porque toda la lectura del sistema —alcance, panel,
      * exportaciones— se apoya en ella.
      *
@@ -143,7 +83,7 @@ class ContratoEjecucion extends Model
 
     /**
      * Dónde está el expediente en cada nivel de la estructura: Gerencia de
-     * Área, Gerencia, Plan y Contrato. Los niveles por debajo del nodo al que
+     * Área, Gerencia y Contrato. Los niveles por debajo del nodo al que
      * se imputa quedan en null.
      *
      * @return array<string, array{sector_id: int, nombre: string}|null>
@@ -159,25 +99,7 @@ class ContratoEjecucion extends Model
         );
     }
 
-    public function getDuracionMesesAttribute(): ?float
-    {
-        if (!$this->fecha_inicio || !$this->fecha_vencimiento) return null;
-        return round(Carbon::parse($this->fecha_inicio)
-            ->floatDiffInMonths(Carbon::parse($this->fecha_vencimiento)), 2);
-    }
 
-    public function getAtrasoMesesAttribute(): ?float
-    {
-        if (!$this->fecha_vencimiento) return null;
-        $estadoFinalizado = optional($this->estado)->nombre === 'Finalizado';
-        if ($estadoFinalizado) return null;
-
-        $venc = Carbon::parse($this->fecha_vencimiento);
-        $hoy  = Carbon::today();
-        if ($venc->greaterThanOrEqualTo($hoy)) return null;
-
-        return round($venc->floatDiffInMonths($hoy), 2);
-    }
 
     /**
      * Suma de movimientos tipo "ingreso" (en pesos). Se calcula a partir de:
@@ -196,17 +118,13 @@ class ContratoEjecucion extends Model
     }
 
     /**
-     * Saldo del contrato: lo que tenía al empezar más lo que entró menos lo
-     * que salió.
+     * Resultado del contrato: lo que entró menos lo que salió por los
+     * movimientos registrados contra él. El saldo
+     * disponible no es del contrato sino de la cuenta.
      */
     public function getSaldoAttribute(): float
     {
-        return round(
-            (float) ($this->saldo_inicial ?? 0)
-            + $this->monto_ejecutado_ingresos
-            - $this->monto_ejecutado_gastos,
-            2
-        );
+        return round($this->monto_ejecutado_ingresos - $this->monto_ejecutado_gastos, 2);
     }
 
     private function sumMovimientos(string $tipo, string $aliasPrecargado): float

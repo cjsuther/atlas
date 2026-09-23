@@ -34,54 +34,34 @@
                 </div>
                 <div class="field">
                     <label>Moneda base</label>
-                    <select v-model="filters.moneda_base" class="select">
-                        <option value="Peso">Peso</option>
-                        <option value="Dólar">Dólar</option>
-                        <option value="Euro">Euro</option>
-                    </select>
+                    <SelectBuscador v-model="filters.moneda_base"
+                                    :opciones="[{ value: 'Peso', etiqueta: 'Peso' },
+                                                { value: 'Dólar', etiqueta: 'Dólar' },
+                                                { value: 'Euro', etiqueta: 'Euro' }]" />
                 </div>
                 <div class="field">
                     <label>Gerencia de Área</label>
-                    <select v-model="filters.gerencia_area_id" class="select">
-                        <option value="">Todas</option>
-                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
-                    </select>
+                    <SelectBuscador v-model="filters.gerencia_area_id"
+                                    :opciones="areas.map(a => ({ value: a.sector_id, etiqueta: a.nombre }))"
+                                    opcion-vacia="Todas" valor-vacio="" placeholder="Todas" />
                 </div>
                 <div class="field">
                     <label>Gerencia</label>
-                    <select v-model="filters.sector_id" class="select">
-                        <option value="">Todas</option>
-                        <option v-for="g in gerenciasFiltradas" :key="g.sector_id" :value="g.sector_id">
-                            {{ g.nombre }}
-                        </option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Plan</label>
-                    <select v-model="filters.plan_id" class="select">
-                        <option value="">Todos</option>
-                        <option v-for="p in planesFiltrados" :key="p.sector_id" :value="p.sector_id">
-                            {{ p.nombre }}
-                        </option>
-                    </select>
+                    <SelectBuscador v-model="filters.sector_id"
+                                    :opciones="gerenciasFiltradas.map(g => ({ value: g.sector_id, etiqueta: g.nombre }))"
+                                    opcion-vacia="Todas" valor-vacio="" placeholder="Todas" />
                 </div>
                 <div class="field">
                     <label>Contrato</label>
-                    <select v-model="filters.nodo_id" class="select">
-                        <option value="">Todos</option>
-                        <option v-for="c in contratosFiltrados" :key="c.sector_id" :value="c.sector_id">
-                            {{ c.nombre }}
-                        </option>
-                    </select>
+                    <SelectBuscador v-model="filters.nodo_id"
+                                    :opciones="contratosFiltrados.map(c => ({ value: c.sector_id, etiqueta: c.nombre }))"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos" />
                 </div>
                 <div class="field">
                     <label>Cuenta operativa</label>
-                    <select v-model="filters.cuenta_operativa_id" class="select">
-                        <option value="">Todas</option>
-                        <option v-for="c in cuentasFiltradas" :key="c.id" :value="c.id">
-                            {{ c.nombre }}
-                        </option>
-                    </select>
+                    <SelectBuscador v-model="filters.cuenta_operativa_id"
+                                    :opciones="cuentasFiltradas.map(c => ({ value: c.id, etiqueta: c.nombre }))"
+                                    opcion-vacia="Todas" valor-vacio="" placeholder="Todas" />
                     <div class="hint">Los expedientes imputados a esa cuenta.</div>
                 </div>
             </div>
@@ -114,16 +94,19 @@
             <table class="atlas-table">
                 <thead>
                     <tr>
-                        <th>{{ tituloColumnaSaldos }}</th>
-                        <th style="text-align:right;">Expedientes</th>
-                        <th style="text-align:right;">Saldo inicial</th>
-                        <th style="text-align:right;">Ingresos</th>
-                        <th style="text-align:right;">Gastos</th>
-                        <th style="text-align:right;">Saldo</th>
+                        <ThOrden campo="etiqueta" :orden="ordenSaldos" @ordenar="ordenarSaldos">
+                            {{ tituloColumnaSaldos }}
+                        </ThOrden>
+                        <ThOrden campo="cuentas" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Cuentas</ThOrden>
+                        <ThOrden campo="contratos" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Contratos</ThOrden>
+                        <ThOrden campo="saldo_inicial" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Saldo inicial</ThOrden>
+                        <ThOrden campo="ejecutado_ingresos" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Ingresos</ThOrden>
+                        <ThOrden campo="ejecutado_gastos" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Gastos</ThOrden>
+                        <ThOrden campo="saldo" :orden="ordenSaldos" derecha @ordenar="ordenarSaldos">Saldo</ThOrden>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="f in saldos?.filas || []" :key="f.clave"
+                    <tr v-for="f in filasSaldos" :key="f.clave"
                         :class="['saldo-row', `nivel-${f.nivel}`, `alcance-${f.alcance}`]">
                         <td>
                             <div :style="{ paddingLeft: `${f.nivel * 20}px` }">
@@ -139,6 +122,7 @@
                                 {{ NIVELES_ARBOL[f.tipo] || f.tipo }} · acumulado de la rama
                             </div>
                         </td>
+                        <td style="text-align:right;">{{ fmtInt(f.cuentas) }}</td>
                         <td style="text-align:right;">{{ fmtInt(f.contratos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.saldo_inicial) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(f.ejecutado_ingresos) }}</td>
@@ -149,10 +133,11 @@
                         </td>
                     </tr>
                     <tr v-if="!saldos?.filas?.length">
-                        <td colspan="6" class="empty-state">Sin datos para el filtro aplicado.</td>
+                        <td colspan="7" class="empty-state">Sin datos para el filtro aplicado.</td>
                     </tr>
                     <tr v-else style="font-weight:600;border-top:2px solid var(--color-border);">
                         <td>Total ({{ saldos?.moneda_base }})</td>
+                        <td style="text-align:right;">{{ fmtInt(saldos?.totales?.cuentas) }}</td>
                         <td style="text-align:right;">{{ fmtInt(saldos?.totales?.contratos) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.saldo_inicial) }}</td>
                         <td style="text-align:right;">{{ fmtMoney(saldos?.totales?.ejecutado_ingresos) }}</td>
@@ -167,24 +152,12 @@
         <h3 style="margin:24px 0 10px;">Indicadores principales</h3>
         <div class="kpi-grid">
             <div class="kpi-card info">
-                <div class="label">Expedientes</div>
+                <div class="label">Cuentas</div>
+                <div class="value">{{ fmtInt(ind?.totales?.cuentas) }}</div>
+            </div>
+            <div class="kpi-card info">
+                <div class="label">Contratos</div>
                 <div class="value">{{ fmtInt(ind?.totales?.contratos) }}</div>
-            </div>
-            <div class="kpi-card warning">
-                <div class="label">En firma</div>
-                <div class="value">{{ fmtInt(ind?.totales?.en_firma) }}</div>
-            </div>
-            <div class="kpi-card success">
-                <div class="label">En ejecución</div>
-                <div class="value">{{ fmtInt(ind?.totales?.en_ejecucion) }}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="label">Finalizados</div>
-                <div class="value">{{ fmtInt(ind?.totales?.finalizados) }}</div>
-            </div>
-            <div class="kpi-card danger">
-                <div class="label">Vencidos</div>
-                <div class="value">{{ fmtInt(ind?.totales?.vencidos) }}</div>
             </div>
             <div class="kpi-card">
                 <div class="label">Saldo inicial ({{ ind?.montos?.moneda_base }})</div>
@@ -208,31 +181,6 @@
             </div>
         </div>
 
-        <!-- Indicadores calculados -->
-        <h3 style="margin:24px 0 10px;">Indicadores calculados</h3>
-        <div class="kpi-grid">
-            <div class="kpi-card info">
-                <div class="label">Días promedio de firma</div>
-                <div class="value">{{ calc?.dias_firma_promedio ?? '—' }}</div>
-            </div>
-            <div class="kpi-card info">
-                <div class="label">Días promedio de ejecución</div>
-                <div class="value">{{ calc?.dias_ejecucion_promedio ?? '—' }}</div>
-            </div>
-            <div class="kpi-card success">
-                <div class="label">% Finalizados en término</div>
-                <div class="value">{{ pctOrDash(calc?.porcentaje_finalizados_en_termino) }}</div>
-            </div>
-            <div class="kpi-card danger">
-                <div class="label">% Vencidos sin cierre</div>
-                <div class="value">{{ pctOrDash(calc?.porcentaje_vencidos_sin_cierre) }}</div>
-            </div>
-            <div class="kpi-card warning">
-                <div class="label">% Ejecución económica</div>
-                <div class="value">{{ pctOrDash(calc?.porcentaje_ejecucion_economica) }}</div>
-            </div>
-        </div>
-
         <!-- Distribución: un indicador por fila, con cantidad e importe -->
         <h3 style="margin:24px 0 10px;">Distribución</h3>
         <div style="display:grid;grid-template-columns:1fr;gap:16px;">
@@ -240,7 +188,7 @@
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por Gerencia de Área
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de expedientes
+                        · saldo y cantidad de cuentas
                     </span>
                 </h4>
                 <BarChart :rows="rowsPorArea" money />
@@ -249,19 +197,10 @@
                 <h4 style="margin:0 0 10px;color:var(--color-primary);">
                     Por Gerencia
                     <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de expedientes
+                        · saldo y cantidad de cuentas
                     </span>
                 </h4>
                 <BarChart :rows="rowsPorSector" money />
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">
-                    Por UVT
-                    <span style="font-weight:400;font-size:12px;color:var(--color-muted);">
-                        · saldo y cantidad de expedientes
-                    </span>
-                </h4>
-                <BarChart :rows="rowsPorUvt" money />
             </div>
         </div>
 
@@ -271,14 +210,14 @@
             <table class="atlas-table">
                 <thead>
                     <tr>
-                        <th>Acción</th>
-                        <th>Tipo</th>
-                        <th style="text-align:right;">Movimientos</th>
-                        <th style="text-align:right;">Total (ARS)</th>
+                        <ThOrden campo="accion" :orden="ordenAcciones" @ordenar="ordenarAcciones">Acción</ThOrden>
+                        <ThOrden campo="tipo" :orden="ordenAcciones" @ordenar="ordenarAcciones">Tipo</ThOrden>
+                        <ThOrden campo="cantidad" :orden="ordenAcciones" derecha @ordenar="ordenarAcciones">Movimientos</ThOrden>
+                        <ThOrden campo="total" :orden="ordenAcciones" derecha @ordenar="ordenarAcciones">Total (ARS)</ThOrden>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="(m, i) in acciones?.movimientos || []" :key="i">
+                    <tr v-for="(m, i) in filasAcciones" :key="i">
                         <td>{{ ACCION_LABELS[m.accion] || m.accion }}</td>
                         <td>
                             <span :class="['badge', m.tipo === 'ingreso' ? 'badge-success' : 'badge-warning']">
@@ -295,70 +234,6 @@
             </table>
         </div>
 
-        <!-- Vencimientos -->
-        <h3 style="margin:24px 0 10px;">Próximos vencimientos</h3>
-        <div class="kpi-grid">
-            <div class="kpi-card danger">
-                <div class="label">Vencidos</div>
-                <div class="value">{{ fmtInt(venc?.vencidos) }}</div>
-            </div>
-            <div class="kpi-card warning">
-                <div class="label">≤ 30 días</div>
-                <div class="value">{{ fmtInt(venc?.dias_30) }}</div>
-            </div>
-            <div class="kpi-card info">
-                <div class="label">31–60 días</div>
-                <div class="value">{{ fmtInt(venc?.dias_60) }}</div>
-            </div>
-            <div class="kpi-card">
-                <div class="label">61–90 días</div>
-                <div class="value">{{ fmtInt(venc?.dias_90) }}</div>
-            </div>
-        </div>
-
-        <!-- Rankings -->
-        <h3 style="margin:24px 0 10px;">Rankings</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">Gerencias de Área con más expedientes</h4>
-                <table class="atlas-table">
-                    <thead><tr><th>Gerencia de Área</th><th style="text-align:right;">Cantidad</th></tr></thead>
-                    <tbody>
-                        <tr v-for="(r, i) in ranks?.gerencias_area_por_cantidad || []" :key="i">
-                            <td>{{ r.gerencia_area || '—' }}</td>
-                            <td style="text-align:right;">{{ fmtInt(r.cantidad) }}</td>
-                        </tr>
-                        <tr v-if="!ranks?.gerencias_area_por_cantidad?.length">
-                            <td colspan="2" class="empty-state">Sin datos.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="card">
-                <h4 style="margin:0 0 10px;color:var(--color-primary);">UVT por saldo ({{ ranks?.moneda_base }})</h4>
-                <table class="atlas-table">
-                    <thead>
-                        <tr>
-                            <th>UVT</th>
-                            <th style="text-align:right;">Saldo inicial</th>
-                            <th style="text-align:right;">Saldo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(r, i) in ranks?.uvt_por_monto || []" :key="i">
-                            <td>{{ r.siglas }}<template v-if="r.nombre"> — {{ r.nombre }}</template></td>
-                            <td style="text-align:right;">{{ fmtMoney(r.saldo_inicial) }}</td>
-                            <td style="text-align:right;">{{ fmtMoney(r.saldo) }}</td>
-                        </tr>
-                        <tr v-if="!ranks?.uvt_por_monto?.length">
-                            <td colspan="3" class="empty-state">Sin datos.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div v-if="loading" class="empty-state"><span class="loader dark" /> Actualizando datos…</div>
     </div>
 </template>
 
@@ -367,13 +242,16 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { panelService } from '@/services/panel';
 import { authService } from '@/services/auth';
 import { exportFullService } from '@/services/exportFull';
-import { contratosEjecucionService } from '@/services/contratosEjecucion';
+import { expedientesService } from '@/services/expedientes';
 import { AGRUPACIONES_SALDO as AGRUPACIONES, useAuthStore } from '@/stores/auth';
+import { useOrdenTabla } from '@/composables/useOrden';
+import ThOrden from '@/components/ThOrden.vue';
 import { fmtInt, fmtMoney } from '@/composables/useFormat';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import BarChart from '@/components/BarChart.vue';
 import IconLib from '@/components/IconLib.vue';
+import SelectBuscador from '@/components/SelectBuscador.vue';
 
 const ACCION_LABELS = {
     factura:       'Factura',
@@ -391,7 +269,6 @@ const filters = reactive({
     moneda_base: 'Peso',
     gerencia_area_id: '',
     sector_id: '',
-    plan_id: '',
     nodo_id: '',
     cuenta_operativa_id: '',
 });
@@ -401,25 +278,88 @@ const filters = reactive({
 const NIVELES_ARBOL = {
     gerencia_area: 'Gerencia de Área',
     gerencia:      'Gerencia',
-    plan:          'Plan',
     contrato:      'Contrato',
 };
 
 const agrupacion = ref(auth.saldosAgrupacion);
 
 const ind = ref(null);
-const calc = ref(null);
 const saldos = ref(null);
-const dUvt = ref(null);
 const dGer = ref(null);
 const acciones = ref(null);
-const venc = ref(null);
-const ranks = ref(null);
 const arbol = ref(null);
 const loading = ref(false);
 const exporting = ref(false);
 const guardandoPref = ref(false);
 const generandoPdf = ref(false);
+
+/**
+ * La tabla de saldos es un árbol: cada nodo trae su fila de acumulado, la de lo
+ * propio, y debajo sus hijos. Ordenar no puede mezclar ramas, así que se
+ * ordenan los hermanos entre sí —por lo que muestra la fila de acumulado— y el
+ * árbol se vuelve a aplanar en ese orden.
+ */
+const ordenSaldos = reactive({ by: '', dir: 'asc' });
+
+function ordenarSaldos(campo) {
+    if (ordenSaldos.by === campo) {
+        ordenSaldos.dir = ordenSaldos.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        ordenSaldos.by = campo;
+        ordenSaldos.dir = 'asc';
+    }
+}
+
+const filasSaldos = computed(() => {
+    const filas = saldos.value?.filas || [];
+    if (!ordenSaldos.by) return filas;
+
+    // Las dos filas de un nodo comparten clave: 's-12-acumulado' y 's-12-propios'.
+    const claveNodo = (f) => String(f.clave).replace(/-(acumulado|propios)$/, '');
+    const nodos = new Map();
+    for (const f of filas) {
+        const clave = claveNodo(f);
+        if (!nodos.has(clave)) nodos.set(clave, { clave, padre: f.padre_clave ?? null, filas: [], hijos: [] });
+        nodos.get(clave).filas.push(f);
+    }
+
+    const raices = [];
+    for (const nodo of nodos.values()) {
+        const padre = nodo.padre !== null ? nodos.get(nodo.padre) : null;
+        (padre ? padre.hijos : raices).push(nodo);
+    }
+
+    const signo = ordenSaldos.dir === 'asc' ? 1 : -1;
+    const valor = (nodo) => {
+        const fila = nodo.filas.find(f => f.alcance === 'acumulado') || nodo.filas[0];
+        const v = fila?.[ordenSaldos.by];
+        return ordenSaldos.by === 'etiqueta' ? String(v ?? '') : Number(v ?? 0);
+    };
+    const comparar = (a, b) => {
+        const va = valor(a);
+        const vb = valor(b);
+        const c = typeof va === 'string'
+            ? va.localeCompare(vb, 'es', { numeric: true, sensitivity: 'base' })
+            : va - vb;
+        return signo * c;
+    };
+
+    const aplanar = (lista, salida) => {
+        for (const nodo of [...lista].sort(comparar)) {
+            salida.push(...nodo.filas);
+            aplanar(nodo.hijos, salida);
+        }
+        return salida;
+    };
+
+    return aplanar(raices, []);
+});
+
+// Tablas del panel: las filas vienen completas, así que ordenan en el navegador.
+// La de saldos queda afuera: es un árbol, y reordenarla lo desarmaría.
+const {
+    orden: ordenAcciones, ordenarPor: ordenarAcciones, filasOrdenadas: filasAcciones,
+} = useOrdenTabla(computed(() => acciones.value?.movimientos || []));
 
 const alcance = computed(() => {
     return auth.veTodo ? 'Todas las Gerencias de Área' : auth.alcanceLabel;
@@ -453,16 +393,14 @@ const areas = computed(() => nodos.value.filter(n => n.nivel === 1));
 const tituloColumnaSaldos = computed(() => ({
     gerencia_area: 'Gerencia de Área',
     gerencia:      'Gerencia de Área / Gerencia',
-    plan:          'Gerencia de Área / Gerencia / Plan',
-    contrato:      'Gerencia de Área / Gerencia / Plan / Contrato',
+    contrato:      'Gerencia de Área / Gerencia / Contrato',
 }[agrupacion.value] || 'Gerencia de Área'));
 
 /** Selectores de la estructura, de arriba hacia abajo, con su nivel en el árbol. */
 const FILTROS_ESTRUCTURA = [
     ['gerencia_area_id', 1],
     ['sector_id',        2],
-    ['plan_id',          3],
-    ['nodo_id',          4],
+    ['nodo_id',          3],
 ];
 
 /** Nodos de un nivel que caen dentro de lo elegido en los selectores de arriba. */
@@ -476,11 +414,8 @@ function nodosDelNivel(nivel) {
 /** Gerencias: segundo nivel, acotado a la Gerencia de Área elegida. */
 const gerenciasFiltradas = computed(() => nodosDelNivel(2));
 
-/** Planes: tercer nivel, acotado a la Gerencia elegida. */
-const planesFiltrados = computed(() => nodosDelNivel(3));
-
-/** Contratos: cuarto nivel, acotado al Plan elegido. */
-const contratosFiltrados = computed(() => nodosDelNivel(4));
+/** Contratos: tercer nivel, acotado a la Gerencia elegida. */
+const contratosFiltrados = computed(() => nodosDelNivel(3));
 
 /** Cuentas de la rama del nodo más profundo que se haya elegido. */
 const cuentasFiltradas = computed(() => {
@@ -512,7 +447,6 @@ function descripcionFiltros() {
     if (filters.moneda_base) partes.push(`moneda base ${filters.moneda_base}`);
     if (filters.gerencia_area_id) partes.push(`Gerencia de Área: ${nombre(filters.gerencia_area_id)}`);
     if (filters.sector_id) partes.push(`Gerencia: ${nombre(filters.sector_id)}`);
-    if (filters.plan_id) partes.push(`Plan: ${nombre(filters.plan_id)}`);
     if (filters.nodo_id) partes.push(`Contrato: ${nombre(filters.nodo_id)}`);
     if (filters.cuenta_operativa_id) {
         const cta = cuentasFiltradas.value.find(c => String(c.id) === String(filters.cuenta_operativa_id));
@@ -529,13 +463,9 @@ async function descargarPdf() {
         const { generarPanelPdf } = await import('@/services/panelPdf');
         generarPanelPdf({
             ind: ind.value,
-            calc: calc.value,
             saldos: saldos.value,
             dGer: dGer.value,
-            dUvt: dUvt.value,
             acciones: acciones.value,
-            venc: venc.value,
-            ranks: ranks.value,
             filtrosAplicados: descripcionFiltros(),
             alcance: alcance.value,
             usuario: auth.user?.display_name || auth.user?.username || '',
@@ -600,18 +530,13 @@ async function loadAll() {
     loading.value = true;
     try {
         const p = paramsClean();
-        const [a, b, c, d, e, f, g] = await Promise.all([
+        const [a, c, e, f] = await Promise.all([
             panelService.indicadores(p),
-            panelService.calculados(p),
             panelService.saldos({ ...p, agrupacion: agrupacion.value }),
-            panelService.porUvt(p),
             panelService.porGerencia(p),
             panelService.porAccion(p),
-            panelService.vencimientos(p),
         ]);
-        ind.value = a; calc.value = b; saldos.value = c; dUvt.value = d;
-        dGer.value = e; acciones.value = f; venc.value = g;
-        ranks.value = await panelService.rankings(p);
+        ind.value = a; saldos.value = c; dGer.value = e; acciones.value = f;
     } catch (err) {
         toast.error(extractError(err, 'No se pudieron cargar los indicadores.'));
     } finally {
@@ -621,29 +546,23 @@ async function loadAll() {
 
 function clearFilters() {
     filters.desde = ''; filters.hasta = ''; filters.moneda_base = 'Peso';
-    filters.gerencia_area_id = ''; filters.sector_id = ''; filters.plan_id = '';
+    filters.gerencia_area_id = ''; filters.sector_id = '';
     filters.nodo_id = ''; filters.cuenta_operativa_id = '';
     loadAll();
 }
 
-function pctOrDash(v) {
-    if (v === null || v === undefined) return '—';
-    return `${v}%`;
-}
-
 /**
  * La barra se dimensiona por el saldo, que es lo que interesa comparar entre
- * gerencias; la cantidad de expedientes acompaña al costado.
+ * gerencias; la cantidad de cuentas acompaña al costado.
  */
 function conImporte(filas, etiqueta) {
     return (filas || []).map(r => ({
         label: etiqueta(r) || '—',
         value: Number(r.saldo) || 0,
-        extra: `${fmtInt(r.cantidad)} contr.`,
+        extra: `${fmtInt(r.cantidad)} ctas.`,
     }));
 }
 
-const rowsPorUvt    = computed(() => conImporte(dUvt.value?.contratos, r => r.siglas));
 // Se muestran todas las gerencias: recortar a las primeras hacía que la suma
 // del gráfico no coincidiera con el total de expedientes del panel.
 const rowsPorSector = computed(() => conImporte(dGer.value?.sectores, r => r.nombre));
@@ -651,7 +570,7 @@ const rowsPorArea   = computed(() => conImporte(dGer.value?.gerencias_area, r =>
 
 onMounted(async () => {
     try {
-        arbol.value = await contratosEjecucionService.arbolEstructura();
+        arbol.value = await expedientesService.arbolEstructura();
     } catch { /* no-op */ }
     loadAll();
 });

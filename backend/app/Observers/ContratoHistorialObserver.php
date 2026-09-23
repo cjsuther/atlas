@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
 /**
- * Observer común para contratos_principal y contratos_ejecucion.
+ * Observer común para contratos_principal y expedientes.
  *
  * Persiste cada creación, modificación campo a campo y baja lógica en
  * la tabla `historial_cambios`. La columna `tabla` se obtiene del nombre

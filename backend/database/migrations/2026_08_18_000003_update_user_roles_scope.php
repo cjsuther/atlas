@@ -19,6 +19,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Instalación nueva: user_roles ya nace con es_admin y sin el rol viejo.
+        if (!Schema::hasColumn('user_roles', 'rol')) {
+            return;
+        }
+
         // El ENUM debe admitir los valores viejos y los nuevos a la vez para
         // poder reasignar los roles sin perder filas.
         DB::statement("

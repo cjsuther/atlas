@@ -14,6 +14,6 @@ class EstadoEjecucion extends Model
 
     public function contratos()
     {
-        return $this->hasMany(ContratoEjecucion::class, 'estado_id', 'id');
+        return $this->hasMany(Contrato::class, 'estado_id', 'id');
     }
 }

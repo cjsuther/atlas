@@ -32,8 +32,10 @@ class DatabaseBackupSchema
             ['table' => 'usuario_permisos',        'pk' => 'id',             'exclude' => []],
             ['table' => 'cuentas_operativas',      'pk' => 'id',             'exclude' => []],
             ['table' => 'personal',                'pk' => 'legajo',         'exclude' => []],
+            ['table' => 'contratos',               'pk' => 'sector_id',      'exclude' => []],
+            ['table' => 'contrato_archivos',       'pk' => 'id',             'exclude' => []],
             ['table' => 'contratos_principal',     'pk' => 'id',             'exclude' => []],
-            ['table' => 'contratos_ejecucion',     'pk' => 'id',             'exclude' => []],
+            ['table' => 'expedientes',     'pk' => 'id',             'exclude' => []],
             ['table' => 'ejecucion_movimientos',   'pk' => 'id',             'exclude' => []],
         ];
     }

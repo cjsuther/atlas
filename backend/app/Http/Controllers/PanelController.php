@@ -16,11 +16,6 @@ class PanelController extends Controller
         return response()->json(['data' => $this->service->indicadoresPrincipales($request->all())]);
     }
 
-    public function calculados(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->indicadoresCalculados($request->all())]);
-    }
-
     /**
      * GET /api/panel/saldos
      *
@@ -41,10 +36,6 @@ class PanelController extends Controller
         return response()->json(['data' => $this->service->saldos($filters)]);
     }
 
-    public function porUvt(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->porUvt($request->all())]);
-    }
 
     public function porGerencia(Request $request): JsonResponse
     {
@@ -56,13 +47,5 @@ class PanelController extends Controller
         return response()->json(['data' => $this->service->porAccion($request->all())]);
     }
 
-    public function vencimientos(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->vencimientos($request->all())]);
-    }
 
-    public function rankings(Request $request): JsonResponse
-    {
-        return response()->json(['data' => $this->service->rankings($request->all())]);
-    }
 }

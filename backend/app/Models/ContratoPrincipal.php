@@ -98,7 +98,7 @@ class ContratoPrincipal extends Model
 
     public function ejecuciones()
     {
-        return $this->hasMany(ContratoEjecucion::class, 'contrato_principal_id', 'id');
+        return $this->hasMany(Expediente::class, 'contrato_principal_id', 'id');
     }
 
     // ----------------------------------------------------------------------
@@ -179,7 +179,7 @@ class ContratoPrincipal extends Model
         // 3) Último recurso: una query SQL agregada para este principal.
         return round(
             (float) \DB::table('ejecucion_movimientos as m')
-                ->join('contratos_ejecucion as ce', 'ce.id', '=', 'm.contrato_ejecucion_id')
+                ->join('expedientes as ce', 'ce.id', '=', 'm.expediente_id')
                 ->where('ce.contrato_principal_id', $this->id)
                 ->where('m.tipo', $tipo)
                 ->whereNull('m.deleted_at')

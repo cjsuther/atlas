@@ -69,24 +69,25 @@ const NAV_SECTIONS = [
         title: 'Principal',
         items: [
             { label: 'Panel de Control', icon: 'dashboard', to: { name: 'panel' } },
-            { label: 'Ejecución',        icon: 'contratos', to: { name: 'contratos-ejecucion' } },
         ],
     },
     {
-        title: 'Estructura',
+        title: 'Operación',
         items: [
-            { label: 'Estructura',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } } },
-            { label: 'Cuentas Operativas',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } } },
+            { label: 'Estructura CNEA',  icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'sectores' } } },
+            { label: 'Cuentas',          icon: 'database',  to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } } },
+            { label: 'Contratos',        icon: 'contratos', to: { name: 'catalogo', params: { slug: 'contratos' } } },
+            { label: 'Expedientes',      icon: 'contratos', to: { name: 'expedientes' } },
         ],
     },
     {
         title: 'Catálogos',
         items: [
-            { label: 'Tipos de expediente', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } } },
-            { label: 'Estados',           icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } } },
-            { label: 'Solicitantes',      icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } } },
-            { label: 'UVTs',              icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } } },
-            { label: 'Personal',          icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } } },
+            { label: 'Tipos de contrato',   icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'tipos-contrato-ejecucion' } } },
+            { label: 'Estados de contrato', icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'estados-ejecucion' } } },
+            { label: 'Solicitantes',        icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'solicitantes' } } },
+            { label: 'UVTs',                icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'uvt' } } },
+            { label: 'Personal',            icon: 'catalogos', to: { name: 'catalogo', params: { slug: 'personal' } } },
         ],
     },
     {

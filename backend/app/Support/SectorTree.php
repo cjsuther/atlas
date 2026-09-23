@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
  * Jerarquía de sectores resuelta en memoria.
  *
  * La estructura organizativa vive en la tabla `sector`, que se referencia a sí
- * misma. El árbol tiene cuatro niveles fijos, dados por la profundidad del nodo:
+ * misma. El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
  *
- *   Gerencia de Área (raíz)  ->  Gerencia  ->  Plan  ->  Contrato
+ *   Gerencia de Área (raíz)  ->  Gerencia  ->  Contrato
  *
  * De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
  * imputan los expedientes.
@@ -171,7 +171,7 @@ class SectorTree
     }
 
     /** Niveles del árbol, por profundidad. */
-    public const NIVELES = ['gerencia_area', 'gerencia', 'plan', 'contrato'];
+    public const NIVELES = ['gerencia_area', 'gerencia', 'contrato'];
 
     public const NIVEL_ORGANIZACION = 'organizacion';
 
@@ -180,13 +180,12 @@ class SectorTree
         self::NIVEL_ORGANIZACION => 'Toda la organización',
         'gerencia_area'          => 'Gerencia de Área',
         'gerencia'               => 'Gerencia',
-        'plan'                   => 'Plan',
         'contrato'               => 'Contrato',
     ];
 
     /**
      * Profundidad del nodo: 1 para una Gerencia de Área, 2 para una Gerencia,
-     * 3 para un Plan y 4 para un Contrato. 0 es la raíz del árbol (toda la
+     * 3 para un Contrato. 0 es la raíz del árbol (toda la
      * organización).
      */
     public function profundidadDe(?int $sectorId): int
@@ -214,6 +213,16 @@ class SectorTree
         return $profundidad;
     }
 
+    /** Nodos que están en un nivel del árbol. @return array<int> */
+    public function nodosDelNivel(string $nivel): array
+    {
+        $this->cargar();
+        return array_values(array_filter(
+            array_keys($this->padres),
+            fn ($id) => $this->nivelDe($id) === $nivel,
+        ));
+    }
+
     /** Nivel del árbol en el que está el nodo. */
     public function nivelDe(?int $sectorId): string
     {
@@ -224,7 +233,7 @@ class SectorTree
     /**
      * El nodo y sus ancestros, cada uno en el nivel que ocupa. Los niveles por
      * debajo del nodo quedan en null: un expediente imputado a una Gerencia no
-     * tiene Plan ni Contrato.
+     * tiene Contrato.
      *
      * @return array<string, int|null> nivel => sector_id
      */

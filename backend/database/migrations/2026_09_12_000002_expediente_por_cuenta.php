@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * El expediente pasa a imputarse a una cuenta operativa, y su rama se deduce
@@ -15,6 +16,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('contratos_ejecucion')) {
+            return;
+        }
+
         // La cuenta es obligatoria: la migración anterior dejó a todos con una.
         DB::statement('ALTER TABLE contratos_ejecucion MODIFY cuenta_operativa_id INT NOT NULL');
         DB::statement('ALTER TABLE contratos_ejecucion MODIFY sector_id INT NULL');

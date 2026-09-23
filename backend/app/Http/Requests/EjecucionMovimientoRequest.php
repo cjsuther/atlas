@@ -2,18 +2,22 @@
 
 namespace App\Http\Requests;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\EjecucionMovimiento;
 use App\Services\AccessScopeService;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Validación de un movimiento de ejecución.
  *
+ * El movimiento se registra en una cuenta. El contrato es opcional: dice con
+ * qué convenio se relaciona.
+ *
  * La contraparte depende de la acción:
  *   factura       -> cliente (ingreso) o proveedor (gasto)
- *   transferencia -> otro contrato de ejecución
+ *   transferencia -> otra cuenta operativa
  *   incentivo/mch -> rubro (son siempre gastos)
  */
 class EjecucionMovimientoRequest extends FormRequest
@@ -25,13 +29,14 @@ class EjecucionMovimientoRequest extends FormRequest
         return [
             'tipo'           => ['required', 'in:ingreso,gasto'],
             'accion'         => ['required', 'in:' . implode(',', EjecucionMovimiento::ACCIONES)],
-            'nro_expediente' => ['required', 'string', 'max:100',
-                                 'regex:/^EX-\d{4}-\d+--APN-[A-Za-z0-9#]+$/'],
+            // El expediente se elige de los cargados en el sistema, no se escribe.
+            'expediente_id'  => ['required', 'integer',
+                                 Rule::exists('expedientes', 'id')->whereNull('deleted_at')],
 
             // Contraparte: cada campo aplica sólo a ciertas acciones (ver withValidator).
             'proveedor'               => ['nullable', 'string', 'max:300'],
             'cliente'                 => ['nullable', 'string', 'max:300'],
-            'contrato_contraparte_id' => ['nullable', 'integer', 'exists:contratos_ejecucion,id'],
+            'cuenta_contraparte_id'   => ['nullable', 'integer', 'exists:cuentas_operativas,id'],
             'rubro'                   => ['nullable', 'string', 'max:200'],
 
             'moneda'         => ['required', 'in:Peso,Dólar'],
@@ -56,7 +61,8 @@ class EjecucionMovimientoRequest extends FormRequest
         return [
             'tipo.required'              => 'Debe indicar si el movimiento es ingreso o gasto.',
             'accion.required'            => 'Debe indicar la acción (factura, transferencia, incentivo o MCH).',
-            'nro_expediente.regex'       => 'El expediente debe tener el formato EX-AAAA-NNNN--APN-REPARTICIÓN.',
+            'expediente_id.required'     => 'Debe elegir el expediente del movimiento.',
+            'expediente_id.exists'       => 'El expediente indicado no existe.',
             'monto.required_if'          => 'El monto en pesos es obligatorio.',
             'monto_dolares.required_if'  => 'El monto en dólares es obligatorio cuando la moneda es Dólar.',
             'cotizacion.required_if'     => 'La cotización es obligatoria cuando la moneda es Dólar.',
@@ -82,21 +88,17 @@ class EjecucionMovimientoRequest extends FormRequest
                     break;
 
                 case EjecucionMovimiento::ACCION_TRANSFERENCIA:
-                    if (!$this->filled('contrato_contraparte_id')) {
-                        $v->errors()->add('contrato_contraparte_id',
-                            'Debe indicar el contrato con el que se hace la transferencia.');
-                    } elseif ($this->contratoActualId() === (int) $this->input('contrato_contraparte_id')) {
-                        $v->errors()->add('contrato_contraparte_id',
-                            'No se puede transferir un contrato a sí mismo.');
-                    } else {
-                        // La transferencia escribe un movimiento espejo dentro del
-                        // expediente contraparte, así que hace falta escritura sobre
-                        // él: si no, se toca la ejecución de otra rama.
-                        $contraparte = ContratoEjecucion::find((int) $this->input('contrato_contraparte_id'));
-                        if ($contraparte && !app(AccessScopeService::class)->puedeEditarContrato($contraparte)) {
-                            $v->errors()->add('contrato_contraparte_id',
-                                'No tiene permisos sobre el contrato de la contraparte.');
-                        }
+                    if (!$this->filled('cuenta_contraparte_id')) {
+                        $v->errors()->add('cuenta_contraparte_id',
+                            'Debe indicar la cuenta con la que se hace la transferencia.');
+                    } elseif ($this->cuentaActualId() === (int) $this->input('cuenta_contraparte_id')) {
+                        $v->errors()->add('cuenta_contraparte_id',
+                            'No se puede transferir una cuenta a sí misma.');
+                    } elseif (!app(AccessScopeService::class)->puedeUsarCuenta((int) $this->input('cuenta_contraparte_id'))) {
+                        // La transferencia escribe la contrapartida en la otra
+                        // cuenta, así que hace falta escritura sobre ella.
+                        $v->errors()->add('cuenta_contraparte_id',
+                            'No tiene permisos sobre la cuenta de la contraparte.');
                     }
                     break;
 
@@ -111,6 +113,14 @@ class EjecucionMovimientoRequest extends FormRequest
                     break;
             }
 
+            // El expediente tiene que estar dentro del alcance del usuario.
+            if ($this->filled('expediente_id')) {
+                $contrato = Expediente::find((int) $this->input('expediente_id'));
+                if ($contrato && !app(AccessScopeService::class)->puedeVerContrato($contrato)) {
+                    $v->errors()->add('expediente_id', 'El expediente no está a su alcance.');
+                }
+            }
+
             if ($this->hasFile('factura')
                 && ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'gasto')) {
                 $v->errors()->add('factura', 'Sólo se adjunta factura en los gastos por factura.');
@@ -118,8 +128,8 @@ class EjecucionMovimientoRequest extends FormRequest
         });
     }
 
-    /** Contrato al que pertenece el movimiento (alta por ruta, edición por el registro). */
-    private function contratoActualId(): ?int
+    /** Cuenta en la que se registra el movimiento (alta por ruta, edición por el registro). */
+    private function cuentaActualId(): ?int
     {
         $desdeRuta = $this->route('id');
 
@@ -131,6 +141,6 @@ class EjecucionMovimientoRequest extends FormRequest
             ? EjecucionMovimiento::withTrashed()->find((int) $desdeRuta)
             : null;
 
-        return $movimiento ? (int) $movimiento->contrato_ejecucion_id : null;
+        return $movimiento ? (int) $movimiento->cuenta_operativa_id : null;
     }
 }

@@ -4,7 +4,7 @@
 -- MySQL 8 / utf8mb4
 --
 -- Cambios v2:
---   * Se separa la tabla `contratos` en `contratos_principal` y `contratos_ejecucion`.
+--   * Se separa la tabla `contratos` en `contratos_principal` y `expedientes`.
 --   * Se separan tipos y estados en tablas distintas para principal y ejecución.
 --   * Se incorpora `historial_cambios` (auditoría obligatoria).
 --   * Toda baja es lógica (`deleted_at`).
@@ -13,7 +13,7 @@
 --   * La estructura organizativa es la tabla `sector`: los sectores sin
 --     dependencia son las Gerencias de Área y reemplazan a la gestión de
 --     contratos principales.
---   * `contratos_ejecucion.sector_id` es obligatorio (jerarquía completa
+--   * `expedientes.sector_id` es obligatorio (jerarquía completa
 --     Gerencia de Área -> Subsector -> Contrato -> Movimiento).
 --   * `ejecucion_movimientos` admite acciones además de facturas
 --     (transferencias entre contratos, incentivos y MCH) y contraparte
@@ -82,12 +82,11 @@ CREATE TABLE IF NOT EXISTS solicitantes (
 --   * Un sector sin dependencia es una Gerencia de Área. Es el nivel al que se
 --     asocian los administradores y operadores de gerencia, y el límite de
 --     confidencialidad: la información no sale de la Gerencia de Área.
---   * Los sectores dependientes son las Gerencias; bajo ellas, los Planes, y
---     bajo los Planes, los Contratos.
+--   * Los sectores dependientes son las Gerencias y, bajo ellas, los Contratos.
 --
---   El árbol tiene cuatro niveles fijos, dados por la profundidad del nodo:
+--   El árbol tiene tres niveles fijos, dados por la profundidad del nodo:
 --
---   Gerencia de Área -> Gerencia -> Plan -> Contrato
+--   Gerencia de Área -> Gerencia -> Contrato
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sector (
   sector_id      INT AUTO_INCREMENT PRIMARY KEY,
@@ -114,6 +113,7 @@ CREATE TABLE IF NOT EXISTS cuentas_operativas (
   nombre       VARCHAR(200) NOT NULL,
   sector_id    INT NOT NULL,              -- nodo del árbol del que cuelga
   descripcion  VARCHAR(500) NULL,
+  saldo_inicial DECIMAL(18,2) NOT NULL DEFAULT 0,  -- con lo que arranca la cuenta
   activo       TINYINT(1) NOT NULL DEFAULT 1,
   created_at   TIMESTAMP NULL,
   updated_at   TIMESTAMP NULL,
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS personal (
 -- `sector_id` apunta a la Gerencia de Área (un sector sin dependencia) y es
 -- obligatorio para los roles acotados.
 -- `saldos_agrupacion` es la configuración con la que el usuario ve los saldos
--- del panel (por Gerencia de Área, Gerencia, Plan o Contrato).
+-- del panel (por Gerencia de Área, Gerencia o Contrato).
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_roles (
   id                INT AUTO_INCREMENT PRIMARY KEY,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
   password          VARCHAR(255) NULL,
   auth_source       ENUM('local','ldap') NOT NULL DEFAULT 'ldap',
   es_admin          TINYINT(1) NOT NULL DEFAULT 0,   -- administra la configuración del sistema
-  saldos_agrupacion ENUM('gerencia_area','gerencia','plan','contrato') NOT NULL DEFAULT 'gerencia_area',
+  saldos_agrupacion ENUM('gerencia_area','gerencia','contrato') NOT NULL DEFAULT 'gerencia_area',
   activo            TINYINT(1) DEFAULT 1,
   last_login        TIMESTAMP NULL,
   created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -269,14 +269,14 @@ CREATE TABLE IF NOT EXISTS contratos_principal (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
--- Tabla: contratos_ejecucion
+-- Tabla: expedientes
 -- Contrato concreto. Tipos: CP, CIT, CE.
 -- Cuelga SIEMPRE de un sector; la Gerencia de Área es el ancestro raíz de ese
 -- sector. El vínculo con contratos_principal se conserva sólo por trazabilidad
 -- histórica: la gestión de contratos principales fue reemplazada por la
 -- estructura Gerencia de Área -> Subsector.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS contratos_ejecucion (
+CREATE TABLE IF NOT EXISTS expedientes (
   id                          INT AUTO_INCREMENT PRIMARY KEY,
   nro_expediente              VARCHAR(100) NOT NULL,
   fecha_apertura_expediente   DATE         NULL,
@@ -348,6 +348,88 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------
+-- Tabla: contratos
+-- Ficha del Contrato, el tercer nivel de la estructura: 1:1 con su nodo.
+-- El monto va en su moneda; si no es pesos, la cotización lo lleva a pesos.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS contratos (
+  sector_id              INT          NOT NULL PRIMARY KEY,
+  tipo_contrato_id       INT          NULL,
+  estado_id              INT          NULL,
+  uvt_id                 INT          NULL,
+  solicitante_id         INT          NULL,
+  resp1_id               INT          NULL,
+  resp2_id               INT          NULL,
+  descripcion_objeto     TEXT         NULL,
+  cliente                VARCHAR(300) NULL,
+  caja_bas               VARCHAR(200) NULL,
+  fecha_inicio           DATE         NULL,
+  fecha_vencimiento      DATE         NULL,
+  fecha_finalizacion     DATE         NULL,
+  acta_finalizacion      VARCHAR(500) NULL,
+  prorroga               TINYINT(1)   NOT NULL DEFAULT 0,
+  renovacion_automatica  TINYINT(1)   NOT NULL DEFAULT 0,
+  monto                  DECIMAL(18,2) NULL,
+  moneda                 ENUM('Peso','Dólar','Euro') NOT NULL DEFAULT 'Peso',
+  cotizacion             DECIMAL(18,4) NULL,
+  observaciones          TEXT         NULL,
+  created_at             TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at             TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  KEY idx_ct_tipo        (tipo_contrato_id),
+  KEY idx_ct_estado      (estado_id),
+  KEY idx_ct_uvt         (uvt_id),
+  KEY idx_ct_solicitante (solicitante_id),
+  KEY idx_ct_vencimiento (fecha_vencimiento),
+
+  CONSTRAINT fk_ct_sector
+    FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_tipo
+    FOREIGN KEY (tipo_contrato_id) REFERENCES tipo_contrato_ejecucion(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_estado
+    FOREIGN KEY (estado_id) REFERENCES estado_ejecucion(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_uvt
+    FOREIGN KEY (uvt_id) REFERENCES uvt(uvt_id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_solic
+    FOREIGN KEY (solicitante_id) REFERENCES solicitantes(solicitante_id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_resp1
+    FOREIGN KEY (resp1_id) REFERENCES personal(legajo)
+    ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT fk_ct_resp2
+    FOREIGN KEY (resp2_id) REFERENCES personal(legajo)
+    ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
+-- Tabla: contrato_archivos
+-- Adjuntos de un contrato (convenio, actas, anexos). El archivo vive en el
+-- disco privado del backend (storage/app/private/contratos/<sector_id>/).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS contrato_archivos (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  sector_id        INT          NOT NULL,
+  nombre_original  VARCHAR(255) NOT NULL,
+  ruta             VARCHAR(500) NOT NULL,
+  mime             VARCHAR(150) NULL,
+  tamano           BIGINT       NOT NULL DEFAULT 0,
+  descripcion      VARCHAR(500) NULL,
+  subido_por       VARCHAR(100) NULL,
+  created_at       TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  KEY idx_ca_sector (sector_id),
+
+  CONSTRAINT fk_ca_sector
+    FOREIGN KEY (sector_id) REFERENCES sector(sector_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------
 -- Tabla: ejecucion_movimientos (gastos / ingresos imputados a una
 -- ejecución concreta). Reemplaza a los campos monto_ejecutado_* del
 -- contrato de ejecución: los montos ejecutados son ahora la suma de
@@ -365,14 +447,16 @@ CREATE TABLE IF NOT EXISTS contratos_ejecucion (
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ejecucion_movimientos (
   id                       INT AUTO_INCREMENT PRIMARY KEY,
-  contrato_ejecucion_id    INT          NOT NULL,
+  cuenta_operativa_id      INT          NOT NULL, -- cuenta en la que se registra
+  expediente_id    INT          NULL,     -- contrato relacionado (opcional)
   tipo                     ENUM('ingreso','gasto') NOT NULL,
   accion                   ENUM('factura','transferencia','incentivo','mch') NOT NULL DEFAULT 'factura',
   nro_expediente           VARCHAR(100) NOT NULL,
-  contraparte_tipo         ENUM('cliente','proveedor','contrato','rubro') NULL,
+  contraparte_tipo         ENUM('cliente','proveedor','cuenta','rubro') NULL,
   proveedor                VARCHAR(300) NULL,          -- gastos por factura
   cliente                  VARCHAR(300) NULL,          -- ingresos por factura
-  contrato_contraparte_id  INT          NULL,          -- transferencias
+  expediente_contraparte_id  INT          NULL,          -- histórico: transferencias entre expedientes
+  cuenta_contraparte_id    INT          NULL,          -- transferencias: la otra cuenta
   rubro                    VARCHAR(200) NULL,          -- incentivos / MCH / sin contraparte
   movimiento_espejo_id     INT          NULL,          -- contrapartida de una transferencia
   moneda                   ENUM('Peso','Dólar') NOT NULL DEFAULT 'Peso',
@@ -387,18 +471,26 @@ CREATE TABLE IF NOT EXISTS ejecucion_movimientos (
   created_at               TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   updated_at               TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-  KEY idx_em_contrato      (contrato_ejecucion_id),
+  KEY idx_em_cuenta        (cuenta_operativa_id),
+  KEY idx_em_cuenta_contraparte (cuenta_contraparte_id),
+  KEY idx_em_contrato      (expediente_id),
   KEY idx_em_tipo          (tipo),
   KEY idx_em_accion        (accion),
-  KEY idx_em_contraparte   (contrato_contraparte_id),
+  KEY idx_em_contraparte   (expediente_contraparte_id),
   KEY idx_em_espejo        (movimiento_espejo_id),
   KEY idx_em_deleted       (deleted_at),
 
+  CONSTRAINT fk_em_cuenta
+    FOREIGN KEY (cuenta_operativa_id) REFERENCES cuentas_operativas(id)
+    ON UPDATE CASCADE,
+  CONSTRAINT fk_em_cuenta_contraparte
+    FOREIGN KEY (cuenta_contraparte_id) REFERENCES cuentas_operativas(id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_em_contrato
-    FOREIGN KEY (contrato_ejecucion_id) REFERENCES contratos_ejecucion(id)
-    ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (expediente_id) REFERENCES expedientes(id)
+    ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT fk_em_contraparte
-    FOREIGN KEY (contrato_contraparte_id) REFERENCES contratos_ejecucion(id)
+    FOREIGN KEY (expediente_contraparte_id) REFERENCES expedientes(id)
     ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

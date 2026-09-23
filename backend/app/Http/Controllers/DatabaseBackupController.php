@@ -18,6 +18,14 @@ class DatabaseBackupController extends Controller
 {
     public function __construct(protected ImportadorTablas $importador) {}
 
+    /**
+     * Nombre que tenía la solapa en los archivos anteriores. Un export viejo
+     * sigue entrando aunque la tabla se haya renombrado.
+     */
+    private const SOLAPAS_ANTERIORES = [
+        'expedientes' => 'contratos_ejecucion',
+    ];
+
     /** @var array<int, string> avisos propios del recorrido de tablas */
     private array $avisos = [];
 
@@ -93,6 +101,8 @@ class DatabaseBackupController extends Controller
      */
     private function importTables(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet, array &$resumen): void
     {
+        $reconocidas = 0;
+
         foreach (DatabaseBackupSchema::tables() as $def) {
             $table = $def['table'];
             $pk    = $def['pk'];
@@ -102,11 +112,14 @@ class DatabaseBackupController extends Controller
                 continue;
             }
 
-            $sheet = $spreadsheet->getSheetByName($table);
+            $sheet = $spreadsheet->getSheetByName($table)
+                ?: $spreadsheet->getSheetByName(self::SOLAPAS_ANTERIORES[$table] ?? '');
             if (!$sheet) {
                 $resumen[] = ['tabla' => $table, 'insertados' => 0, 'actualizados' => 0, 'omitida' => true];
                 continue;
             }
+
+            $reconocidas++;
 
             $allowed = DatabaseBackupSchema::columnsFor($table, $def['exclude']);
             $matrix  = $sheet->toArray(null, true, false, false);
@@ -191,6 +204,16 @@ class DatabaseBackupController extends Controller
                                 . 'habiendo un administrador de sistema con acceso.';
             }
         }
+
+        // Un archivo que no trae ninguna solapa con nombre de tabla no es un
+        // backup: lo más común es confundirlo con el export legible del panel.
+        if ($reconocidas === 0) {
+            throw new \RuntimeException(
+                'el archivo no tiene ninguna solapa con el nombre de una tabla '
+                . '(por ejemplo "sector" o "expedientes"). Para importar hace falta el '
+                . 'archivo de "Exportar base de datos"; el de "Exportar todo a Excel" es sólo para leer.'
+            );
+        }
     }
 
     /**
@@ -261,7 +284,8 @@ class DatabaseBackupController extends Controller
     {
         // Además de las columnas de la tabla se conservan las del formato
         // anterior, porque el importador las necesita para traducirlas.
-        $legadas = ['gerencia', 'gerencia_area', 'rol'];
+        $legadas = ['gerencia', 'gerencia_area', 'rol',
+                    'contrato_ejecucion_id', 'contrato_contraparte_id'];
         $row = [];
         $hasValue = false;
 

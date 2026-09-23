@@ -23,11 +23,11 @@
                 </div>
                 <div class="field">
                     <label>Tipo</label>
-                    <select v-model="state.es_admin" class="select" @change="reload">
-                        <option value="">Todos</option>
-                        <option value="1">Administradores del sistema</option>
-                        <option value="0">Resto</option>
-                    </select>
+                    <SelectBuscador v-model="state.es_admin"
+                                    :opciones="[{ value: '1', etiqueta: 'Administradores del sistema' },
+                                                { value: '0', etiqueta: 'Resto' }]"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
+                                    @update:model-value="reload" />
                 </div>
                 <div v-if="pendientes > 0" class="field aviso-pendientes">
                     <label>Pendientes de asignación</label>
@@ -37,28 +37,24 @@
                 </div>
                 <div class="field">
                     <label>Con permiso sobre</label>
-                    <select v-model="state.sector_id" class="select" @change="reload">
-                        <option value="">Cualquier rama</option>
-                        <option v-for="o in opcionesNodo" :key="o.sector_id" :value="o.sector_id">
-                            {{ o.etiqueta }}
-                        </option>
-                    </select>
+                    <SelectBuscador v-model="state.sector_id"
+                                    :opciones="opcionesNodo.map(o => ({ value: o.sector_id, etiqueta: o.etiqueta }))"
+                                    opcion-vacia="Cualquier rama" valor-vacio="" placeholder="Cualquier rama"
+                                    @update:model-value="reload" />
                 </div>
                 <div class="field">
                     <label>Origen</label>
-                    <select v-model="state.auth_source" class="select" @change="reload">
-                        <option value="">Todos</option>
-                        <option value="local">Local</option>
-                        <option value="ldap">LDAP</option>
-                    </select>
+                    <SelectBuscador v-model="state.auth_source"
+                                    :opciones="[{ value: 'local', etiqueta: 'Local' }, { value: 'ldap', etiqueta: 'LDAP' }]"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
+                                    @update:model-value="reload" />
                 </div>
                 <div class="field">
                     <label>Estado</label>
-                    <select v-model="state.activo" class="select" @change="reload">
-                        <option value="">Todos</option>
-                        <option value="1">Activos</option>
-                        <option value="0">Inactivos</option>
-                    </select>
+                    <SelectBuscador v-model="state.activo"
+                                    :opciones="[{ value: '1', etiqueta: 'Activos' }, { value: '0', etiqueta: 'Inactivos' }]"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
+                                    @update:model-value="reload" />
                 </div>
             </div>
         </div>
@@ -70,19 +66,19 @@
             <table class="atlas-table">
                 <thead>
                     <tr>
-                        <th>Usuario</th>
-                        <th>Nombre</th>
-                        <th>E-mail</th>
-                        <th>Alcance</th>
-                        <th>Origen</th>
-                        <th>Activo</th>
-                        <th>Último login</th>
+                        <ThOrden campo="username" :orden="orden" @ordenar="ordenarPor">Usuario</ThOrden>
+                        <ThOrden campo="display_name" :orden="orden" @ordenar="ordenarPor">Nombre</ThOrden>
+                        <ThOrden campo="email" :orden="orden" @ordenar="ordenarPor">E-mail</ThOrden>
+                        <ThOrden campo="alcance" :orden="orden" @ordenar="ordenarPor">Alcance</ThOrden>
+                        <ThOrden campo="auth_source" :orden="orden" @ordenar="ordenarPor">Origen</ThOrden>
+                        <ThOrden campo="activo" :orden="orden" @ordenar="ordenarPor">Activo</ThOrden>
+                        <ThOrden campo="last_login" :orden="orden" @ordenar="ordenarPor">Último login</ThOrden>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="u in rows" :key="u.id">
-                        <td>{{ u.username }}</td>
+                        <td><a href="#" @click.prevent="openEdit(u)" title="Abrir para editar">{{ u.username }}</a></td>
                         <td>{{ u.display_name || '—' }}</td>
                         <td>{{ u.email || '—' }}</td>
                         <td>
@@ -136,10 +132,9 @@
                     </div>
                     <div class="field" v-if="!editing">
                         <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
-                        <select v-model="formData.auth_source" class="select" required>
-                            <option value="local">Base de datos (local)</option>
-                            <option value="ldap">LDAP / Active Directory</option>
-                        </select>
+                        <SelectBuscador v-model="formData.auth_source"
+                                        :opciones="[{ value: 'local', etiqueta: 'Base de datos (local)' },
+                                                    { value: 'ldap', etiqueta: 'LDAP / Active Directory' }]" />
                         <div class="hint" v-if="formData.auth_source === 'ldap'">
                             Se autentica contra el directorio; no se define contraseña.
                         </div>
@@ -189,13 +184,12 @@
                                     {{ n.nombre }}
                                     <small v-if="heredado(n)">— heredado</small>
                                 </span>
-                                <select class="select permiso-nivel" :value="nivelDe(n)"
-                                        :disabled="heredado(n)"
-                                        @change="setNivel(n, $event.target.value)">
-                                    <option value="">—</option>
-                                    <option value="lectura">Sólo ver</option>
-                                    <option value="escritura">Ejecutar</option>
-                                </select>
+                                <SelectBuscador class="permiso-nivel" :model-value="nivelDe(n)"
+                                                :opciones="[{ value: 'lectura', etiqueta: 'Sólo ver' },
+                                                            { value: 'escritura', etiqueta: 'Ejecutar' }]"
+                                                opcion-vacia="—" valor-vacio="" placeholder="—"
+                                                :deshabilitado="heredado(n)"
+                                                @update:model-value="setNivel(n, $event)" />
                             </div>
                         </div>
                         <div v-if="errors.permisos" class="error">{{ errors.permisos[0] }}</div>
@@ -240,20 +234,35 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { usuariosService } from '@/services/usuarios';
-import { contratosEjecucionService } from '@/services/contratosEjecucion';
+import { expedientesService } from '@/services/expedientes';
 import { NIVEL_LABELS, useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { debounce, fmtDateTime } from '@/composables/useFormat';
 import BasePager from '@/components/BasePager.vue';
+import SelectBuscador from '@/components/SelectBuscador.vue';
 import BaseModal from '@/components/BaseModal.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import IconLib from '@/components/IconLib.vue';
+import ThOrden from '@/components/ThOrden.vue';
 
 const toast = useToast();
 const auth = useAuthStore();
 const state = reactive({ search: '', es_admin: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
 const rows = ref([]);
+const orden = reactive({ by: '', dir: 'asc' });
+
+/** El listado viene por página, así que el orden lo resuelve el servidor. */
+function ordenarPor(campo) {
+    if (orden.by === campo) {
+        orden.dir = orden.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        orden.by = campo;
+        orden.dir = 'asc';
+    }
+    state.page = 1;
+    load();
+}
 const total = ref(0);
 const arbol = ref(null);
 const loading = ref(false);
@@ -316,6 +325,7 @@ async function load() {
     loading.value = true;
     try {
         const params = { page: state.page, per_page: state.per_page };
+        if (orden.by) { params.order_by = orden.by; params.order_dir = orden.dir; }
         if (state.search) params.search = state.search;
         if (state.es_admin !== '') params.es_admin = state.es_admin;
         if (state.sector_id) params.sector_id = state.sector_id;
@@ -502,7 +512,7 @@ async function remove(u) {
 }
 
 onMounted(async () => {
-    try { arbol.value = await contratosEjecucionService.arbolEstructura(); } catch { /* no-op */ }
+    try { arbol.value = await expedientesService.arbolEstructura(); } catch { /* no-op */ }
     contarPendientes();
     load();
 });

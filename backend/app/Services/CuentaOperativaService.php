@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\CuentaOperativa;
+use App\Models\EjecucionMovimiento;
+use Illuminate\Support\Facades\DB;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -15,15 +17,74 @@ class CuentaOperativaService extends BaseCrudService
 
     protected function baseQuery(): Builder
     {
-        return CuentaOperativa::query()->with('sector:sector_id,nombre,dependencia_id');
+        return CuentaOperativa::query()
+            ->with('sector:sector_id,nombre,dependencia_id')
+            ->addSelect([
+                'cuentas_operativas.*',
+                'sum_ingresos' => $this->sumMovimientosSub('ingreso'),
+                'sum_gastos'   => $this->sumMovimientosSub('gasto'),
+            ]);
+    }
+
+    /** Suma de los movimientos de la cuenta, para no consultarlos uno por uno. */
+    private function sumMovimientosSub(string $tipo)
+    {
+        return DB::table('ejecucion_movimientos')
+            ->whereColumn('ejecucion_movimientos.cuenta_operativa_id', 'cuentas_operativas.id')
+            ->whereNull('deleted_at')
+            ->where('tipo', $tipo)
+            ->selectRaw('COALESCE(SUM(monto), 0)');
+    }
+
+    /**
+     * El saldo no es una columna: sale del saldo inicial más los movimientos.
+     * MySQL admite los alias del SELECT dentro del ORDER BY.
+     */
+    protected function aplicarOrdenPropio(Builder $query, string $campo, string $dir): bool
+    {
+        $dir = $dir === 'desc' ? 'desc' : 'asc';
+
+        $expresiones = [
+            'saldo'    => '(cuentas_operativas.saldo_inicial + sum_ingresos - sum_gastos)',
+            'ingresos' => 'sum_ingresos',
+            'gastos'   => 'sum_gastos',
+        ];
+
+        if (isset($expresiones[$campo])) {
+            $query->orderByRaw($expresiones[$campo] . ' ' . $dir);
+            return true;
+        }
+
+        // El nivel y la ubicación salen del nodo del que cuelga la cuenta y de
+        // sus ancestros, que es como se arma la ruta que se muestra.
+        if (in_array($campo, ['nivel', 'ruta'], true)) {
+            $query->leftJoin('sector as nodo', 'nodo.sector_id', '=', 'cuentas_operativas.sector_id')
+                  ->leftJoin('sector as padre', 'padre.sector_id', '=', 'nodo.dependencia_id')
+                  ->leftJoin('sector as abuelo', 'abuelo.sector_id', '=', 'padre.dependencia_id');
+
+            if ($campo === 'ruta') {
+                $query->orderByRaw("CONCAT_WS(' › ', abuelo.nombre, padre.nombre, nodo.nombre) " . $dir);
+            } else {
+                $query->orderByRaw('(CASE WHEN nodo.dependencia_id IS NULL THEN 1
+                                          WHEN padre.dependencia_id IS NULL THEN 2
+                                          ELSE 3 END) ' . $dir);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
-        $expedientes = ContratoEjecucion::where('cuenta_operativa_id', $id)->count();
+        $expedientes = Expediente::where('cuenta_operativa_id', $id)->count();
         if ($expedientes > 0) {
             $msgs[] = "Existen {$expedientes} expediente(s) imputado(s) a esta cuenta.";
+        }
+        $movimientos = EjecucionMovimiento::where('cuenta_operativa_id', $id)->count();
+        if ($movimientos > 0) {
+            $msgs[] = "Existen {$movimientos} movimiento(s) registrado(s) en esta cuenta.";
         }
         return $msgs;
     }
@@ -36,7 +97,7 @@ class CuentaOperativaService extends BaseCrudService
     {
         $cuenta = parent::update($id, $data);
         if ($cuenta) {
-            ContratoEjecucion::where('cuenta_operativa_id', $cuenta->id)
+            Expediente::where('cuenta_operativa_id', $cuenta->id)
                 ->update(['sector_id' => $cuenta->sector_id]);
         }
         return $cuenta;

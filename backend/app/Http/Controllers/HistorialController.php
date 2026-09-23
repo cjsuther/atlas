@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\EjecucionMovimiento;
 use App\Models\HistorialCambio;
 use App\Services\AccessScopeService;
@@ -13,8 +13,9 @@ class HistorialController extends Controller
 {
     private const TABLAS_PERMITIDAS = [
         'contratos_principal',
-        'contratos_ejecucion',
+        'expedientes',
         'ejecucion_movimientos',
+        'contratos',
     ];
 
     public function __construct(protected AccessScopeService $scope) {}
@@ -55,10 +56,12 @@ class HistorialController extends Controller
     private function puedeVer(string $tabla, int $id): bool
     {
         return match ($tabla) {
-            'contratos_ejecucion' => $this->contratoVisible($id),
+            'expedientes' => $this->contratoVisible($id),
+            // La ficha de un contrato se identifica por su nodo.
+            'contratos' => in_array($id, $this->scope->sectoresVisibles() ?? [$id], true),
             'ejecucion_movimientos' => (function () use ($id) {
                 $m = EjecucionMovimiento::withTrashed()->find($id);
-                return $m !== null && $this->contratoVisible((int) $m->contrato_ejecucion_id);
+                return $m !== null && $this->contratoVisible((int) $m->expediente_id);
             })(),
             // Los contratos principales ya no se gestionan: su historial queda
             // disponible sólo para el administrador de sistema.
@@ -69,7 +72,7 @@ class HistorialController extends Controller
 
     private function contratoVisible(int $contratoId): bool
     {
-        $contrato = ContratoEjecucion::withTrashed()->find($contratoId);
+        $contrato = Expediente::withTrashed()->find($contratoId);
         return $contrato !== null && $this->scope->puedeVerContrato($contrato);
     }
 }

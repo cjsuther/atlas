@@ -14,6 +14,6 @@ class TipoContratoEjecucion extends Model
 
     public function contratos()
     {
-        return $this->hasMany(ContratoEjecucion::class, 'tipo_contrato_id', 'id');
+        return $this->hasMany(Contrato::class, 'tipo_contrato_id', 'id');
     }
 }

@@ -183,7 +183,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'saldos_agrupacion' => ['required', 'in:' . implode(',', UserRole::AGRUPACIONES_SALDO)],
         ], [
-            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Gerencia, Plan o Contrato.',
+            'saldos_agrupacion.in' => 'La agrupación de saldos debe ser por Gerencia de Área, Gerencia o Contrato.',
         ]);
 
         $user = $request->user();

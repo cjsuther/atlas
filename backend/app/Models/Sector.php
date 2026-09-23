@@ -7,9 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Estructura organizativa. La tabla se referencia a sí misma y arma un árbol de
- * cuatro niveles fijos, dados por la profundidad del nodo:
+ * tres niveles fijos, dados por la profundidad del nodo:
  *
- *   Gerencia de Área  ->  Gerencia  ->  Plan  ->  Contrato
+ *   Gerencia de Área  ->  Gerencia  ->  Contrato
  *
  * De cualquiera de esos nodos cuelgan cuentas operativas, y a una cuenta se
  * imputan los expedientes. La Gerencia de Área sigue siendo el límite de
@@ -48,7 +48,13 @@ class Sector extends Model
 
     public function contratos()
     {
-        return $this->hasMany(ContratoEjecucion::class, 'sector_id', 'sector_id');
+        return $this->hasMany(Expediente::class, 'sector_id', 'sector_id');
+    }
+
+    /** Ficha del contrato, si el nodo está en el tercer nivel y la tiene cargada. */
+    public function contrato()
+    {
+        return $this->hasOne(Contrato::class, 'sector_id', 'sector_id');
     }
 
     /** Cuentas operativas que cuelgan de este nodo. */

@@ -24,6 +24,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Instalación nueva: el esquema inicial ya crea las cuentas operativas.
+        if (Schema::hasTable('cuentas_operativas')) {
+            return;
+        }
+
         Schema::create('cuentas_operativas', function (Blueprint $table) {
             $table->integer('id', true); // INT con signo, como el resto del esquema
             $table->string('nombre', 200);

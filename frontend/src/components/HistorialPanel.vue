@@ -12,16 +12,16 @@
             <table v-else class="atlas-table">
                 <thead>
                     <tr>
-                        <th>Fecha</th>
-                        <th>Usuario</th>
-                        <th>Tipo</th>
-                        <th>Campo</th>
-                        <th>Valor anterior</th>
-                        <th>Valor nuevo</th>
+                        <ThOrden campo="fecha" :orden="orden" @ordenar="ordenarPor">Fecha</ThOrden>
+                        <ThOrden campo="usuario" :orden="orden" @ordenar="ordenarPor">Usuario</ThOrden>
+                        <ThOrden campo="tipo_cambio" :orden="orden" @ordenar="ordenarPor">Tipo</ThOrden>
+                        <ThOrden campo="campo_modificado" :orden="orden" @ordenar="ordenarPor">Campo</ThOrden>
+                        <ThOrden campo="valor_anterior" :orden="orden" @ordenar="ordenarPor">Valor anterior</ThOrden>
+                        <ThOrden campo="valor_nuevo" :orden="orden" @ordenar="ordenarPor">Valor nuevo</ThOrden>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="h in items" :key="h.id">
+                    <tr v-for="h in filasOrdenadas" :key="h.id">
                         <td>{{ fmtDateTime(h.fecha) }}</td>
                         <td>{{ h.usuario }}</td>
                         <td><span :class="['badge', badge(h.tipo_cambio)]">{{ h.tipo_cambio }}</span></td>
@@ -42,9 +42,11 @@ import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtDateTime } from '@/composables/useFormat';
+import { useOrdenTabla } from '@/composables/useOrden';
+import ThOrden from './ThOrden.vue';
 
 const props = defineProps({
-    tabla: { type: String, required: true },   // 'contratos_principal' | 'contratos_ejecucion'
+    tabla: { type: String, required: true },   // 'contratos_principal' | 'expedientes'
     id:    { type: [Number, String], required: true },
 });
 
@@ -52,6 +54,8 @@ const auth = useAuthStore();
 const toast = useToast();
 const items = ref([]);
 const loading = ref(false);
+
+const { orden, ordenarPor, filasOrdenadas } = useOrdenTabla(items);
 let loaded = false;
 
 // El backend ya recorta el historial al alcance del usuario.

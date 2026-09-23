@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\EjecucionMovimientoRequest;
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\EjecucionMovimiento;
 use App\Services\AccessScopeService;
 use App\Services\EjecucionMovimientoService;
@@ -20,25 +20,36 @@ class EjecucionMovimientoController extends Controller
         protected AccessScopeService $scope,
     ) {}
 
-    /** GET /api/contratos-ejecucion/{id}/movimientos */
-    public function indexForContrato(Request $request, int $contratoEjecucionId): JsonResponse
+    /** GET /api/cuentas-operativas/{id}/movimientos — historial de la cuenta */
+    public function indexForCuenta(Request $request, int $cuentaOperativaId): JsonResponse
     {
-        if (!$this->contratoAccesible($contratoEjecucionId)) {
-            return $this->notFoundContrato();
+        if (!$this->scope->puedeVerCuenta($cuentaOperativaId)) {
+            return $this->notFoundCuenta();
         }
         return response()->json(
-            $this->service->listForContrato($contratoEjecucionId, $request->all())
+            $this->service->listForCuenta($cuentaOperativaId, $request->all())
         );
     }
 
-    /** POST /api/contratos-ejecucion/{id}/movimientos */
-    public function storeForContrato(EjecucionMovimientoRequest $request, int $contratoEjecucionId): JsonResponse
+    /** POST /api/cuentas-operativas/{id}/movimientos */
+    public function storeForCuenta(EjecucionMovimientoRequest $request, int $cuentaOperativaId): JsonResponse
     {
-        if (!$this->contratoEditable($contratoEjecucionId)) {
+        if (!$this->scope->puedeUsarCuenta($cuentaOperativaId)) {
+            return $this->notFoundCuenta();
+        }
+        $m = $this->service->create($cuentaOperativaId, $request->validated(), $request->file('factura'));
+        return response()->json(['data' => $m], 201);
+    }
+
+    /** GET /api/expedientes/{id}/movimientos — lo registrado contra ese contrato */
+    public function indexForContrato(Request $request, int $expedienteId): JsonResponse
+    {
+        if (!$this->contratoAccesible($expedienteId)) {
             return $this->notFoundContrato();
         }
-        $m = $this->service->create($contratoEjecucionId, $request->validated(), $request->file('factura'));
-        return response()->json(['data' => $m], 201);
+        return response()->json(
+            $this->service->listForContrato($expedienteId, $request->all())
+        );
     }
 
     /** GET /api/movimientos/{id} */
@@ -96,30 +107,31 @@ class EjecucionMovimientoController extends Controller
     }
 
     /**
-     * Los movimientos son tan reservados como el expediente al que pertenecen:
+     * Los movimientos son tan reservados como la cuenta en la que están:
      * fuera del alcance del usuario se responde "no encontrado".
      */
-    private function contratoAccesible(int $contratoEjecucionId): bool
+    private function contratoAccesible(int $expedienteId): bool
     {
-        $contrato = ContratoEjecucion::withTrashed()->find($contratoEjecucionId);
+        $contrato = Expediente::withTrashed()->find($expedienteId);
         return $contrato !== null && $this->scope->puedeVerContrato($contrato);
-    }
-
-    /** Registrar, modificar o dar de baja un movimiento exige escritura. */
-    private function contratoEditable(int $contratoEjecucionId): bool
-    {
-        $contrato = ContratoEjecucion::withTrashed()->find($contratoEjecucionId);
-        return $contrato !== null && $this->scope->puedeEditarContrato($contrato);
     }
 
     private function movimientoAccesible(EjecucionMovimiento $m): bool
     {
-        return $this->contratoAccesible((int) $m->contrato_ejecucion_id);
+        return $this->scope->puedeVerCuenta((int) $m->cuenta_operativa_id);
     }
 
     private function movimientoEditable(EjecucionMovimiento $m): bool
     {
-        return $this->contratoEditable((int) $m->contrato_ejecucion_id);
+        return $this->scope->puedeUsarCuenta((int) $m->cuenta_operativa_id);
+    }
+
+    private function notFoundCuenta(): JsonResponse
+    {
+        return response()->json([
+            'error'   => 'not_found',
+            'message' => 'Cuenta operativa no encontrada.',
+        ], 404);
     }
 
     private function notFound(): JsonResponse

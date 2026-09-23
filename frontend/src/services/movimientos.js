@@ -1,9 +1,13 @@
 import http, { downloadBlob } from './http';
 
 export const movimientosService = {
-    /** GET /api/contratos-ejecucion/{id}/movimientos */
-    listForContrato: (contratoId, params) =>
-        http.get(`/contratos-ejecucion/${contratoId}/movimientos`, { params }).then(r => r.data),
+    /** GET /api/cuentas-operativas/{id}/movimientos — historial de la cuenta */
+    listForCuenta: (cuentaId, params) =>
+        http.get(`/cuentas-operativas/${cuentaId}/movimientos`, { params }).then(r => r.data),
+
+    /** GET /api/expedientes/{id}/movimientos — lo registrado contra un expediente */
+    listForExpediente: (expedienteId, params) =>
+        http.get(`/expedientes/${expedienteId}/movimientos`, { params }).then(r => r.data),
 
     get: (id) => http.get(`/movimientos/${id}`).then(r => r.data),
 
@@ -11,9 +15,9 @@ export const movimientosService = {
      * Crea un movimiento. Si `data.factura` es File, envía multipart;
      * si no, envía JSON.
      */
-    create: (contratoId, data) => {
+    create: (cuentaId, data) => {
         const fd = toFormData(data);
-        return http.post(`/contratos-ejecucion/${contratoId}/movimientos`, fd, {
+        return http.post(`/cuentas-operativas/${cuentaId}/movimientos`, fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }).then(r => r.data);
     },

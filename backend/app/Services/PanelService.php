@@ -2,12 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\HistorialCambio;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,19 +19,18 @@ use Illuminate\Support\Facades\DB;
  *   - moneda_base           : 'Peso' por defecto, para conversión de montos
  *   - gerencia_area_id      : acota a una Gerencia de Área y su rama
  *   - sector_id             : acota a una Gerencia y su rama
- *   - plan_id               : acota a un Plan y su rama
  *   - nodo_id               : acota a un Contrato y su rama
- *   - cuenta_operativa_id   : acota a los expedientes de una cuenta
+ *   - cuenta_operativa_id   : acota a una sola cuenta
  *
  * Los de estructura se combinan: cada uno recorta sobre el anterior.
  */
 class PanelService
 {
     /** Agrupaciones admitidas para la vista de saldos. */
-    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'plan', 'contrato'];
+    public const AGRUPACIONES = ['gerencia_area', 'gerencia', 'contrato'];
 
     /** Hasta qué profundidad del árbol se abre cada agrupación. */
-    private const PROFUNDIDAD = ['gerencia_area' => 1, 'gerencia' => 2, 'plan' => 3, 'contrato' => 4];
+    private const PROFUNDIDAD = ['gerencia_area' => 1, 'gerencia' => 2, 'contrato' => 3];
 
     public function __construct(
         protected AccessScopeService $scope,
@@ -52,7 +49,7 @@ class PanelService
     /** Consulta base de contratos: rango de fechas, alcance del usuario y filtros de estructura. */
     private function ejecucionQuery(array $filters): Builder
     {
-        $q = $this->applyDateRange(ContratoEjecucion::query(), $filters);
+        $q = $this->applyDateRange(Expediente::query(), $filters);
         $this->scope->aplicarASaldos($q);
 
         if (!empty($filters['sector_id'])) {
@@ -60,9 +57,6 @@ class PanelService
         }
         if (!empty($filters['gerencia_area_id'])) {
             $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['gerencia_area_id']) ?: [0]);
-        }
-        if (!empty($filters['plan_id'])) {
-            $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['plan_id']) ?: [0]);
         }
         if (!empty($filters['nodo_id'])) {
             $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters['nodo_id']) ?: [0]);
@@ -75,14 +69,93 @@ class PanelService
         return $q;
     }
 
+    /**
+     * Cuentas del alcance del usuario recortadas por los filtros de estructura.
+     * La plata vive en las cuentas, así que todo importe del panel sale de acá.
+     */
+    private function cuentasQuery(array $filters): \Illuminate\Database\Query\Builder
+    {
+        $q = DB::table('cuentas_operativas');
+
+        $visibles = $this->scope->cuentasVisibles();
+        if ($visibles !== null) {
+            $q->whereIn('id', $visibles ?: [0]);
+        }
+
+        foreach (['gerencia_area_id', 'sector_id', 'nodo_id'] as $filtro) {
+            if (!empty($filters[$filtro])) {
+                $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters[$filtro]) ?: [0]);
+            }
+        }
+        if (!empty($filters['cuenta_operativa_id'])) {
+            $q->where('id', (int) $filters['cuenta_operativa_id']);
+        }
+
+        return $q;
+    }
+
+    /** Movimientos registrados en esas cuentas, dentro del rango de fechas. */
+    private function movimientosQuery(array $filters): \Illuminate\Database\Query\Builder
+    {
+        $q = DB::table('ejecucion_movimientos')
+            ->whereNull('deleted_at')
+            ->whereIn('cuenta_operativa_id', $this->cuentasQuery($filters)->select('id'));
+
+        if (!empty($filters['desde'])) $q->whereDate('created_at', '>=', $filters['desde']);
+        if (!empty($filters['hasta'])) $q->whereDate('created_at', '<=', $filters['hasta']);
+
+        return $q;
+    }
+
+    /**
+     * Nodos «Contrato» —el tercer nivel de la estructura— que entran en el
+     * alcance del usuario y en los filtros. Es lo que se cuenta cuando se habla
+     * de contratos; los registros que se imputan a una cuenta son expedientes.
+     *
+     * @return array<int>
+     */
+    private function contratosDelAlcance(array $filters): array
+    {
+        $visibles = $this->scope->sectoresVisibles();
+
+        $ramas = [];
+        foreach (['gerencia_area_id', 'sector_id', 'nodo_id'] as $filtro) {
+            if (!empty($filters[$filtro])) {
+                $ramas[] = $this->arbol->ramaDe((int) $filters[$filtro]);
+            }
+        }
+
+        // Filtrar por una cuenta deja sólo el nodo del que cuelga.
+        if (!empty($filters['cuenta_operativa_id'])) {
+            $sector = DB::table('cuentas_operativas')
+                ->where('id', (int) $filters['cuenta_operativa_id'])->value('sector_id');
+            $ramas[] = $sector !== null ? [(int) $sector] : [];
+        }
+
+        $ids = [];
+        foreach (DB::table('sector')->pluck('sector_id') as $sectorId) {
+            $sectorId = (int) $sectorId;
+            if ($this->arbol->nivelDe($sectorId) !== 'contrato') {
+                continue;
+            }
+            if ($visibles !== null && !in_array($sectorId, $visibles, true)) {
+                continue;
+            }
+            foreach ($ramas as $rama) {
+                if (!in_array($sectorId, $rama, true)) {
+                    continue 2;
+                }
+            }
+            $ids[] = $sectorId;
+        }
+
+        return $ids;
+    }
+
     /** Suma de movimientos por tipo, respetando alcance y filtros. */
     private function sumaMovimientos(array $filters, ?string $tipo = null): float
     {
-        $ids = $this->ejecucionQuery($filters)->select('contratos_ejecucion.id');
-
-        return (float) DB::table('ejecucion_movimientos')
-            ->whereNull('deleted_at')
-            ->whereIn('contrato_ejecucion_id', $ids)
+        return (float) $this->movimientosQuery($filters)
             ->when($tipo !== null, fn ($q) => $q->where('tipo', $tipo))
             ->sum('monto');
     }
@@ -90,35 +163,18 @@ class PanelService
     /** ---------------- Sección A: indicadores principales ---------------- */
     public function indicadoresPrincipales(array $filters): array
     {
-        $hoy = Carbon::today();
-
-        $total = $this->ejecucionQuery($filters)->count();
-
-        $enFirma = $this->ejecucionQuery($filters)
-            ->whereHas('estado', fn ($q) => $q->where('nombre', 'like', 'En firma%'))->count();
-        $enEjec = $this->ejecucionQuery($filters)
-            ->whereHas('estado', fn ($q) => $q->where('nombre', 'En ejecución'))->count();
-        $finalizados = $this->ejecucionQuery($filters)
-            ->whereHas('estado', fn ($q) => $q->where('nombre', 'Finalizado'))->count();
-
-        $vencidos = $this->ejecucionQuery($filters)
-            ->whereDate('fecha_vencimiento', '<', $hoy)
-            ->whereHas('estado', fn ($q) => $q->where('nombre', '!=', 'Finalizado'))
-            ->count();
+        $cuentas   = (int) $this->cuentasQuery($filters)->count();
+        $contratos = count($this->contratosDelAlcance($filters));
 
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
-        $sumSaldoInicial = $this->sumarMontos($this->ejecucionQuery($filters), 'saldo_inicial', $monedaBase);
+        $sumSaldoInicial = (float) $this->cuentasQuery($filters)->sum('saldo_inicial');
         $sumEjecIngresos = $this->sumaMovimientos($filters, 'ingreso');
         $sumEjecGastos   = $this->sumaMovimientos($filters, 'gasto');
 
         return [
             'totales' => [
-                'contratos'    => $total,
-                'en_firma'     => $enFirma,
-                'en_ejecucion' => $enEjec,
-                'finalizados'  => $finalizados,
-                'vencidos'     => $vencidos,
-                'con_atraso'   => $vencidos,
+                'cuentas'   => $cuentas,
+                'contratos' => $contratos,
             ],
             'montos' => [
                 'moneda_base'              => $monedaBase,
@@ -131,42 +187,15 @@ class PanelService
         ];
     }
 
-    /** ---------------- Sección C: indicadores calculados ---------------- */
-    public function indicadoresCalculados(array $filters): array
-    {
-        $monedaBase = $filters['moneda_base'] ?? 'Peso';
-
-        $diasFirma = $this->promedioDiasACambioEstado(
-            campoFecha: 'fecha_apertura_expediente',
-            estadoNombre: 'Firmado',
-            filters: $filters,
-        );
-
-        $diasEjec = $this->promedioDiasEntreEstados(
-            estadoInicial: 'En ejecución',
-            estadoFinal: 'Finalizado',
-            filters: $filters,
-        );
-
-        $sumSaldoInicial = $this->sumarMontos($this->ejecucionQuery($filters), 'saldo_inicial', $monedaBase);
-        $sumEjec = $this->sumaMovimientos($filters);
-        $pctEjec = $sumSaldoInicial > 0 ? round(($sumEjec / $sumSaldoInicial) * 100, 2) : null;
-
-        return [
-            'dias_firma_promedio'             => $diasFirma,
-            'dias_ejecucion_promedio'         => $diasEjec,
-            'porcentaje_finalizados_en_termino' => $this->porcentajeFinalizadosEnTermino($filters),
-            'porcentaje_vencidos_sin_cierre'  => $this->porcentajeVencidosSinCierre($filters),
-            'porcentaje_ejecucion_economica'  => $pctEjec,
-            'moneda_base'                     => $monedaBase,
-        ];
-    }
-
     /** ---------------- Saldos configurables ---------------- */
 
     /**
      * Saldos del árbol de la estructura, hasta el nivel que el usuario quiera
-     * ver: Gerencia de Área, Gerencia, Plan o Contrato.
+     * ver: Gerencia de Área, Gerencia o Contrato.
+     *
+     * Los importes salen de las cuentas de cada nodo: su saldo inicial más lo
+     * que entró y salió por sus movimientos. Se cuentan también sus cuentas y
+     * los nodos «Contrato» —el tercer nivel— que cuelgan de él.
      *
      * Cada nodo aporta dos filas:
      *
@@ -186,30 +215,37 @@ class PanelService
             : 'gerencia_area';
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
 
-        $contratos = $this->ejecucionQuery($filters)
-            ->select(
-                'contratos_ejecucion.id',
-                'contratos_ejecucion.sector_id',
-                'contratos_ejecucion.moneda',
-                'contratos_ejecucion.cotizacion',
-                'contratos_ejecucion.saldo_inicial',
-            )
+        // 1) Importes propios de cada nodo: lo de sus cuentas.
+        $porSector = [];
+
+        foreach ($this->cuentasQuery($filters)->get(['id', 'sector_id', 'saldo_inicial']) as $cuenta) {
+            $sectorId = (int) $cuenta->sector_id;
+            $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, [
+                'cuentas'       => 1,
+                'saldo_inicial' => (float) ($cuenta->saldo_inicial ?? 0),
+            ]);
+        }
+
+        // Los movimientos ya están expresados en pesos.
+        $movimientos = $this->movimientosQuery($filters)
+            ->join('cuentas_operativas as co', 'co.id', '=', 'ejecucion_movimientos.cuenta_operativa_id')
+            ->select('co.sector_id', 'ejecucion_movimientos.tipo', DB::raw('SUM(monto) as total'))
+            ->groupBy('co.sector_id', 'ejecucion_movimientos.tipo')
             ->get();
 
-        $sumas = $this->sumasPorContrato($contratos->pluck('id')->all());
-
-        // 1) Importes propios de cada nodo: lo imputado a sus cuentas.
-        $porSector = [];
-        foreach ($contratos as $c) {
-            $sectorId = (int) $c->sector_id;
-            $factor   = ($c->moneda === $monedaBase || !$c->cotizacion) ? 1.0 : (float) $c->cotizacion;
-
+        foreach ($movimientos as $m) {
+            $sectorId = (int) $m->sector_id;
             $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, [
-                'contratos'          => 1,
-                'saldo_inicial'      => ((float) ($c->saldo_inicial ?? 0)) * $factor,
-                // Los movimientos ya están expresados en pesos.
-                'ejecutado_ingresos' => (float) ($sumas[$c->id]['ingreso'] ?? 0),
-                'ejecutado_gastos'   => (float) ($sumas[$c->id]['gasto']   ?? 0),
+                'ejecutado_ingresos' => $m->tipo === 'ingreso' ? (float) $m->total : 0,
+                'ejecutado_gastos'   => $m->tipo === 'gasto'   ? (float) $m->total : 0,
+            ]);
+        }
+
+        // Los contratos son los nodos del tercer nivel: cada uno cuenta por sí
+        // mismo y suma hacia arriba al acumulado de su rama.
+        foreach ($this->contratosDelAlcance($filters) as $sectorId) {
+            $porSector[$sectorId] = $this->acumular($porSector[$sectorId] ?? null, [
+                'contratos' => 1,
             ]);
         }
 
@@ -242,6 +278,7 @@ class PanelService
             'moneda_base' => $monedaBase,
             'filas'       => $rows,
             'totales'     => [
+                'cuentas'            => (int) $raices->sum('cuentas'),
                 'contratos'          => (int) $raices->sum('contratos'),
                 'saldo_inicial'      => round($raices->sum('saldo_inicial'), 2),
                 'ejecutado_ingresos' => round($raices->sum('ejecutado_ingresos'), 2),
@@ -314,7 +351,7 @@ class PanelService
         if ($posAcumulado !== null) {
             // Una rama vacía se marca en lugar de borrarse: las posiciones ya
             // reservadas se siguen usando mientras se recorre el resto.
-            $vacia = (int) $acumulado['contratos'] === 0;
+            $vacia = (int) $acumulado['contratos'] === 0 && (int) $acumulado['cuentas'] === 0;
 
             $filas[$posPropios]   += $propios   + ['descartar' => $vacia];
             $filas[$posAcumulado] += $acumulado + ['descartar' => $vacia];
@@ -332,7 +369,7 @@ class PanelService
      */
     private function acumular(?array $base, array $extra): array
     {
-        $campos = ['contratos', 'cantidad', 'saldo_inicial', 'ejecutado_ingresos', 'ejecutado_gastos'];
+        $campos = ['cuentas', 'contratos', 'cantidad', 'saldo_inicial', 'ejecutado_ingresos', 'ejecutado_gastos'];
 
         $out = [];
         foreach ($campos as $campo) {
@@ -348,6 +385,7 @@ class PanelService
             $f[$campo] = round((float) ($f[$campo] ?? 0), 2);
         }
         $f['contratos'] = (int) ($f['contratos'] ?? 0);
+        $f['cuentas']   = (int) ($f['cuentas'] ?? 0);
         // Saldo = lo que había al empezar, más lo que entró, menos lo que salió.
         $f['saldo'] = round(
             $f['saldo_inicial'] + $f['ejecutado_ingresos'] - $f['ejecutado_gastos'], 2
@@ -367,14 +405,14 @@ class PanelService
 
         $rows = DB::table('ejecucion_movimientos')
             ->whereNull('deleted_at')
-            ->whereIn('contrato_ejecucion_id', $contratoIds)
-            ->select('contrato_ejecucion_id', 'tipo', DB::raw('SUM(monto) as total'))
-            ->groupBy('contrato_ejecucion_id', 'tipo')
+            ->whereIn('expediente_id', $contratoIds)
+            ->select('expediente_id', 'tipo', DB::raw('SUM(monto) as total'))
+            ->groupBy('expediente_id', 'tipo')
             ->get();
 
         $out = [];
         foreach ($rows as $r) {
-            $out[(int) $r->contrato_ejecucion_id][$r->tipo] = (float) $r->total;
+            $out[(int) $r->expediente_id][$r->tipo] = (float) $r->total;
         }
         return $out;
     }
@@ -391,9 +429,9 @@ class PanelService
         $monedaBase = $filters['moneda_base'] ?? 'Peso';
 
         $contratos = $this->ejecucionQuery($filters)
-            ->select('contratos_ejecucion.id', 'contratos_ejecucion.sector_id',
-                     'contratos_ejecucion.uvt_id', 'contratos_ejecucion.moneda',
-                     'contratos_ejecucion.cotizacion', 'contratos_ejecucion.saldo_inicial')
+            ->select('expedientes.id', 'expedientes.sector_id',
+                     'expedientes.uvt_id', 'expedientes.moneda',
+                     'expedientes.cotizacion', 'expedientes.saldo_inicial')
             ->get();
 
         $sumas = $this->sumasPorContrato($contratos->pluck('id')->all());
@@ -433,57 +471,38 @@ class PanelService
         return $f;
     }
 
-    /** Distribución por UVT, con cantidad de contratos e importes. */
-    public function porUvt(array $filters): array
-    {
-        $porUvt  = [];
-        $nombres = DB::table('uvt')->get()->keyBy('uvt_id');
-
-        foreach ($this->importesPorContrato($filters) as $c) {
-            $clave = $c['uvt_id'] ?? 0;
-            $porUvt[$clave] ??= [
-                'uvt_id' => $c['uvt_id'],
-                'siglas' => optional($nombres->get($c['uvt_id']))->siglas ?? 'Sin UVT',
-                'nombre' => optional($nombres->get($c['uvt_id']))->nombre,
-            ];
-            $porUvt[$clave] = $this->acumular($porUvt[$clave], $c['importes']) + $porUvt[$clave];
-        }
-
-        return [
-            'moneda_base' => $filters['moneda_base'] ?? 'Peso',
-            'contratos'   => collect(array_values($porUvt))
-                ->map(fn ($r) => $this->cerrarFila($r))
-                ->sortByDesc('saldo')->values(),
-        ];
-    }
 
     /**
-     * Distribución por Gerencia y por Gerencia de Área, con cantidad de
-     * contratos e importes. Lo imputado a un Plan o a un Contrato suma a la
-     * Gerencia de la que depende, y la Gerencia de Área acumula toda su rama.
+     * Distribución por Gerencia y por Gerencia de Área. Los importes salen de
+     * las cuentas, que es donde está la plata: lo de una cuenta suma a la
+     * Gerencia de la que cuelga —o al propio nodo, si cuelga de una Gerencia de
+     * Área— y la Gerencia de Área acumula toda su rama.
      */
     public function porGerencia(array $filters): array
     {
         $porSector = [];
         $porArea   = [];
 
-        foreach ($this->importesPorContrato($filters) as $c) {
+        $acumularEn = function (array &$destino, int|string $clave, array $base, array $importes) {
+            $destino[$clave] ??= $base;
+            $destino[$clave] = $this->acumular($destino[$clave], $importes) + $destino[$clave];
+        };
+
+        foreach ($this->importesPorCuenta($filters) as $c) {
             $raiz     = $this->arbol->raizDe($c['sector_id']) ?? $c['sector_id'];
-            // Lo imputado a la propia Gerencia de Área no tiene Gerencia: queda en su nodo.
+            // Lo de la propia Gerencia de Área no tiene Gerencia: queda en su nodo.
             $sectorId = $this->arbol->ancestrosPorNivel($c['sector_id'])['gerencia'] ?? $c['sector_id'];
 
-            $porSector[$sectorId] ??= [
+            $acumularEn($porSector, $sectorId, [
                 'sector_id'     => $sectorId,
                 'nombre'        => $this->arbol->nombre($sectorId) ?? "Gerencia #{$sectorId}",
                 'gerencia_area' => $this->arbol->nombre($raiz),
-            ];
-            $porSector[$sectorId] = $this->acumular($porSector[$sectorId], $c['importes']) + $porSector[$sectorId];
+            ], $c['importes']);
 
-            $porArea[$raiz] ??= [
+            $acumularEn($porArea, $raiz, [
                 'gerencia_area_id' => $raiz,
                 'nombre'           => $this->arbol->nombre($raiz) ?? "Gerencia #{$raiz}",
-            ];
-            $porArea[$raiz] = $this->acumular($porArea[$raiz], $c['importes']) + $porArea[$raiz];
+            ], $c['importes']);
         }
 
         return [
@@ -495,14 +514,45 @@ class PanelService
         ];
     }
 
+    /**
+     * Importes de cada cuenta del alcance, listos para agrupar: su saldo
+     * inicial y lo que entró y salió por sus movimientos.
+     *
+     * @return array<int, array{sector_id: int, importes: array<string, float|int>}>
+     */
+    private function importesPorCuenta(array $filters): array
+    {
+        $movimientos = [];
+        foreach (
+            $this->movimientosQuery($filters)
+                ->select('cuenta_operativa_id', 'tipo', DB::raw('SUM(monto) as total'))
+                ->groupBy('cuenta_operativa_id', 'tipo')
+                ->get() as $m
+        ) {
+            $movimientos[(int) $m->cuenta_operativa_id][$m->tipo] = (float) $m->total;
+        }
+
+        $out = [];
+        foreach ($this->cuentasQuery($filters)->get(['id', 'sector_id', 'saldo_inicial']) as $cuenta) {
+            $id = (int) $cuenta->id;
+            $out[] = [
+                'sector_id' => (int) $cuenta->sector_id,
+                'importes'  => [
+                    'cantidad'           => 1,
+                    'saldo_inicial'      => (float) ($cuenta->saldo_inicial ?? 0),
+                    'ejecutado_ingresos' => $movimientos[$id]['ingreso'] ?? 0,
+                    'ejecutado_gastos'   => $movimientos[$id]['gasto']   ?? 0,
+                ],
+            ];
+        }
+
+        return $out;
+    }
+
     /** Distribución de movimientos de ejecución por acción (factura, transferencia, incentivo, MCH). */
     public function porAccion(array $filters): array
     {
-        $ids = $this->ejecucionQuery($filters)->select('contratos_ejecucion.id');
-
-        $rows = DB::table('ejecucion_movimientos')
-            ->whereNull('deleted_at')
-            ->whereIn('contrato_ejecucion_id', $ids)
+        $rows = $this->movimientosQuery($filters)
             ->select('accion', 'tipo', DB::raw('COUNT(*) as cantidad'), DB::raw('SUM(monto) as total'))
             ->groupBy('accion', 'tipo')
             ->get();
@@ -517,166 +567,18 @@ class PanelService
         ];
     }
 
-    public function vencimientos(array $filters): array
-    {
-        $hoy = Carbon::today();
 
-        $bucket = function (int $maxDias, ?int $minDias = null) use ($hoy, $filters) {
-            return $this->ejecucionQuery($filters)
-                ->whereHas('estado', fn ($q) => $q->where('nombre', '!=', 'Finalizado'))
-                ->whereDate('fecha_vencimiento', '>=', $hoy)
-                ->whereDate('fecha_vencimiento', '<=', $hoy->copy()->addDays($maxDias))
-                ->when($minDias !== null, fn ($q) => $q->whereDate('fecha_vencimiento', '>', $hoy->copy()->addDays($minDias)))
-                ->count();
-        };
-
-        return [
-            'vencidos' => $this->ejecucionQuery($filters)
-                ->whereHas('estado', fn ($q) => $q->where('nombre', '!=', 'Finalizado'))
-                ->whereDate('fecha_vencimiento', '<', $hoy)->count(),
-            'dias_30' => $bucket(30),
-            'dias_60' => $bucket(60, 30),
-            'dias_90' => $bucket(90, 60),
-            'moneda_base' => $filters['moneda_base'] ?? 'Peso',
-        ];
-    }
-
-    public function rankings(array $filters): array
-    {
-        $monedaBase = $filters['moneda_base'] ?? 'Peso';
-
-        $porArea = [];
-        foreach ($this->ejecucionQuery($filters)
-                    ->select('sector_id', DB::raw('COUNT(*) as cantidad'))
-                    ->groupBy('sector_id')->get() as $r) {
-            $raiz = $this->arbol->raizDe((int) $r->sector_id) ?? (int) $r->sector_id;
-            $porArea[$raiz] ??= [
-                'gerencia_area_id' => $raiz,
-                'gerencia_area'    => $this->arbol->nombre($raiz) ?? "Gerencia #{$raiz}",
-                'cantidad'         => 0,
-            ];
-            $porArea[$raiz]['cantidad'] += (int) $r->cantidad;
-        }
-        $rankGerencia = collect(array_values($porArea))->sortByDesc('cantidad')->take(20)->values();
-
-        return [
-            'gerencias_area_por_cantidad' => $rankGerencia,
-            'uvt_por_monto'          => $this->montoPorUvt($filters, $monedaBase)
-                                            ->sortByDesc('saldo')->values(),
-            'moneda_base'            => $monedaBase,
-        ];
-    }
 
     /** ---------------- Helpers privados ---------------- */
 
-    /**
-     * Suma `monto * cotizacion` para llevar todo a la moneda base (Peso).
-     *
-     * Los importes negativos cuentan: los saldos iniciales de una gerencia
-     * pueden serlo, y descartarlos haría que este total no coincida con el de
-     * la vista de saldos.
-     */
-    private function sumarMontos(Builder $q, string $col, string $monedaBase): float
-    {
-        $rows = $q->select('moneda', 'cotizacion', $col)->get();
-        $total = 0.0;
-        foreach ($rows as $r) {
-            $monto = (float) ($r->{$col} ?? 0);
-            if ($monto === 0.0) continue;
-            if ($r->moneda === $monedaBase) {
-                $total += $monto;
-            } else {
-                $cot = (float) ($r->cotizacion ?? 0);
-                if ($cot > 0) $total += $monto * $cot;
-                else $total += $monto; // sin cotización, asume 1:1
-            }
-        }
-        return $total;
-    }
 
-    private function montoPorUvt(array $filters, string $monedaBase): Collection
-    {
-        return collect($this->porUvt($filters + ['moneda_base' => $monedaBase])['contratos']);
-    }
 
-    private function porcentajeFinalizadosEnTermino(array $filters): ?float
-    {
-        $finalizados = $this->ejecucionQuery($filters)
-            ->whereHas('estado', fn ($e) => $e->where('nombre', 'Finalizado'))
-            ->count();
-        if ($finalizados === 0) return null;
 
-        $enTermino = $this->ejecucionQuery($filters)
-            ->whereHas('estado', fn ($e) => $e->where('nombre', 'Finalizado'))
-            ->whereNotNull('fecha_finalizacion')
-            ->whereNotNull('fecha_vencimiento')
-            ->whereColumn('fecha_finalizacion', '<=', 'fecha_vencimiento')
-            ->count();
 
-        return round(($enTermino / $finalizados) * 100, 2);
-    }
-
-    private function porcentajeVencidosSinCierre(array $filters): ?float
-    {
-        $total = $this->ejecucionQuery($filters)->count();
-        if ($total === 0) return null;
-
-        $vencidos = $this->ejecucionQuery($filters)
-            ->whereDate('fecha_vencimiento', '<', Carbon::today())
-            ->whereHas('estado', fn ($q) => $q->where('nombre', '!=', 'Finalizado'))
-            ->count();
-
-        return round(($vencidos / $total) * 100, 2);
-    }
-
-    /**
-     * Promedio de días entre el campoFecha del contrato y el primer cambio de
-     * estado al estado indicado, según historial_cambios.
-     */
-    private function promedioDiasACambioEstado(string $campoFecha, string $estadoNombre, array $filters): ?float
-    {
-        $estadoId = DB::table('estado_ejecucion')->where('nombre', $estadoNombre)->value('id');
-        if (!$estadoId) return null;
-
-        $contratos = $this->ejecucionQuery($filters)
-            ->whereNotNull($campoFecha)
-            ->get(['contratos_ejecucion.id', $campoFecha]);
-
-        $dias = [];
-        foreach ($contratos as $c) {
-            $h = $this->primerCambioAEstado((int) $c->id, (int) $estadoId);
-            if (!$h) continue;
-            $diff = Carbon::parse($c->{$campoFecha})->diffInDays(Carbon::parse($h->fecha));
-            if ($diff >= 0) $dias[] = $diff;
-        }
-
-        return $dias ? round(array_sum($dias) / count($dias), 1) : null;
-    }
-
-    /** Promedio de días entre dos cambios de estado consecutivos en historial. */
-    private function promedioDiasEntreEstados(string $estadoInicial, string $estadoFinal, array $filters): ?float
-    {
-        $idIni = DB::table('estado_ejecucion')->where('nombre', $estadoInicial)->value('id');
-        $idFin = DB::table('estado_ejecucion')->where('nombre', $estadoFinal)->value('id');
-        if (!$idIni || !$idFin) return null;
-
-        $contratos = $this->ejecucionQuery($filters)->get(['contratos_ejecucion.id']);
-
-        $dias = [];
-        foreach ($contratos as $c) {
-            $hIni = $this->primerCambioAEstado((int) $c->id, (int) $idIni);
-            $hFin = $this->primerCambioAEstado((int) $c->id, (int) $idFin);
-            if (!$hIni || !$hFin) continue;
-            $diff = Carbon::parse($hIni->fecha)->diffInDays(Carbon::parse($hFin->fecha));
-            if ($diff >= 0) $dias[] = $diff;
-        }
-
-        return $dias ? round(array_sum($dias) / count($dias), 1) : null;
-    }
 
     private function primerCambioAEstado(int $contratoId, int $estadoId): ?HistorialCambio
     {
-        return HistorialCambio::where('tabla', 'contratos_ejecucion')
+        return HistorialCambio::where('tabla', 'expedientes')
             ->where('registro_id', $contratoId)
             ->where('campo_modificado', 'estado_id')
             ->where('valor_nuevo', (string) $estadoId)

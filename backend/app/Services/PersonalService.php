@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Contrato;
 use App\Models\ContratoPrincipal;
 use App\Models\Personal;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +17,20 @@ class PersonalService extends BaseCrudService
         return Personal::query()->with('lugarTrabajo:sector_id,nombre');
     }
 
+    /** El lugar de trabajo se muestra por su nombre, que está en la otra tabla. */
+    protected function aplicarOrdenPropio(Builder $query, string $campo, string $dir): bool
+    {
+        if ($campo !== 'lugar_trabajo') {
+            return false;
+        }
+
+        $query->leftJoin('sector as lugar', 'lugar.sector_id', '=', 'personal.lugar_trabajo_id')
+              ->select('personal.*')
+              ->orderBy('lugar.nombre', $dir === 'desc' ? 'desc' : 'asc');
+
+        return true;
+    }
+
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
@@ -24,9 +38,9 @@ class PersonalService extends BaseCrudService
         if ($cP > 0) {
             $msgs[] = "Esta persona figura como responsable en {$cP} contrato(s) principal(es).";
         }
-        $cE = ContratoEjecucion::where('resp1_id', $id)->orWhere('resp2_id', $id)->count();
-        if ($cE > 0) {
-            $msgs[] = "Esta persona figura como responsable en {$cE} contrato(s) de ejecución.";
+        $cC = Contrato::where('resp1_id', $id)->orWhere('resp2_id', $id)->count();
+        if ($cC > 0) {
+            $msgs[] = "Esta persona figura como responsable en {$cC} contrato(s).";
         }
         return $msgs;
     }

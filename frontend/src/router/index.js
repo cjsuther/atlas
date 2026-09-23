@@ -18,24 +18,28 @@ const routes = [
             { path: 'panel', name: 'panel', component: () => import('@/views/Panel.vue'),
               meta: { title: 'Panel de Control' } },
 
-            // Expedientes (antes "contratos de ejecución"). Las rutas y el endpoint
-            // conservan el nombre histórico; en la interfaz son los expedientes.
-            // "Contrato" pasó a ser un nivel de la estructura, no este registro.
-            { path: 'contratos', name: 'contratos-ejecucion',
-              component: () => import('@/views/contratos/EjecucionList.vue'),
-              meta: { title: 'Ejecución' } },
-            { path: 'contratos/nuevo', name: 'contratos-ejecucion-nuevo',
-              component: () => import('@/views/contratos/EjecucionForm.vue'),
+            // Expedientes: el registro que se imputa a una cuenta. «Contrato» es
+            // el tercer nivel de la estructura, no esto.
+            { path: 'expedientes', name: 'expedientes',
+              component: () => import('@/views/expedientes/ExpedientesList.vue'),
+              meta: { title: 'Expedientes' } },
+            { path: 'expedientes/nuevo', name: 'expedientes-nuevo',
+              component: () => import('@/views/expedientes/ExpedienteFormView.vue'),
               meta: { title: 'Nuevo Expediente', requiresEdit: true } },
-            { path: 'contratos/:id', name: 'contratos-ejecucion-detalle',
-              component: () => import('@/views/contratos/EjecucionDetail.vue'),
+            { path: 'expedientes/:id', name: 'expedientes-detalle',
+              component: () => import('@/views/expedientes/ExpedienteDetail.vue'),
               meta: { title: 'Detalle de Expediente' } },
-            { path: 'contratos/:id/ejecucion', name: 'contratos-ejecucion-movimientos',
-              component: () => import('@/views/contratos/EjecucionMovimientos.vue'),
-              meta: { title: 'Ejecución del Expediente' } },
-            { path: 'contratos/:id/editar', name: 'contratos-ejecucion-editar',
-              component: () => import('@/views/contratos/EjecucionForm.vue'),
+            { path: 'expedientes/:id/movimientos', name: 'expedientes-movimientos',
+              component: () => import('@/views/expedientes/ExpedienteMovimientos.vue'),
+              meta: { title: 'Movimientos del Expediente' } },
+            { path: 'expedientes/:id/editar', name: 'expedientes-editar',
+              component: () => import('@/views/expedientes/ExpedienteFormView.vue'),
               meta: { title: 'Editar Expediente', requiresEdit: true } },
+
+            // Cuenta operativa: su saldo y el historial de lo que se registró.
+            { path: 'cuentas/:id', name: 'cuenta-detalle',
+              component: () => import('@/views/cuentas/CuentaDetail.vue'),
+              meta: { title: 'Cuenta' } },
 
             // Estructura organizativa y catálogos
             { path: 'catalogos/:slug', name: 'catalogo',

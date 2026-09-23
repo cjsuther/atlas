@@ -19,6 +19,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Instalación nueva: el esquema inicial ya trae la tabla con su forma final.
+        if (!Schema::hasTable('contratos_ejecucion')) {
+            return;
+        }
+
         if (!Schema::hasColumn('contratos_ejecucion', 'sector_id')) {
             DB::statement('ALTER TABLE contratos_ejecucion ADD COLUMN sector_id INT NULL AFTER contrato_principal_id');
         }

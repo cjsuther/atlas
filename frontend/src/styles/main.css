@@ -241,6 +241,9 @@ a:hover { text-decoration: underline; }
     letter-spacing: 0.5px;
 }
 .field .error { color: var(--color-danger); font-size: 12px; margin-top: 2px; }
+/* Agrupa el formulario para poder deshabilitarlo entero en modo consulta. */
+fieldset.sin-marco { border: 0; padding: 0; margin: 0; min-width: 0; }
+.field .hint { color: var(--color-muted, #888); font-size: 12px; margin-top: 2px; }
 .field.inherited label::after {
     content: ' · heredado';
     color: var(--color-accent);
@@ -274,6 +277,20 @@ table.atlas-table th {
 }
 table.atlas-table th.sortable { cursor: pointer; }
 table.atlas-table th.sortable:hover { background: var(--color-primary-2); }
+
+/* Encabezado que ordena al hacer clic. */
+table.atlas-table th.ordenable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+table.atlas-table th.ordenable:hover { text-decoration: underline; }
+table.atlas-table th.ordenable.derecha { text-align: right; }
+table.atlas-table th .flecha {
+    font-size: 10px;
+    margin-left: 3px;
+    opacity: 0.85;
+}
 table.atlas-table tbody tr:nth-child(even) { background: var(--color-surface-2); }
 table.atlas-table tbody tr:hover { background: var(--color-accent-soft); }
 table.atlas-table .actions { display: flex; gap: 6px; justify-content: flex-end; }

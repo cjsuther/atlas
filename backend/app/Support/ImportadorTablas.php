@@ -28,7 +28,7 @@ class ImportadorTablas
     /**
      * Solapas que se ignoran: la gestión de contratos principales fue
      * reemplazada por la estructura de sectores, y sus filas duplican los
-     * saldos iniciales que ya vienen en `contratos_ejecucion`.
+     * saldos iniciales que ya vienen en `expedientes`.
      */
     public const IGNORADAS = ['contratos_principal'];
 
@@ -104,7 +104,7 @@ class ImportadorTablas
      */
     private function traducir(string $tabla, array $fila): array
     {
-        if ($tabla === 'contratos_ejecucion') {
+        if ($tabla === 'expedientes') {
             // `gerencia` traía el id del subsector y `gerencia_area` el de la raíz.
             if (!array_key_exists('sector_id', $fila) || $fila['sector_id'] === null) {
                 $fila['sector_id'] = $this->entero($fila['gerencia'] ?? null)
@@ -133,10 +133,43 @@ class ImportadorTablas
         }
 
         if ($tabla === 'ejecucion_movimientos') {
+            // Los archivos anteriores llamaban contrato al expediente.
+            foreach (['contrato_ejecucion_id' => 'expediente_id',
+                      'contrato_contraparte_id' => 'expediente_contraparte_id'] as $viejo => $nuevo) {
+                if ($this->entero($fila[$nuevo] ?? null) === null && isset($fila[$viejo])) {
+                    $fila[$nuevo] = $fila[$viejo];
+                }
+                unset($fila[$viejo]);
+            }
+
             // En este formato todos los movimientos son facturas.
             $fila['accion'] = $fila['accion'] ?? 'factura';
             $fila['contraparte_tipo'] = $fila['contraparte_tipo']
                 ?? (($fila['tipo'] ?? null) === 'ingreso' ? 'cliente' : 'proveedor');
+
+            // Los archivos anteriores imputaban el movimiento al expediente: la
+            // cuenta, que ahora es obligatoria, es la de ese expediente.
+            if ($this->entero($fila['cuenta_operativa_id'] ?? null) === null) {
+                $fila['cuenta_operativa_id'] = DB::table('expedientes')
+                    ->where('id', $this->entero($fila['expediente_id'] ?? null))
+                    ->value('cuenta_operativa_id');
+                if ($fila['cuenta_operativa_id'] !== null) {
+                    $this->avisos[] = 'ejecucion_movimientos: el archivo no trae cuenta; cada movimiento '
+                                    . 'se registró en la cuenta de su expediente.';
+                }
+            }
+
+            // La transferencia iba de expediente a expediente y ahora va de
+            // cuenta a cuenta.
+            if ($this->entero($fila['cuenta_contraparte_id'] ?? null) === null
+                && $this->entero($fila['expediente_contraparte_id'] ?? null) !== null) {
+                $fila['cuenta_contraparte_id'] = DB::table('expedientes')
+                    ->where('id', $this->entero($fila['expediente_contraparte_id']))
+                    ->value('cuenta_operativa_id');
+            }
+            if (($fila['contraparte_tipo'] ?? null) === 'contrato') {
+                $fila['contraparte_tipo'] = 'cuenta';
+            }
         }
 
         if (isset($fila['moneda']) && is_string($fila['moneda'])) {
@@ -175,7 +208,7 @@ class ImportadorTablas
         }
 
         $id = $this->entero($fila['id'] ?? null);
-        $actual = $id === null ? null : DB::table('contratos_ejecucion as c')
+        $actual = $id === null ? null : DB::table('expedientes as c')
             ->join('cuentas_operativas as co', 'co.id', '=', 'c.cuenta_operativa_id')
             ->where('c.id', $id)
             ->where('co.sector_id', $nodo)
@@ -223,7 +256,7 @@ class ImportadorTablas
                             . 'expedientes de ese nodo, que no tenía ninguna.';
         }
 
-        $this->avisos[] = 'contratos_ejecucion: el archivo no trae cuenta operativa; cada expediente '
+        $this->avisos[] = 'expedientes: el archivo no trae cuenta operativa; cada expediente '
                         . 'se imputó a la cuenta de su nodo.';
 
         return $this->cuentaPorNodo[$nodo] = (int) $cuenta;

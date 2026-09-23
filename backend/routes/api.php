@@ -1,7 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\ContratoEjecucionController;
+use App\Http\Controllers\ContratoController;
+use App\Http\Controllers\ExpedienteController;
 use App\Http\Controllers\DatabaseBackupController;
 use App\Http\Controllers\EjecucionMovimientoController;
 use App\Http\Controllers\EstadoEjecucionController;
@@ -79,45 +80,41 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // ------------------------------------------------------------------
     Route::prefix('panel')->group(function () {
         Route::get('/indicadores',  [PanelController::class, 'indicadores']);
-        Route::get('/calculados',   [PanelController::class, 'calculados']);
         Route::get('/saldos',       [PanelController::class, 'saldos']);
-        Route::get('/por-uvt',      [PanelController::class, 'porUvt']);
         Route::get('/por-gerencia', [PanelController::class, 'porGerencia']);
         Route::get('/por-accion',   [PanelController::class, 'porAccion']);
-        Route::get('/vencimientos', [PanelController::class, 'vencimientos']);
-        Route::get('/rankings',     [PanelController::class, 'rankings']);
     });
 
     // ------------------------------------------------------------------
-    // Contratos
+    // Expedientes
     //   GET    : todos los roles (sólo los de su alcance)
-    //   POST/PUT/DELETE : todos los roles, sobre su propia gerencia
-    //   transferir      : sólo el administrador (puede cruzar Gerencias de Área)
+    //   POST/PUT/DELETE : todos los roles, sobre su propia rama
     // ------------------------------------------------------------------
-    Route::get('/contratos-ejecucion',              [ContratoEjecucionController::class, 'index']);
-    Route::get('/contratos-ejecucion/export/excel', [ContratoEjecucionController::class, 'export']);
-    Route::get('/contratos-ejecucion/{id}',         [ContratoEjecucionController::class, 'show'])->whereNumber('id');
+    Route::get('/expedientes',              [ExpedienteController::class, 'index']);
+    Route::get('/expedientes/export/excel', [ExpedienteController::class, 'export']);
+    Route::get('/expedientes/{id}',         [ExpedienteController::class, 'show'])->whereNumber('id');
 
-    Route::post  ('/contratos-ejecucion',        [ContratoEjecucionController::class, 'store']);
-    Route::put   ('/contratos-ejecucion/{id}',   [ContratoEjecucionController::class, 'update'])->whereNumber('id');
-    Route::delete('/contratos-ejecucion/{id}',   [ContratoEjecucionController::class, 'destroy'])->whereNumber('id');
+    Route::post  ('/expedientes',        [ExpedienteController::class, 'store']);
+    Route::put   ('/expedientes/{id}',   [ExpedienteController::class, 'update'])->whereNumber('id');
+    Route::delete('/expedientes/{id}',   [ExpedienteController::class, 'destroy'])->whereNumber('id');
 
-    Route::middleware('admin')->group(function () {
-        Route::post('/contratos-ejecucion/{id}/transferir',
-            [ContratoEjecucionController::class, 'transferir'])->whereNumber('id');
-    });
 
     // ------------------------------------------------------------------
-    // Movimientos de ejecución imputados a un contrato.
-    // Además de facturas hay transferencias entre contratos, incentivos y MCH.
+    // Movimientos registrados en una cuenta operativa: ingresos y gastos por
+    // factura, transferencias con otra cuenta, incentivos y MCH. Cada uno puede
+    // indicar el contrato con el que se relaciona, sin estar obligado.
     // ------------------------------------------------------------------
-    Route::get('/contratos-ejecucion/{id}/movimientos',
+    Route::get('/cuentas-operativas/{id}/movimientos',
+        [EjecucionMovimientoController::class, 'indexForCuenta'])->whereNumber('id');
+    Route::post('/cuentas-operativas/{id}/movimientos',
+        [EjecucionMovimientoController::class, 'storeForCuenta'])->whereNumber('id');
+
+    // Lo registrado contra un contrato, para verlo desde el expediente.
+    Route::get('/expedientes/{id}/movimientos',
         [EjecucionMovimientoController::class, 'indexForContrato'])->whereNumber('id');
     Route::get('/movimientos/{id}',          [EjecucionMovimientoController::class, 'show'])->whereNumber('id');
     Route::get('/movimientos/{id}/factura',  [EjecucionMovimientoController::class, 'descargarFactura'])->whereNumber('id');
 
-    Route::post('/contratos-ejecucion/{id}/movimientos',
-        [EjecucionMovimientoController::class, 'storeForContrato'])->whereNumber('id');
     // POST con `_method=PUT` permite enviar multipart (archivo) y ser tratado como PUT.
     Route::match(['put','post'], '/movimientos/{id}',
         [EjecucionMovimientoController::class, 'update'])->whereNumber('id');
@@ -128,6 +125,22 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // Historial de cambios
     // ------------------------------------------------------------------
     Route::get('/historial/{tabla}/{id}', [HistorialController::class, 'show'])->whereNumber('id');
+
+    // ------------------------------------------------------------------
+    // Contratos: la ficha de cada nodo del tercer nivel de la estructura.
+    //   GET : los de la rama del usuario
+    //   PUT : los de la rama en la que tiene escritura
+    // El nodo se crea y se borra desde la Estructura.
+    // ------------------------------------------------------------------
+    Route::get('/contratos',      [ContratoController::class, 'index']);
+    Route::get('/contratos/{id}', [ContratoController::class, 'show'])->whereNumber('id');
+    Route::put('/contratos/{id}', [ContratoController::class, 'update'])->whereNumber('id');
+
+    // Archivos adjuntos de cada contrato (convenio, actas, anexos).
+    Route::get   ('/contratos/{id}/archivos',           [ContratoController::class, 'archivos'])->whereNumber('id');
+    Route::post  ('/contratos/{id}/archivos',           [ContratoController::class, 'adjuntar'])->whereNumber('id');
+    Route::get   ('/contrato-archivos/{id}/descargar',  [ContratoController::class, 'descargar'])->whereNumber('id');
+    Route::delete('/contrato-archivos/{id}',            [ContratoController::class, 'quitarArchivo'])->whereNumber('id');
 
     // El árbol de la estructura con las cuentas de cada nodo: lo consumen el
     // selector de cuenta del expediente y la asignación de permisos.

@@ -115,7 +115,7 @@ function tablaDistribucion(doc, y, encabezado, filas) {
 
     y = titulo(doc, encabezado, y);
     return tabla(doc, y,
-        ['', 'Expedientes', 'Saldo', ''],
+        ['', 'Cuentas', 'Saldo', ''],
         filas.map(f => [f.label, f.extra, fmtMoney(f.value), '']),
         {
             columnStyles: {
@@ -143,7 +143,7 @@ function tablaDistribucion(doc, y, encabezado, filas) {
  */
 export function generarPanelPdf(datos) {
     const {
-        ind, calc, saldos, dGer, dUvt, acciones, venc, ranks,
+        ind, saldos, dGer, acciones,
         filtrosAplicados = [], alcance = '', usuario = '',
         tituloSaldos = 'Estructura', accionLabels = {},
     } = datos;
@@ -168,29 +168,13 @@ export function generarPanelPdf(datos) {
     const moneda = ind?.montos?.moneda_base || 'Peso';
     y = titulo(doc, 'Indicadores principales', y);
     y = tablaIndicadores(doc, y, [
-        ['Expedientes',              fmtInt(ind?.totales?.contratos)],
-        ['En firma',                 fmtInt(ind?.totales?.en_firma)],
-        ['En ejecución',             fmtInt(ind?.totales?.en_ejecucion)],
-        ['Finalizados',              fmtInt(ind?.totales?.finalizados)],
-        ['Vencidos',                 fmtInt(ind?.totales?.vencidos)],
-        ['Con atraso',               fmtInt(ind?.totales?.con_atraso)],
+        ['Cuentas',                  fmtInt(ind?.totales?.cuentas)],
+        ['Contratos',                fmtInt(ind?.totales?.contratos)],
         [`Saldo inicial (${moneda})`, fmtMoney(ind?.montos?.saldo_inicial_total)],
         [`Saldo (${moneda})`,         fmtMoney(ind?.montos?.saldo_total)],
         ['Ejecutado ingresos',       fmtMoney(ind?.montos?.ejecutado_ingresos_total)],
         ['Ejecutado gastos',         fmtMoney(ind?.montos?.ejecutado_gastos_total)],
         ['Beneficio',                fmtMoney(ind?.montos?.beneficio_total)],
-        ['', ''],
-    ]);
-
-    // ---- Indicadores calculados ----
-    const pct = (v) => (v === null || v === undefined ? '—' : `${v}%`);
-    y = titulo(doc, 'Indicadores calculados', y);
-    y = tablaIndicadores(doc, y, [
-        ['Días promedio de firma',     calc?.dias_firma_promedio ?? '—'],
-        ['Días promedio de ejecución', calc?.dias_ejecucion_promedio ?? '—'],
-        ['% Finalizados en término',   pct(calc?.porcentaje_finalizados_en_termino)],
-        ['% Vencidos sin cierre',      pct(calc?.porcentaje_vencidos_sin_cierre)],
-        ['% Ejecución económica',      pct(calc?.porcentaje_ejecucion_economica)],
         ['', ''],
     ]);
 
@@ -203,6 +187,7 @@ export function generarPanelPdf(datos) {
         f.alcance === 'acumulado'
             ? '   '.repeat(f.nivel) + f.etiqueta
             : '   '.repeat(f.nivel) + '    sólo lo propio',
+        fmtInt(f.cuentas),
         fmtInt(f.contratos),
         fmtMoney(f.saldo_inicial),
         fmtMoney(f.ejecutado_ingresos),
@@ -211,6 +196,7 @@ export function generarPanelPdf(datos) {
     ]);
     filasSaldos.push([
         `Total (${saldos?.moneda_base || moneda})`,
+        fmtInt(saldos?.totales?.cuentas),
         fmtInt(saldos?.totales?.contratos),
         fmtMoney(saldos?.totales?.saldo_inicial),
         fmtMoney(saldos?.totales?.ejecutado_ingresos),
@@ -219,16 +205,17 @@ export function generarPanelPdf(datos) {
     ]);
 
     y = tabla(doc, y,
-        ['Estructura', 'Expedientes', 'Saldo inicial', 'Ingresos', 'Gastos', 'Saldo'],
+        ['Estructura', 'Cuentas', 'Contratos', 'Saldo inicial', 'Ingresos', 'Gastos', 'Saldo'],
         filasSaldos,
         {
             columnStyles: {
-                0: { cellWidth: 150 },
+                0: { cellWidth: 130 },
                 1: { halign: 'right' },
                 2: { halign: 'right' },
                 3: { halign: 'right' },
                 4: { halign: 'right' },
-                5: { halign: 'right', fontStyle: 'bold' },
+                5: { halign: 'right' },
+                6: { halign: 'right', fontStyle: 'bold' },
             },
             // La fila del total y las acumuladas se destacan.
             didParseCell: (data) => {
@@ -246,7 +233,6 @@ export function generarPanelPdf(datos) {
     y = titulo(doc, 'Distribución', y) + 12;
     y = tablaDistribucion(doc, y, 'Por Gerencia de Área', dGer?.gerencias_area?.map(mapear) || []);
     y = tablaDistribucion(doc, y, 'Por Gerencia',         dGer?.sectores?.map(mapear) || []);
-    y = tablaDistribucion(doc, y, 'Por UVT',              dUvt?.contratos?.map(mapearUvt) || []);
 
     // ---- Movimientos por acción ----
     if (acciones?.movimientos?.length) {
@@ -262,34 +248,6 @@ export function generarPanelPdf(datos) {
             { columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } } });
     }
 
-    // ---- Vencimientos ----
-    y = titulo(doc, 'Próximos vencimientos', y);
-    y = tablaIndicadores(doc, y, [
-        ['Vencidos',        fmtInt(venc?.vencidos)],
-        ['Vencen en 30 días', fmtInt(venc?.dias_30)],
-        ['Vencen en 60 días', fmtInt(venc?.dias_60)],
-        ['Vencen en 90 días', fmtInt(venc?.dias_90)],
-    ]);
-
-    // ---- Rankings ----
-    if (ranks?.gerencias_area_por_cantidad?.length) {
-        y = titulo(doc, 'Gerencias de Área con más expedientes', y);
-        y = tabla(doc, y, ['Gerencia de Área', 'Cantidad'],
-            ranks.gerencias_area_por_cantidad.map(r => [r.gerencia_area || '—', fmtInt(r.cantidad)]),
-            { columnStyles: { 1: { halign: 'right' } } });
-    }
-
-    if (ranks?.uvt_por_monto?.length) {
-        y = titulo(doc, 'UVT por monto', y);
-        tabla(doc, y, ['UVT', 'Saldo inicial', 'Saldo'],
-            ranks.uvt_por_monto.map(r => [
-                r.nombre ? `${r.siglas} — ${r.nombre}` : r.siglas,
-                fmtMoney(r.saldo_inicial),
-                fmtMoney(r.saldo),
-            ]),
-            { columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } } });
-    }
-
     decorar(doc, 'Panel de control', emitido);
 
     const fecha = new Date().toISOString().slice(0, 10);
@@ -298,8 +256,4 @@ export function generarPanelPdf(datos) {
 
 function mapear(r) {
     return { label: r.nombre || '—', value: Number(r.saldo) || 0, extra: fmtInt(r.cantidad) };
-}
-
-function mapearUvt(r) {
-    return { label: r.siglas || '—', value: Number(r.saldo) || 0, extra: fmtInt(r.cantidad) };
 }

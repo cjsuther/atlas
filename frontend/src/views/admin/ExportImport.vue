@@ -42,15 +42,15 @@
                 <table class="atlas-table">
                     <thead>
                         <tr>
-                            <th>Tabla</th>
-                            <th>Insertados</th>
-                            <th>Actualizados</th>
-                            <th>Omitidos</th>
-                            <th>Estado</th>
+                            <ThOrden campo="tabla" :orden="orden" @ordenar="ordenarPor">Tabla</ThOrden>
+                            <ThOrden campo="insertados" :orden="orden" @ordenar="ordenarPor">Insertados</ThOrden>
+                            <ThOrden campo="actualizados" :orden="orden" @ordenar="ordenarPor">Actualizados</ThOrden>
+                            <ThOrden campo="omitidas" :orden="orden" @ordenar="ordenarPor">Omitidos</ThOrden>
+                            <ThOrden campo="omitida" :orden="orden" @ordenar="ordenarPor">Estado</ThOrden>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="r in resumen" :key="r.tabla">
+                        <tr v-for="r in filasOrdenadas" :key="r.tabla">
                             <td>{{ r.tabla }}</td>
                             <td>{{ r.insertados }}</td>
                             <td>{{ r.actualizados }}</td>
@@ -86,6 +86,8 @@ import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import IconLib from '@/components/IconLib.vue';
+import ThOrden from '@/components/ThOrden.vue';
+import { useOrdenTabla } from '@/composables/useOrden';
 
 const toast = useToast();
 
@@ -106,6 +108,10 @@ const fileInput = ref(null);
 const archivo = ref(null);
 const importing = ref(false);
 const resumen = ref([]);
+
+const { orden, ordenarPor, filasOrdenadas } = useOrdenTabla(resumen, {
+    accesores: { omitida: (r) => (r.omitida ? 1 : 0), omitidas: (r) => Number(r.omitidas || 0) },
+});
 const avisos = ref([]);
 
 function onFile(ev) {

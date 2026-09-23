@@ -15,6 +15,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('contratos_ejecucion')) {
+            return;
+        }
+
         if (Schema::hasColumn('contratos_ejecucion', 'monto_presupuestado_ingresos')
             && !Schema::hasColumn('contratos_ejecucion', 'saldo_inicial')) {
             DB::statement('ALTER TABLE contratos_ejecucion

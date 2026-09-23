@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Contrato;
 use App\Models\TipoContratoEjecucion;
 
 class TipoContratoEjecucionService extends BaseCrudService
@@ -13,9 +13,9 @@ class TipoContratoEjecucionService extends BaseCrudService
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
-        $usados = ContratoEjecucion::where('tipo_contrato_id', (int) $id)->count();
+        $usados = Contrato::where('tipo_contrato_id', (int) $id)->count();
         if ($usados > 0) {
-            $msgs[] = "Hay {$usados} contrato(s) de ejecución usando este tipo.";
+            $msgs[] = "Hay {$usados} contrato(s) usando este tipo.";
         }
         return $msgs;
     }

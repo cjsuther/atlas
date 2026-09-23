@@ -2,9 +2,9 @@
     <div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
             <div>
-                <h1 class="page-title">Ejecución</h1>
+                <h1 class="page-title">Expedientes</h1>
                 <p class="page-subtitle">
-                    Expedientes por cuenta operativa de la estructura
+                    Cada expediente va contra una cuenta
                     <template v-if="!auth.veTodo"> · {{ auth.alcanceLabel }}</template>
                 </p>
             </div>
@@ -12,7 +12,7 @@
                 <button class="btn btn-secondary" @click="exportar">
                     <IconLib name="download" /> Exportar Excel
                 </button>
-                <router-link v-if="auth.canEdit" :to="{ name: 'contratos-ejecucion-nuevo' }" class="btn btn-primary">
+                <router-link v-if="auth.canEdit" :to="{ name: 'expedientes-nuevo' }" class="btn btn-primary">
                     <IconLib name="plus" /> Nuevo
                 </router-link>
             </div>
@@ -23,86 +23,34 @@
                 <div class="field">
                     <label>Buscar</label>
                     <input v-model="filters.search" type="text" class="input"
-                           placeholder="Proyecto, expediente, descripción..." @input="onFilter" />
-                </div>
-                <div class="field">
-                    <label>Estado</label>
-                    <select v-model="filters.estado_id" class="select" @change="onFilter">
-                        <option value="">Todos</option>
-                        <option v-for="e in estados" :key="e.id" :value="e.id">{{ e.nombre }}</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Tipo</label>
-                    <select v-model="filters.tipo_contrato_id" class="select" @change="onFilter">
-                        <option value="">Todos</option>
-                        <option v-for="t in tipos" :key="t.id" :value="t.id">{{ t.sigla }} — {{ t.nombre }}</option>
-                    </select>
+                           placeholder="Número de expediente…" @input="onFilter" />
                 </div>
                 <div v-if="auth.veTodo" class="field">
                     <label>Gerencia de Área</label>
-                    <select v-model="filters.gerencia_area_id" class="select" @change="onFilter">
-                        <option value="">Todas</option>
-                        <option v-for="a in areas" :key="a.sector_id" :value="a.sector_id">{{ a.nombre }}</option>
-                    </select>
+                    <SelectBuscador v-model="filters.gerencia_area_id"
+                                    :opciones="areas.map(a => ({ value: a.sector_id, etiqueta: a.nombre }))"
+                                    opcion-vacia="Todas" valor-vacio="" placeholder="Todas"
+                                    @update:model-value="onFilter" />
                 </div>
                 <div class="field">
                     <label>Gerencia</label>
-                    <select v-model="filters.sector_id" class="select" @change="onFilter">
-                        <option value="">Todas</option>
-                        <option v-for="g in nodosDelNivel(2)" :key="g.sector_id" :value="g.sector_id">
-                            {{ g.nombre }}
-                        </option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Plan</label>
-                    <select v-model="filters.plan_id" class="select" @change="onFilter">
-                        <option value="">Todos</option>
-                        <option v-for="p in nodosDelNivel(3)" :key="p.sector_id" :value="p.sector_id">
-                            {{ p.nombre }}
-                        </option>
-                    </select>
+                    <SelectBuscador v-model="filters.sector_id"
+                                    :opciones="nodosDelNivel(2).map(g => ({ value: g.sector_id, etiqueta: g.nombre }))"
+                                    opcion-vacia="Todas" valor-vacio="" placeholder="Todas"
+                                    @update:model-value="onFilter" />
                 </div>
                 <div class="field">
                     <label>Contrato</label>
-                    <select v-model="filters.nodo_id" class="select" @change="onFilter">
-                        <option value="">Todos</option>
-                        <option v-for="c in nodosDelNivel(4)" :key="c.sector_id" :value="c.sector_id">
-                            {{ c.nombre }}
-                        </option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>UVT</label>
-                    <select v-model="filters.uvt_id" class="select" @change="onFilter">
-                        <option value="">Todas</option>
-                        <option v-for="u in uvts" :key="u.uvt_id" :value="u.uvt_id">{{ u.siglas }}</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Moneda</label>
-                    <select v-model="filters.moneda" class="select" @change="onFilter">
-                        <option value="">Todas</option>
-                        <option>Peso</option>
-                        <option>Dólar</option>
-                        <option>Euro</option>
-                        <option>Otro</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Solo vencidos</label>
-                    <select v-model="filters.vencidos" class="select" @change="onFilter">
-                        <option :value="''">No</option>
-                        <option :value="'1'">Sí</option>
-                    </select>
+                    <SelectBuscador v-model="filters.nodo_id"
+                                    :opciones="nodosDelNivel(3).map(c => ({ value: c.sector_id, etiqueta: c.nombre }))"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
+                                    @update:model-value="onFilter" />
                 </div>
                 <div v-if="auth.veTodo" class="field">
                     <label>Mostrar dados de baja</label>
-                    <select v-model="filters.mostrar_baja" class="select" @change="onFilter">
-                        <option :value="''">No</option>
-                        <option :value="'1'">Sí</option>
-                    </select>
+                    <SelectBuscador v-model="filters.mostrar_baja"
+                                    :opciones="[{ value: '', etiqueta: 'No' }, { value: '1', etiqueta: 'Sí' }]"
+                                    @update:model-value="onFilter" />
                 </div>
             </div>
         </div>
@@ -114,12 +62,11 @@
             <table class="atlas-table">
                 <thead>
                     <tr>
-                        <th v-for="col in columnas" :key="col.campo || col.label"
-                            :class="{ ordenable: col.campo, activa: orden.by === col.campo }"
-                            @click="col.campo && ordenarPor(col.campo)">
-                            {{ col.label }}
-                            <span v-if="col.campo" class="flecha">{{ flecha(col.campo) }}</span>
-                        </th>
+                        <template v-for="col in columnas" :key="col.campo || col.label">
+                            <ThOrden v-if="col.campo" :campo="col.campo" :orden="orden"
+                                     @ordenar="ordenarPor">{{ col.label }}</ThOrden>
+                            <th v-else>{{ col.label }}</th>
+                        </template>
                         <th></th>
                     </tr>
                 </thead>
@@ -127,13 +74,10 @@
                     <tr v-for="r in rows" :key="r.id" :class="{ deleted: r.deleted_at }">
                         <td>{{ r.id }}</td>
                         <td>
-                            <router-link :to="{ name: 'contratos-ejecucion-detalle', params: { id: r.id } }">
+                            <router-link :to="{ name: 'expedientes-detalle', params: { id: r.id } }">
                                 {{ r.nro_expediente }}
                             </router-link>
                         </td>
-                        <td>{{ r.tipo_contrato?.sigla }}</td>
-                        <td>{{ r.nombre_proyecto }}</td>
-                        <td><span :class="['badge', badgeForEstado(r.estado)]">{{ r.estado?.nombre || '—' }}</span></td>
                         <td>
                             <div>{{ r.estructura?.gerencia?.nombre || r.sector?.nombre || '—' }}</div>
                             <div v-if="bajoLaGerencia(r)" style="font-size:12px;">
@@ -143,22 +87,25 @@
                                 {{ r.gerencia_area.nombre }}
                             </div>
                         </td>
-                        <td>{{ r.uvt?.siglas || '—' }}</td>
-                        <td>{{ fmtDate(r.fecha_inicio) }}</td>
-                        <td>{{ fmtDate(r.fecha_vencimiento) }}</td>
+                        <td>
+                            <router-link v-if="r.cuenta_operativa"
+                                         :to="{ name: 'cuenta-detalle', params: { id: r.cuenta_operativa.id } }">
+                                {{ r.cuenta_operativa.nombre }}
+                            </router-link>
+                            <span v-else>—</span>
+                        </td>
                         <td>
                             <div class="ejecutado">
-                                <div><span>Saldo inic.:</span> {{ fmtMoney(r.saldo_inicial) }}</div>
                                 <div><span>Ing.:</span> {{ fmtMoney(r.monto_ejecutado_ingresos) }}</div>
                                 <div><span>Gtos.:</span> {{ fmtMoney(r.monto_ejecutado_gastos) }}</div>
                                 <div class="saldo" :class="{ negativo: Number(r.saldo) < 0 }">
-                                    <span>Saldo:</span> {{ r.moneda }} {{ fmtMoney(r.saldo) }}
+                                    <span>Resultado:</span> {{ fmtMoney(r.saldo) }}
                                 </div>
                             </div>
                         </td>
                         <td class="actions">
                             <router-link v-if="auth.canEdit && !r.deleted_at"
-                                         :to="{ name: 'contratos-ejecucion-editar', params: { id: r.id } }">
+                                         :to="{ name: 'expedientes-editar', params: { id: r.id } }">
                                 <button><IconLib name="edit" :size="14" /></button>
                             </router-link>
                             <button v-if="auth.canEdit && !r.deleted_at" class="danger" @click="darBaja(r)">
@@ -171,12 +118,9 @@
             <div class="pie-grilla">
                 <label>
                     Ver
-                    <select v-model.number="perPage" class="select" @change="cambiarTamanio">
-                        <option :value="20">20</option>
-                        <option :value="50">50</option>
-                        <option :value="100">100</option>
-                        <option :value="200">200</option>
-                    </select>
+                    <SelectBuscador v-model="perPage"
+                                    :opciones="[20, 50, 100, 200].map(n => ({ value: n, etiqueta: String(n) }))"
+                                    @update:model-value="cambiarTamanio" />
                     por página
                 </label>
                 <BasePager :page="page" :per-page="perPage" :total="total" @change="goto" />
@@ -189,15 +133,17 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { contratosEjecucionService } from '@/services/contratosEjecucion';
+import { expedientesService } from '@/services/expedientes';
 import { listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
-import { fmtDate, fmtMoney, badgeForEstado, debounce } from '@/composables/useFormat';
+import { fmtMoney, debounce } from '@/composables/useFormat';
 import IconLib from '@/components/IconLib.vue';
+import SelectBuscador from '@/components/SelectBuscador.vue';
 import BasePager from '@/components/BasePager.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import ThOrden from '@/components/ThOrden.vue';
 
 const auth = useAuthStore();
 const toast = useToast();
@@ -211,29 +157,19 @@ const confirmRef = ref(null);
 
 const filters = reactive({
     search: '',
-    estado_id: '',
-    tipo_contrato_id: '',
     gerencia_area_id: '',
     sector_id: '',
-    plan_id: '',
     nodo_id: '',
-    uvt_id: '',
-    moneda: '',
-    vencidos: '',
     mostrar_baja: '',
 });
 
-const estados = ref([]);
-const tipos = ref([]);
-const uvts = ref([]);
 const sectores = ref([]);
 
 /** Selectores de la estructura, de arriba hacia abajo, con su nivel en el árbol. */
 const FILTROS_ESTRUCTURA = [
     ['gerencia_area_id', 1],
     ['sector_id',        2],
-    ['plan_id',          3],
-    ['nodo_id',          4],
+    ['nodo_id',          3],
 ];
 
 /** Cada nodo con su nivel y sus ancestros, deducidos de la dependencia. */
@@ -271,9 +207,9 @@ FILTROS_ESTRUCTURA.forEach(([campo], i) => {
     });
 });
 
-/** Plan y Contrato del expediente, cuando se imputa por debajo de la Gerencia. */
+/** Contrato del expediente, cuando se imputa por debajo de la Gerencia. */
 function bajoLaGerencia(r) {
-    return [r.estructura?.plan?.nombre, r.estructura?.contrato?.nombre].filter(Boolean).join(' › ');
+    return r.estructura?.contrato?.nombre || '';
 }
 
 /**
@@ -281,16 +217,11 @@ function bajoLaGerencia(r) {
  * las que no lo tienen no son ordenables.
  */
 const columnas = [
-    { label: 'ID',                campo: 'id' },
-    { label: 'Expediente',        campo: 'nro_expediente' },
-    { label: 'Tipo',              campo: 'tipo' },
-    { label: 'Proyecto',          campo: 'nombre_proyecto' },
-    { label: 'Estado',            campo: 'estado' },
-    { label: 'Gerencia',          campo: 'sector' },
-    { label: 'UVT',               campo: 'uvt' },
-    { label: 'F. Inicio',         campo: 'fecha_inicio' },
-    { label: 'F. Venc.',          campo: 'fecha_vencimiento' },
-    { label: 'Ejecución y saldo', campo: 'saldo' },
+    { label: 'ID',          campo: 'id' },
+    { label: 'Expediente',  campo: 'nro_expediente' },
+    { label: 'Gerencia',    campo: 'sector' },
+    { label: 'Cuenta',      campo: 'cuenta' },
+    { label: 'Movimientos relacionados', campo: 'saldo' },
 ];
 
 const orden = reactive({ by: 'id', dir: 'desc' });
@@ -305,11 +236,6 @@ function ordenarPor(campo) {
     }
     page.value = 1;
     load();
-}
-
-function flecha(campo) {
-    if (orden.by !== campo) return '';
-    return orden.dir === 'asc' ? '▲' : '▼';
 }
 
 function cambiarTamanio() {
@@ -331,7 +257,7 @@ async function load() {
         for (const [k, v] of Object.entries(filters)) {
             if (v !== '' && v !== null && v !== undefined) params[k] = v;
         }
-        const res = await contratosEjecucionService.list(params);
+        const res = await expedientesService.list(params);
         rows.value = res.data || [];
         total.value = res.total || 0;
         perPage.value = Number(res.per_page) || perPage.value;
@@ -353,7 +279,7 @@ async function darBaja(r) {
     });
     if (!ok) return;
     try {
-        await contratosEjecucionService.remove(r.id);
+        await expedientesService.remove(r.id);
         toast.success('Expediente dado de baja.');
         load();
     } catch (err) {
@@ -367,7 +293,7 @@ async function exportar() {
         for (const [k, v] of Object.entries(filters)) {
             if (v !== '' && v !== null && v !== undefined) params[k] = v;
         }
-        await contratosEjecucionService.exportExcel(params);
+        await expedientesService.exportExcel(params);
     } catch (err) {
         toast.error(extractError(err, 'No se pudo exportar.'));
     }
@@ -375,32 +301,13 @@ async function exportar() {
 
 onMounted(async () => {
     try {
-        const [e, t, u, sec] = await Promise.all([
-            listAll('estados-ejecucion'),
-            listAll('tipos-contrato-ejecucion'),
-            listAll('uvt'),
-            listAll('sectores'),
-        ]);
-        estados.value = e; tipos.value = t; uvts.value = u;
-        sectores.value = sec;
+        sectores.value = await listAll('sectores');
     } catch { /* no-op */ }
     load();
 });
 </script>
 
 <style scoped>
-.atlas-table th.ordenable {
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-.atlas-table th.ordenable:hover { text-decoration: underline; }
-.atlas-table th .flecha {
-    font-size: 10px;
-    margin-left: 3px;
-    opacity: 0.85;
-}
-
 .pie-grilla {
     display: flex;
     align-items: center;

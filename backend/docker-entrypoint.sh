@@ -31,8 +31,9 @@ php artisan config:clear || true
 php artisan route:clear || true
 php artisan cache:clear || true
 
-# Directorio de facturas (persistido por backend_storage volume)
-mkdir -p storage/app/private/facturas
+# Directorios de archivos (persistidos por el volumen backend_storage):
+# las facturas de los movimientos y los adjuntos de cada contrato.
+mkdir -p storage/app/private/facturas storage/app/private/contratos
 
 # Permisos
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true

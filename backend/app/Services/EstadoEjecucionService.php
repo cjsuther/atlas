@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Contrato;
 use App\Models\EstadoEjecucion;
 
 class EstadoEjecucionService extends BaseCrudService
@@ -13,9 +13,9 @@ class EstadoEjecucionService extends BaseCrudService
     public function dependenciesFor(int|string $id): array
     {
         $msgs = [];
-        $usados = ContratoEjecucion::where('estado_id', (int) $id)->count();
+        $usados = Contrato::where('estado_id', (int) $id)->count();
         if ($usados > 0) {
-            $msgs[] = "Hay {$usados} contrato(s) de ejecución en este estado.";
+            $msgs[] = "Hay {$usados} contrato(s) en este estado.";
         }
         return $msgs;
     }

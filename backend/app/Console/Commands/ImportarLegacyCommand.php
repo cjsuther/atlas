@@ -38,7 +38,8 @@ class ImportarLegacyCommand extends Command
         'sector'                  => 'sector_id',
         'personal'                => 'legajo',
         'user_roles'              => 'id',
-        'contratos_ejecucion'     => 'id',
+        'contratos'               => 'sector_id',
+        'expedientes'     => 'id',
         'ejecucion_movimientos'   => 'id',
     ];
 
@@ -180,7 +181,7 @@ class ImportarLegacyCommand extends Command
         }
 
         $faltan = [];
-        foreach ($hojas['contratos_ejecucion']['filas'] ?? [] as $f) {
+        foreach ($hojas['expedientes']['filas'] ?? [] as $f) {
             $sectorId = $importador->entero($f['gerencia'] ?? null)
                 ?? $importador->entero($f['gerencia_area'] ?? null);
             if ($sectorId !== null && !isset($sectores[$sectorId])) {

@@ -5,7 +5,8 @@ namespace App\Providers;
 use App\Console\Commands\EnsureAdminCommand;
 use App\Console\Commands\ImportarLegacyCommand;
 use App\Console\Commands\LimpiarCommand;
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
+use App\Models\Contrato;
 use App\Models\ContratoPrincipal;
 use App\Models\EjecucionMovimiento;
 use App\Observers\ContratoHistorialObserver;
@@ -37,7 +38,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Auditoría obligatoria (creación, edición, baja lógica).
         ContratoPrincipal::observe(ContratoHistorialObserver::class);
-        ContratoEjecucion::observe(ContratoHistorialObserver::class);
+        Expediente::observe(ContratoHistorialObserver::class);
+        Contrato::observe(ContratoHistorialObserver::class);
         EjecucionMovimiento::observe(ContratoHistorialObserver::class);
 
         if ($this->app->runningInConsole()) {

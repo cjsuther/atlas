@@ -26,6 +26,11 @@ return new class extends Migration
 
     public function up(): void
     {
+        // Instalación nueva: los movimientos ya vienen con su forma final.
+        if (Schema::hasColumn('ejecucion_movimientos', 'expediente_id')) {
+            return;
+        }
+
         foreach ($this->columnas as $col => $definicion) {
             if (!Schema::hasColumn('ejecucion_movimientos', $col)) {
                 DB::statement("ALTER TABLE ejecucion_movimientos ADD COLUMN {$col} {$definicion}");

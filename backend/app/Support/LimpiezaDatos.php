@@ -25,8 +25,11 @@ class LimpiezaDatos
     public const TABLAS = [
         'historial_cambios',
         'ejecucion_movimientos',
-        'contratos_ejecucion',
+        'expedientes',
+        'cuentas_operativas',
         'contratos_principal',
+        'contrato_archivos',
+        'contratos',
         'personal',
         'sector',
         'solicitantes',
@@ -71,6 +74,7 @@ class LimpiezaDatos
 
         if ($borrarFacturas) {
             $borradas['facturas (archivos)'] = self::borrarFacturas();
+            $borradas['adjuntos de contratos (archivos)'] = self::borrarCarpeta('contratos');
         }
 
         return $borradas;
@@ -79,6 +83,18 @@ class LimpiezaDatos
     /**
      * Las facturas adjuntas quedarían huérfanas: sus movimientos ya no existen.
      */
+    /** Los adjuntos de los contratos también quedarían huérfanos. */
+    private static function borrarCarpeta(string $carpeta): int
+    {
+        $disk = Storage::disk('local');
+        if (!$disk->exists($carpeta)) {
+            return 0;
+        }
+        $archivos = $disk->allFiles($carpeta);
+        $disk->deleteDirectory($carpeta);
+        return count($archivos);
+    }
+
     private static function borrarFacturas(): int
     {
         $disk = Storage::disk('local');

@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Expediente;
 use App\Models\CuentaOperativa;
 use App\Models\UserRole;
 use App\Models\UsuarioPermiso;
@@ -139,7 +139,7 @@ class AccessScopeService
      */
     public function aplicarAContratos(
         Builder|QueryBuilder $query,
-        string $tabla = 'contratos_ejecucion',
+        string $tabla = 'expedientes',
         ?UserRole $user = null,
     ): Builder|QueryBuilder {
         $ids = $this->sectoresVisibles($user);
@@ -152,20 +152,20 @@ class AccessScopeService
     /** Los saldos tienen el mismo alcance que los expedientes. */
     public function aplicarASaldos(
         Builder|QueryBuilder $query,
-        string $tabla = 'contratos_ejecucion',
+        string $tabla = 'expedientes',
         ?UserRole $user = null,
     ): Builder|QueryBuilder {
         return $this->aplicarAContratos($query, $tabla, $user);
     }
 
-    public function puedeVerContrato(ContratoEjecucion $contrato, ?UserRole $user = null): bool
+    public function puedeVerContrato(Expediente $contrato, ?UserRole $user = null): bool
     {
         $ids = $this->sectoresVisibles($user);
         return $ids === null || in_array((int) $contrato->sector_id, $ids, true);
     }
 
     /** Modificar un expediente exige escritura sobre su rama. */
-    public function puedeEditarContrato(ContratoEjecucion $contrato, ?UserRole $user = null): bool
+    public function puedeEditarContrato(Expediente $contrato, ?UserRole $user = null): bool
     {
         $ids = $this->sectoresEditables($user);
         return $ids === null || in_array((int) $contrato->sector_id, $ids, true);
@@ -190,7 +190,22 @@ class AccessScopeService
             ->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 
-    /** Imputar un expediente a una cuenta exige escritura sobre su rama. */
+    /** Ver el saldo y el historial de una cuenta exige alcance de lectura. */
+    public function puedeVerCuenta(?int $cuentaId, ?UserRole $user = null): bool
+    {
+        if ($cuentaId === null) {
+            return false;
+        }
+
+        $ids = $this->cuentasVisibles($user);
+        if ($ids === null) {
+            return CuentaOperativa::whereKey($cuentaId)->exists();
+        }
+
+        return in_array((int) $cuentaId, $ids, true);
+    }
+
+    /** Imputar un expediente a una cuenta, o registrar en ella, exige escritura. */
     public function puedeUsarCuenta(?int $cuentaId, ?UserRole $user = null): bool
     {
         if ($cuentaId === null) {

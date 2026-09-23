@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\ContratoEjecucion;
+use App\Models\Contrato;
 use App\Models\ContratoPrincipal;
 use App\Models\Solicitante;
 
@@ -20,9 +20,9 @@ class SolicitanteService extends BaseCrudService
         if ($cP > 0) {
             $msgs[] = "Existen {$cP} contrato(s) principal(es) con este solicitante.";
         }
-        $cE = ContratoEjecucion::where('solicitante_id', $id)->count();
-        if ($cE > 0) {
-            $msgs[] = "Existen {$cE} contrato(s) de ejecución con este solicitante.";
+        $cC = Contrato::where('solicitante_id', $id)->count();
+        if ($cC > 0) {
+            $msgs[] = "Existen {$cC} contrato(s) con este solicitante.";
         }
         return $msgs;
     }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\EjecucionMovimiento;
+use App\Models\Expediente;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,13 @@ use Illuminate\Support\Facades\Storage;
 
 class EjecucionMovimientoService
 {
+    /** Lo que se carga junto al movimiento para mostrarlo en pantalla. */
+    private const RELACIONES = [
+        'cuenta:id,nombre,sector_id',
+        'cuentaContraparte:id,nombre,sector_id',
+        'expediente:id,nro_expediente,sector_id',
+    ];
+
     /** Disk del filesystem donde se persisten las facturas. */
     public const FACTURA_DISK = 'local';
     public const FACTURA_DIR  = 'facturas';
@@ -17,18 +25,36 @@ class EjecucionMovimientoService
     /** Campos que se replican en la contrapartida de una transferencia. */
     private const CAMPOS_ESPEJO = [
         'nro_expediente', 'moneda', 'monto', 'monto_dolares', 'cotizacion', 'objeto',
+        'expediente_id',
     ];
 
     /** Evita que la sincronización de la contrapartida se dispare a sí misma. */
     private bool $sincronizando = false;
 
-    public function listForContrato(int $contratoEjecucionId, array $filters): LengthAwarePaginator
+    /** Historial de una cuenta: todo lo que se registró contra ella. */
+    public function listForCuenta(int $cuentaOperativaId, array $filters): LengthAwarePaginator
+    {
+        return $this->listar(
+            EjecucionMovimiento::query()->where('cuenta_operativa_id', $cuentaOperativaId),
+            $filters,
+        );
+    }
+
+    /** Movimientos que declaran a este contrato como contrato relacionado. */
+    public function listForContrato(int $expedienteId, array $filters): LengthAwarePaginator
+    {
+        return $this->listar(
+            EjecucionMovimiento::query()->where('expediente_id', $expedienteId),
+            $filters,
+        );
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Builder $q */
+    private function listar($q, array $filters): LengthAwarePaginator
     {
         $perPage = max(1, min((int) ($filters['per_page'] ?? 50), 200));
 
-        $q = EjecucionMovimiento::query()
-            ->with('contratoContraparte:id,nro_expediente,nombre_proyecto')
-            ->where('contrato_ejecucion_id', $contratoEjecucionId);
+        $q->with(self::RELACIONES);
 
         if (!empty($filters['tipo'])) {
             $q->where('tipo', $filters['tipo']);
@@ -45,16 +71,17 @@ class EjecucionMovimientoService
 
     public function find(int $id, bool $withTrashed = false): ?EjecucionMovimiento
     {
-        $q = EjecucionMovimiento::query()->with('contratoContraparte:id,nro_expediente,nombre_proyecto');
+        $q = EjecucionMovimiento::query()->with(self::RELACIONES);
         if ($withTrashed) $q->withTrashed();
         return $q->find($id);
     }
 
-    public function create(int $contratoEjecucionId, array $data, ?UploadedFile $factura = null): EjecucionMovimiento
+    public function create(int $cuentaOperativaId, array $data, ?UploadedFile $factura = null): EjecucionMovimiento
     {
+        $data = $this->conNumeroDeExpediente($data);
         $data = $this->normalizeMontos($data);
         $data = $this->normalizeContraparte($data);
-        $data['contrato_ejecucion_id'] = $contratoEjecucionId;
+        $data['cuenta_operativa_id'] = $cuentaOperativaId;
 
         if ($factura && $this->admiteFactura($data)) {
             $data = array_merge($data, $this->storeFactura($factura));
@@ -78,6 +105,7 @@ class EjecucionMovimientoService
         $m = EjecucionMovimiento::find($id);
         if (!$m) return null;
 
+        $data = $this->conNumeroDeExpediente($data);
         $data = $this->normalizeMontos($data);
         $data = $this->normalizeContraparte($data);
 
@@ -132,13 +160,13 @@ class EjecucionMovimientoService
     private function esTransferencia(EjecucionMovimiento $m): bool
     {
         return $m->accion === EjecucionMovimiento::ACCION_TRANSFERENCIA
-            && !empty($m->contrato_contraparte_id);
+            && !empty($m->cuenta_contraparte_id);
     }
 
     /**
-     * Una transferencia mueve fondos entre dos contratos: lo que sale de uno
-     * entra en el otro. Se registra automáticamente la contrapartida para que
-     * los saldos de ambas gerencias queden consistentes.
+     * Una transferencia mueve fondos entre dos cuentas: lo que sale de una
+     * entra en la otra. Se registra automáticamente la contrapartida para que
+     * los saldos de las dos queden consistentes.
      */
     private function crearEspejo(EjecucionMovimiento $origen): void
     {
@@ -148,11 +176,12 @@ class EjecucionMovimientoService
         try {
             $espejo = new EjecucionMovimiento();
             $espejo->fill([
-                'contrato_ejecucion_id'   => $origen->contrato_contraparte_id,
+                'cuenta_operativa_id'     => $origen->cuenta_contraparte_id,
+                'expediente_id'   => $origen->expediente_id,
                 'tipo'                    => $origen->tipo === 'gasto' ? 'ingreso' : 'gasto',
                 'accion'                  => EjecucionMovimiento::ACCION_TRANSFERENCIA,
-                'contraparte_tipo'        => 'contrato',
-                'contrato_contraparte_id' => $origen->contrato_ejecucion_id,
+                'contraparte_tipo'        => 'cuenta',
+                'cuenta_contraparte_id'   => $origen->cuenta_operativa_id,
                 'movimiento_espejo_id'    => $origen->id,
                 'nro_expediente'          => $origen->nro_expediente,
                 'moneda'                  => $origen->moneda,
@@ -204,9 +233,9 @@ class EjecucionMovimientoService
             foreach (self::CAMPOS_ESPEJO as $campo) {
                 $espejo->{$campo} = $m->{$campo};
             }
-            $espejo->tipo                    = $m->tipo === 'gasto' ? 'ingreso' : 'gasto';
-            $espejo->contrato_ejecucion_id   = $m->contrato_contraparte_id;
-            $espejo->contrato_contraparte_id = $m->contrato_ejecucion_id;
+            $espejo->tipo                  = $m->tipo === 'gasto' ? 'ingreso' : 'gasto';
+            $espejo->cuenta_operativa_id   = $m->cuenta_contraparte_id;
+            $espejo->cuenta_contraparte_id = $m->cuenta_operativa_id;
             $espejo->save();
         } finally {
             $this->sincronizando = false;
@@ -216,6 +245,25 @@ class EjecucionMovimientoService
     // ------------------------------------------------------------------
     // Normalización
     // ------------------------------------------------------------------
+
+    /**
+     * El número de expediente es el del expediente elegido: se copia para poder
+     * mostrarlo y buscarlo sin ir a buscar la relación.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function conNumeroDeExpediente(array $data): array
+    {
+        if (!empty($data['expediente_id'])) {
+            $numero = Expediente::withTrashed()->find((int) $data['expediente_id'])?->nro_expediente;
+            if ($numero !== null) {
+                $data['nro_expediente'] = $numero;
+            }
+        }
+
+        return $data;
+    }
 
     /**
      * Calcula `monto` (en pesos) cuando moneda='Dólar'.
@@ -245,7 +293,7 @@ class EjecucionMovimientoService
         $tipo   = $data['tipo']   ?? 'gasto';
 
         $data['contraparte_tipo'] = match ($accion) {
-            EjecucionMovimiento::ACCION_TRANSFERENCIA => 'contrato',
+            EjecucionMovimiento::ACCION_TRANSFERENCIA => 'cuenta',
             EjecucionMovimiento::ACCION_INCENTIVO,
             EjecucionMovimiento::ACCION_MCH           => 'rubro',
             default                                   => $tipo === 'ingreso' ? 'cliente' : 'proveedor',
@@ -255,7 +303,7 @@ class EjecucionMovimientoService
             'cliente'   => 'cliente',
             'proveedor' => 'proveedor',
             'rubro'     => 'rubro',
-            'contrato'  => 'contrato_contraparte_id',
+            'cuenta'    => 'cuenta_contraparte_id',
         ];
         foreach ($vigentes as $tipoContraparte => $campo) {
             if ($tipoContraparte !== $data['contraparte_tipo']) {

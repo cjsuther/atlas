@@ -27,6 +27,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Instalación nueva: el esquema inicial ya trae los permisos por árbol.
+        if (Schema::hasTable('usuario_permisos')) {
+            return;
+        }
+
         Schema::create('usuario_permisos', function (Blueprint $table) {
             $table->integer('id', true);
             $table->integer('user_role_id');

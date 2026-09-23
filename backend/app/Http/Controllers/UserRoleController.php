@@ -64,10 +64,19 @@ class UserRoleController extends Controller
         }
 
         $orderBy  = in_array($request->query('order_by'),
-            ['username', 'display_name', 'email', 'es_admin', 'last_login', 'activo'], true)
+            ['username', 'display_name', 'email', 'es_admin', 'last_login', 'activo', 'auth_source', 'alcance'], true)
             ? $request->query('order_by') : 'username';
         $orderDir = strtolower($request->query('order_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
-        $q->orderBy($orderBy, $orderDir);
+
+        if ($orderBy === 'alcance') {
+            // El alcance no es un campo: primero quien administra todo y después
+            // por cuántos nodos del árbol tiene asignados.
+            $q->withCount('permisos')
+              ->orderBy('es_admin', $orderDir)
+              ->orderBy('permisos_count', $orderDir);
+        } else {
+            $q->orderBy($orderBy, $orderDir);
+        }
 
         $perPage = max(1, min((int) $request->query('per_page', 20), 200));
         return response()->json($q->paginate($perPage));

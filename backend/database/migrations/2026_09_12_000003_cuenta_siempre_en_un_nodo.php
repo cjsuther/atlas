@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Una cuenta operativa siempre cuelga de un nodo del árbol: no existe la cuenta
@@ -15,6 +16,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('contratos_ejecucion')) {
+            return;
+        }
+
         DB::table('cuentas_operativas')->whereNull('sector_id')->delete();
 
         DB::statement('ALTER TABLE cuentas_operativas MODIFY sector_id INT NOT NULL');

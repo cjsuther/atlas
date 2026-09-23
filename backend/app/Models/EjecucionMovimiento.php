@@ -6,12 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Movimiento de ejecución imputado a un contrato.
+ * Movimiento registrado en una cuenta operativa.
  *
  * Además de los gastos e ingresos por facturas (solicitud o recepción) existen
- * transferencias a otro contrato —de la misma o de otra gerencia— y pagos de
+ * transferencias a otra cuenta —de la misma o de otra gerencia— y pagos de
  * incentivos o MCH (Mayor Carga Horaria). Por eso la contraparte no siempre es
- * un cliente o un proveedor: puede ser otro contrato o simplemente un rubro.
+ * un cliente o un proveedor: puede ser otra cuenta o simplemente un rubro.
+ *
+ * El contrato es opcional: indica con qué convenio se relaciona el movimiento,
+ * porque una cuenta puede acumular ingresos de varios y sus gastos no siempre
+ * se vinculan a uno.
  */
 class EjecucionMovimiento extends Model
 {
@@ -31,21 +35,23 @@ class EjecucionMovimiento extends Model
     ];
 
     /** Campo de contraparte que aplica según la acción. */
-    public const CONTRAPARTES = ['cliente', 'proveedor', 'contrato', 'rubro'];
+    public const CONTRAPARTES = ['cliente', 'proveedor', 'cuenta', 'rubro'];
 
     protected $table      = 'ejecucion_movimientos';
     protected $primaryKey = 'id';
     public $timestamps    = true;
 
     protected $fillable = [
-        'contrato_ejecucion_id',
+        'cuenta_operativa_id',
+        'expediente_id',
         'tipo',
         'accion',
         'nro_expediente',
         'contraparte_tipo',
         'proveedor',
         'cliente',
-        'contrato_contraparte_id',
+        'expediente_contraparte_id',
+        'cuenta_contraparte_id',
         'rubro',
         'movimiento_espejo_id',
         'moneda',
@@ -68,18 +74,30 @@ class EjecucionMovimiento extends Model
 
     protected $appends = ['has_factura', 'contraparte'];
 
-    public function contratoEjecucion()
+    public function expediente()
     {
-        return $this->belongsTo(ContratoEjecucion::class, 'contrato_ejecucion_id', 'id');
+        return $this->belongsTo(Expediente::class, 'expediente_id', 'id');
     }
 
-    /** Contrato con el que se hizo la transferencia. */
-    public function contratoContraparte()
+    /** Cuenta en la que se registra el movimiento. */
+    public function cuenta()
     {
-        return $this->belongsTo(ContratoEjecucion::class, 'contrato_contraparte_id', 'id');
+        return $this->belongsTo(CuentaOperativa::class, 'cuenta_operativa_id', 'id');
     }
 
-    /** Movimiento generado automáticamente en el contrato contraparte. */
+    /** Cuenta con la que se hizo la transferencia. */
+    public function cuentaContraparte()
+    {
+        return $this->belongsTo(CuentaOperativa::class, 'cuenta_contraparte_id', 'id');
+    }
+
+    /** Contrato con el que se hizo la transferencia (histórico). */
+    public function expedienteContraparte()
+    {
+        return $this->belongsTo(Expediente::class, 'expediente_contraparte_id', 'id');
+    }
+
+    /** Movimiento generado automáticamente en la cuenta contraparte. */
     public function espejo()
     {
         return $this->belongsTo(self::class, 'movimiento_espejo_id', 'id');
@@ -97,9 +115,9 @@ class EjecucionMovimiento extends Model
             'cliente'   => $this->cliente,
             'proveedor' => $this->proveedor,
             'rubro'     => $this->rubro,
-            'contrato'  => $this->relationLoaded('contratoContraparte') && $this->contratoContraparte
-                ? "#{$this->contratoContraparte->id} — {$this->contratoContraparte->nro_expediente}"
-                : ($this->contrato_contraparte_id ? "Contrato #{$this->contrato_contraparte_id}" : null),
+            'cuenta'    => $this->relationLoaded('cuentaContraparte') && $this->cuentaContraparte
+                ? $this->cuentaContraparte->nombre
+                : ($this->cuenta_contraparte_id ? "Cuenta #{$this->cuenta_contraparte_id}" : null),
             default     => $this->cliente ?: $this->proveedor ?: $this->rubro,
         };
     }

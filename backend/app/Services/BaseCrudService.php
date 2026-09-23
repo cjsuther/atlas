@@ -33,7 +33,9 @@ abstract class BaseCrudService
 
         $orderBy = $params['order_by'] ?? null;
         $orderDir = strtolower($params['order_dir'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
-        if ($orderBy && $this->isOrderable($orderBy)) {
+        if ($orderBy && $this->aplicarOrdenPropio($query, $orderBy, $orderDir)) {
+            // La subclase sabe ordenar por esa columna: no es un campo de la tabla.
+        } elseif ($orderBy && $this->isOrderable($orderBy)) {
             $query->orderBy($orderBy, $orderDir);
         } else {
             $query->orderBy($this->getKeyName(), 'asc');
@@ -91,6 +93,15 @@ abstract class BaseCrudService
     protected function getKeyName(): string
     {
         return (new $this->modelClass)->getKeyName();
+    }
+
+    /**
+     * Orden por una columna que no está en la tabla —un cálculo, el valor de
+     * una relación—. Devuelve true si la subclase lo resolvió.
+     */
+    protected function aplicarOrdenPropio(Builder $query, string $campo, string $dir): bool
+    {
+        return false;
     }
 
     protected function isOrderable(string $field): bool

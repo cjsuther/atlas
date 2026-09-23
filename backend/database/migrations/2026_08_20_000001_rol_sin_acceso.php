@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Rol `sin_acceso`: el usuario puede autenticarse pero no ve nada del sistema.
@@ -14,6 +15,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Instalación nueva: el rol viejo ya no existe; el acceso sale de los permisos.
+        if (!Schema::hasColumn('user_roles', 'rol')) {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE user_roles MODIFY COLUMN rol
             ENUM('admin_sistema','admin_gerencia','operador_gerencia','sin_acceso')
