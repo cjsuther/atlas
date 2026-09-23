@@ -19,6 +19,7 @@ class SectorService extends BaseCrudService
         protected SectorTree $arbol,
         protected CuentaOperativaService $cuentas,
         protected ContratoService $contratos,
+        protected AccessScopeService $scope,
     ) {
     }
 
@@ -103,9 +104,17 @@ class SectorService extends BaseCrudService
         return 1 + max(array_map(fn ($h) => $this->alturaDe($h), $hijos));
     }
 
+    /**
+     * Cada usuario ve su rama del árbol y nada más. El administrador de
+     * sistema, y quien tiene permiso sobre la raíz, ven todo.
+     */
     protected function baseQuery(): Builder
     {
-        return Sector::query()->with('dependencia:sector_id,nombre');
+        $visibles = $this->scope->sectoresVisibles();
+
+        return Sector::query()
+            ->when($visibles !== null, fn ($q) => $q->whereIn('sector.sector_id', $visibles ?: [0]))
+            ->with('dependencia:sector_id,nombre');
     }
 
     /**

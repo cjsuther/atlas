@@ -15,9 +15,21 @@ class CuentaOperativaService extends BaseCrudService
     protected string $modelClass = CuentaOperativa::class;
     protected array $searchableFields = ['nombre', 'descripcion'];
 
+    public function __construct(protected AccessScopeService $scope)
+    {
+    }
+
+    /**
+     * Las cuentas se ven sólo dentro de la rama del usuario: son el corazón de
+     * la operatoria y la Gerencia de Área es el límite de confidencialidad.
+     * Un permiso sobre la raíz no recorta nada.
+     */
     protected function baseQuery(): Builder
     {
+        $visibles = $this->scope->sectoresVisibles();
+
         return CuentaOperativa::query()
+            ->when($visibles !== null, fn ($q) => $q->whereIn('cuentas_operativas.sector_id', $visibles ?: [0]))
             ->with('sector:sector_id,nombre,dependencia_id')
             ->addSelect([
                 'cuentas_operativas.*',
@@ -122,22 +134,41 @@ class CuentaOperativaService extends BaseCrudService
      *
      * La raíz es toda la organización; de ella cuelgan las Gerencias de Área.
      *
-     * Cada cuenta viene marcada con `permitida`: el árbol se muestra entero,
-     * pero sólo se puede imputar a las cuentas de la rama del usuario. Quién
-     * decide eso es el servidor, no la pantalla.
+     * El árbol se recorta a la rama del usuario: sólo aparecen los nodos que
+     * puede ver y los que hacen falta para llegar a ellos, y de cada uno, sus
+     * cuentas visibles. Cada cuenta viene marcada con `permitida`, que es
+     * escritura: se ve la cuenta pero no siempre se puede imputar a ella.
+     * Quién decide todo esto es el servidor, no la pantalla.
      */
     public function arbolConCuentas(SectorTree $arbol): array
     {
-        $permitidas = app(AccessScopeService::class)->cuentasVisibles();
+        $scope       = app(AccessScopeService::class);
+        $visibles    = $scope->sectoresVisibles();
+        $permitidas  = $scope->cuentasVisibles(soloEscritura: true);
+        $deLectura   = $scope->cuentasVisibles();
 
         $cuentas = CuentaOperativa::where('activo', true)
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'sector_id'])
             ->groupBy(fn ($c) => $c->sector_id === null ? 'raiz' : (string) $c->sector_id);
 
-        $nodo = function (?int $sectorId) use (&$nodo, $arbol, $cuentas, $permitidas): array {
+        // Un nodo entra si el usuario lo ve o si cuelga de él algo que ve.
+        $alcanzado = function (int $sectorId) use (&$alcanzado, $arbol, $visibles): bool {
+            if ($visibles === null || in_array($sectorId, $visibles, true)) {
+                return true;
+            }
+            foreach ($arbol->hijosDe($sectorId) as $hijo) {
+                if ($alcanzado($hijo)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        $nodo = function (?int $sectorId) use (&$nodo, $arbol, $cuentas, $permitidas, $deLectura, $alcanzado): array {
             $clave = $sectorId === null ? 'raiz' : (string) $sectorId;
             $hijos = $sectorId === null ? $arbol->raices() : $arbol->hijosDe($sectorId);
+            $hijos = array_values(array_filter($hijos, $alcanzado));
 
             return [
                 'sector_id' => $sectorId,
@@ -146,6 +177,7 @@ class CuentaOperativaService extends BaseCrudService
                     : $arbol->nombre($sectorId),
                 'nivel'     => $arbol->nivelDe($sectorId),
                 'cuentas'   => ($cuentas[$clave] ?? collect())
+                    ->filter(fn ($c) => $deLectura === null || in_array((int) $c->id, $deLectura, true))
                     ->map(fn ($c) => [
                         'id'        => $c->id,
                         'nombre'    => $c->nombre,
