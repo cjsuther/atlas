@@ -104,11 +104,11 @@
                             </div>
                         </td>
                         <td class="actions">
-                            <router-link v-if="auth.canEdit && !r.deleted_at"
+                            <router-link v-if="r.editable && !r.deleted_at"
                                          :to="{ name: 'expedientes-editar', params: { id: r.id } }">
                                 <button><IconLib name="edit" :size="14" /></button>
                             </router-link>
-                            <button v-if="auth.canEdit && !r.deleted_at" class="danger" @click="darBaja(r)">
+                            <button v-if="r.editable && !r.deleted_at" class="danger" @click="darBaja(r)">
                                 <IconLib name="trash" :size="14" />
                             </button>
                         </td>

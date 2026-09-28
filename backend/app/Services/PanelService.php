@@ -404,7 +404,7 @@ class PanelService
     {
         if (empty($contratoIds)) return [];
 
-        $rows = DB::table('ejecucion_movimientos')
+        $rows = $this->scope->aplicarAMovimientos(DB::table('ejecucion_movimientos'))
             ->whereNull('deleted_at')
             ->whereIn('expediente_id', $contratoIds)
             ->select('expediente_id', 'tipo', DB::raw('SUM(monto) as total'))

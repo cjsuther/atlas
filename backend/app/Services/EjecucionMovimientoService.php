@@ -31,6 +31,10 @@ class EjecucionMovimientoService
     /** Evita que la sincronización de la contrapartida se dispare a sí misma. */
     private bool $sincronizando = false;
 
+    public function __construct(protected AccessScopeService $scope)
+    {
+    }
+
     /** Historial de una cuenta: todo lo que se registró contra ella. */
     public function listForCuenta(int $cuentaOperativaId, array $filters): LengthAwarePaginator
     {
@@ -40,11 +44,17 @@ class EjecucionMovimientoService
         );
     }
 
-    /** Movimientos que declaran a este contrato como contrato relacionado. */
+    /**
+     * Movimientos que declaran a este contrato como contrato relacionado. Se
+     * registran en cuentas de cualquier rama, así que se recortan a las que el
+     * usuario puede ver.
+     */
     public function listForContrato(int $expedienteId, array $filters): LengthAwarePaginator
     {
         return $this->listar(
-            EjecucionMovimiento::query()->where('expediente_id', $expedienteId),
+            $this->scope->aplicarAMovimientos(
+                EjecucionMovimiento::query()->where('expediente_id', $expedienteId)
+            ),
             $filters,
         );
     }
@@ -66,14 +76,39 @@ class EjecucionMovimientoService
             $q->withTrashed();
         }
 
-        return $q->orderBy('created_at', 'desc')->paginate($perPage);
+        $pagina = $q->orderBy('created_at', 'desc')->paginate($perPage);
+        $pagina->getCollection()->each(fn ($m) => $this->recortar($m));
+        return $pagina;
     }
 
     public function find(int $id, bool $withTrashed = false): ?EjecucionMovimiento
     {
         $q = EjecucionMovimiento::query()->with(self::RELACIONES);
         if ($withTrashed) $q->withTrashed();
-        return $q->find($id);
+        $m = $q->find($id);
+        return $m ? $this->recortar($m) : null;
+    }
+
+    /**
+     * Prepara el movimiento para mostrarlo: no nombra la cuenta contraparte ni
+     * el expediente si están fuera del alcance del usuario, y dice si puede
+     * modificarlo.
+     */
+    private function recortar(EjecucionMovimiento $m): EjecucionMovimiento
+    {
+        if ($m->cuenta_contraparte_id !== null
+            && !$this->scope->puedeVerCuenta((int) $m->cuenta_contraparte_id)) {
+            $m->setRelation('cuentaContraparte', null);
+        }
+
+        $expediente = $m->relationLoaded('expediente') ? $m->expediente : null;
+        if ($expediente && !$this->scope->puedeVerContrato($expediente)) {
+            $m->setRelation('expediente', null);
+            $m->nro_expediente = null;
+        }
+
+        $m->setAttribute('editable', $this->scope->puedeEditarMovimiento($m));
+        return $m;
     }
 
     public function create(int $cuentaOperativaId, array $data, ?UploadedFile $factura = null): EjecucionMovimiento

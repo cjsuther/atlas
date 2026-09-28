@@ -409,7 +409,7 @@ class FullExport implements WithMultipleSheets
                     ->with([
                         'cuenta:id,nombre',
                         'cuentaContraparte:id,nombre',
-                        'expediente:id,nro_expediente',
+                        'expediente:id,nro_expediente,sector_id',
                     ])
                     ->orderBy('id');
                 $visibles = $this->cuentasVisibles();
@@ -423,29 +423,46 @@ class FullExport implements WithMultipleSheets
                 'Objeto', 'Tiene factura', 'Nombre factura',
                 'Creado',
             ],
-            fn ($r) => [
-                $r->id,
-                optional($r->cuenta)->nombre,
-                optional($r->expediente)->nro_expediente,
-                $r->tipo,
-                $r->accion,
-                $r->nro_expediente,
-                $r->contraparte_tipo,
-                $r->contraparte,
-                $r->proveedor,
-                $r->cliente,
-                optional($r->cuentaContraparte)->nombre,
-                $r->rubro,
-                $r->moneda,
-                $r->monto,
-                $r->monto_dolares,
-                $r->cotizacion,
-                $r->objeto,
-                $r->has_factura ? 'Sí' : 'No',
-                $r->factura_original_name,
-                optional($r->created_at)?->format('d/m/Y H:i'),
-            ],
+            function ($r) {
+                $this->recortarMovimiento($r);
+                return [
+                    $r->id,
+                    optional($r->cuenta)->nombre,
+                    optional($r->expediente)->nro_expediente,
+                    $r->tipo,
+                    $r->accion,
+                    $r->nro_expediente,
+                    $r->contraparte_tipo,
+                    $r->contraparte,
+                    $r->proveedor,
+                    $r->cliente,
+                    optional($r->cuentaContraparte)->nombre,
+                    $r->rubro,
+                    $r->moneda,
+                    $r->monto,
+                    $r->monto_dolares,
+                    $r->cotizacion,
+                    $r->objeto,
+                    $r->has_factura ? 'Sí' : 'No',
+                    $r->factura_original_name,
+                    optional($r->created_at)?->format('d/m/Y H:i'),
+                ];
+            },
         );
+    }
+
+    /** La contraparte y el expediente de otra rama no se nombran. */
+    private function recortarMovimiento(EjecucionMovimiento $m): EjecucionMovimiento
+    {
+        if ($m->cuenta_contraparte_id !== null
+            && !$this->scope->puedeVerCuenta((int) $m->cuenta_contraparte_id)) {
+            $m->setRelation('cuentaContraparte', null);
+        }
+        if ($m->expediente && !$this->scope->puedeVerContrato($m->expediente)) {
+            $m->setRelation('expediente', null);
+            $m->nro_expediente = null;
+        }
+        return $m;
     }
 
     private function historial(): TableSheet
@@ -465,8 +482,8 @@ class FullExport implements WithMultipleSheets
                         $x->where('tabla', 'expedientes')->whereIn('registro_id', $contratos);
                     })->orWhere(function ($x) use ($contratos) {
                         $x->where('tabla', 'ejecucion_movimientos')
-                          ->whereIn('registro_id', EjecucionMovimiento::withTrashed()
-                              ->whereIn('expediente_id', $contratos)->select('id'));
+                          ->whereIn('registro_id', $this->scope->aplicarAMovimientos(
+                              EjecucionMovimiento::withTrashed())->select('id'));
                     });
                 });
             },

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\EjecucionMovimiento;
 use App\Models\Expediente;
 use App\Models\CuentaOperativa;
 use App\Models\UserRole;
@@ -30,6 +31,9 @@ class AccessScopeService
 {
     /** @var array<string, array<int>|null> ramas ya resueltas en este request */
     private array $cache = [];
+
+    /** @var array<string, array<int>|null> cuentas ya resueltas en este request */
+    private array $cacheCuentas = [];
 
     public function __construct(protected SectorTree $arbol)
     {
@@ -178,16 +182,60 @@ class AccessScopeService
      */
     public function cuentasVisibles(?UserRole $user = null, bool $soloEscritura = false): ?array
     {
+        $user ??= $this->usuario();
+        $clave = ($user?->id ?? 0) . ($soloEscritura ? ':w' : ':r');
+        if (array_key_exists($clave, $this->cacheCuentas)) {
+            return $this->cacheCuentas[$clave];
+        }
+
         $sectores = $soloEscritura
             ? $this->sectoresEditables($user)
             : $this->sectoresVisibles($user);
 
         if ($sectores === null) {
-            return null;
+            return $this->cacheCuentas[$clave] = null;
         }
 
-        return CuentaOperativa::whereIn('sector_id', $sectores ?: [0])
+        return $this->cacheCuentas[$clave] = CuentaOperativa::whereIn('sector_id', $sectores ?: [0])
             ->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * Recorta una consulta de movimientos a los de las cuentas que el usuario
+     * puede ver. Un movimiento es tan reservado como la cuenta en la que está,
+     * aunque se relacione con un expediente que el usuario sí ve.
+     *
+     * @template T of Builder|QueryBuilder
+     * @param  T  $query
+     * @return T
+     */
+    public function aplicarAMovimientos(
+        Builder|QueryBuilder $query,
+        string $columna = 'cuenta_operativa_id',
+        ?UserRole $user = null,
+    ): Builder|QueryBuilder {
+        $ids = $this->cuentasVisibles($user);
+        if ($ids === null) {
+            return $query;
+        }
+        return $query->whereIn($columna, $ids ?: [0]);
+    }
+
+    /**
+     * Modificar o dar de baja un movimiento exige escritura sobre su cuenta y,
+     * si es una transferencia, también sobre la cuenta contraparte: la
+     * contrapartida que vive allá se modifica o se da de baja con él.
+     */
+    public function puedeEditarMovimiento(EjecucionMovimiento $m, ?UserRole $user = null): bool
+    {
+        if (!$this->puedeUsarCuenta((int) $m->cuenta_operativa_id, $user)) {
+            return false;
+        }
+        if ($m->cuenta_contraparte_id !== null
+            && !$this->puedeUsarCuenta((int) $m->cuenta_contraparte_id, $user)) {
+            return false;
+        }
+        return true;
     }
 
     /** Ver el saldo y el historial de una cuenta exige alcance de lectura. */

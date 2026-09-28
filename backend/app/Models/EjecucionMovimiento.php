@@ -115,9 +115,14 @@ class EjecucionMovimiento extends Model
             'cliente'   => $this->cliente,
             'proveedor' => $this->proveedor,
             'rubro'     => $this->rubro,
-            'cuenta'    => $this->relationLoaded('cuentaContraparte') && $this->cuentaContraparte
-                ? $this->cuentaContraparte->nombre
-                : ($this->cuenta_contraparte_id ? "Cuenta #{$this->cuenta_contraparte_id}" : null),
+            // Cargada la relación, si viene vacía es una cuenta que el usuario
+            // no puede ver: no se la nombra.
+            'cuenta'    => match (true) {
+                !$this->cuenta_contraparte_id              => null,
+                !$this->relationLoaded('cuentaContraparte') => "Cuenta #{$this->cuenta_contraparte_id}",
+                $this->cuentaContraparte !== null          => $this->cuentaContraparte->nombre,
+                default                                    => 'Cuenta fuera de su alcance',
+            },
             default     => $this->cliente ?: $this->proveedor ?: $this->rubro,
         };
     }

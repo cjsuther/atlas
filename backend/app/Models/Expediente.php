@@ -31,7 +31,7 @@ class Expediente extends Model
 
     protected $appends = [
         'monto_ejecutado_ingresos', 'monto_ejecutado_gastos',
-        'saldo', 'gerencia_area', 'estructura',
+        'saldo', 'gerencia_area', 'estructura', 'editable',
     ];
 
     // ----------------------------------------------------------------------
@@ -137,9 +137,28 @@ class Expediente extends Model
         if (array_key_exists($aliasPrecargado, $this->attributes)) {
             return round((float) ($this->attributes[$aliasPrecargado] ?? 0), 2);
         }
+        // Con un usuario, sólo cuenta lo registrado en las cuentas que ve.
+        $scope   = app(AccessScopeService::class);
+        $cuentas = $scope->usuario() ? $scope->cuentasVisibles() : null;
+
         if ($this->relationLoaded('movimientos')) {
-            return round((float) $this->movimientos->where('tipo', $tipo)->sum('monto'), 2);
+            $movimientos = $this->movimientos->where('tipo', $tipo);
+            if ($cuentas !== null) {
+                $movimientos = $movimientos->whereIn('cuenta_operativa_id', $cuentas);
+            }
+            return round((float) $movimientos->sum('monto'), 2);
         }
-        return round((float) $this->movimientos()->where('tipo', $tipo)->sum('monto'), 2);
+
+        $q = $this->movimientos()->where('tipo', $tipo);
+        if ($cuentas !== null) {
+            $q->whereIn('cuenta_operativa_id', $cuentas ?: [0]);
+        }
+        return round((float) $q->sum('monto'), 2);
+    }
+
+    /** Si el usuario puede modificarlo o darlo de baja: escritura sobre su rama. */
+    public function getEditableAttribute(): bool
+    {
+        return app(AccessScopeService::class)->puedeEditarContrato($this);
     }
 }

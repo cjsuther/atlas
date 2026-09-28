@@ -15,7 +15,7 @@
                     </p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <router-link v-if="auth.canEdit && !c.deleted_at"
+                    <router-link v-if="c.editable && !c.deleted_at"
                                  :to="{ name: 'expedientes-editar', params: { id: c.id } }"
                                  class="btn btn-primary">
                         <IconLib name="edit" /> Editar
@@ -57,13 +57,11 @@
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { expedientesService } from '@/services/expedientes';
-import { useAuthStore } from '@/stores/auth';
 import { fmtMoney } from '@/composables/useFormat';
 import IconLib from '@/components/IconLib.vue';
 import Field from '@/components/DetailField.vue';
 
 const route = useRoute();
-const auth = useAuthStore();
 
 const c = ref(null);
 const loading = ref(true);

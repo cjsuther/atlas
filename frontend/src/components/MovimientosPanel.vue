@@ -23,7 +23,7 @@
                                     placeholder="Todas las acciones"
                                     @update:model-value="load" />
                 </div>
-                <div v-if="auth.canEdit && !soloConsulta" style="display:flex;gap:6px;flex-wrap:wrap;">
+                <div v-if="puedeRegistrar && !soloConsulta" style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button class="btn btn-primary btn-sm"   @click="nuevo('factura', 'ingreso')">+ Ingreso por factura</button>
                     <button class="btn btn-secondary btn-sm" @click="nuevo('factura', 'gasto')">+ Gasto por factura</button>
                     <button class="btn btn-secondary btn-sm" @click="nuevo('transferencia', 'gasto')">+ Transferencia</button>
@@ -78,7 +78,7 @@
                             </td>
                             <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                                 :title="m.objeto">
-                                <a v-if="auth.canEdit && !soloConsulta" href="#" @click.prevent="editar(m)">
+                                <a v-if="m.editable && !soloConsulta" href="#" @click.prevent="editar(m)">
                                     {{ m.objeto || 'Sin objeto' }}
                                 </a>
                                 <template v-else>{{ m.objeto }}</template>
@@ -95,10 +95,10 @@
                                 <span v-else style="color:var(--color-muted);font-size:12px;">—</span>
                             </td>
                             <td class="actions">
-                                <button v-if="auth.canEdit && !soloConsulta" @click="editar(m)" title="Editar">
+                                <button v-if="m.editable && !soloConsulta" @click="editar(m)" title="Editar">
                                     <IconLib name="edit" :size="14" />
                                 </button>
-                                <button v-if="auth.canEdit && !soloConsulta" class="danger" @click="darBaja(m)" title="Eliminar">
+                                <button v-if="m.editable && !soloConsulta" class="danger" @click="darBaja(m)" title="Eliminar">
                                     <IconLib name="trash" :size="14" />
                                 </button>
                             </td>
@@ -117,7 +117,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { movimientosService } from '@/services/movimientos';
-import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtMoney } from '@/composables/useFormat';
@@ -136,10 +135,12 @@ import ConfirmDialog from './ConfirmDialog.vue';
 const props = defineProps({
     cuentaOperativaId:   { type: [Number, String], default: null },
     expedienteId: { type: [Number, String], default: null },
+    // Escritura sobre la cuenta: la decide el servidor, igual que `editable`
+    // en cada movimiento.
+    puedeRegistrar: { type: Boolean, default: false },
 });
 const emit = defineEmits(['changed']);
 
-const auth = useAuthStore();
 const toast = useToast();
 
 const ACCION_LABELS = {

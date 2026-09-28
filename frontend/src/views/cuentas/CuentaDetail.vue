@@ -42,7 +42,8 @@
                 {{ cuenta.descripcion }}
             </p>
 
-            <MovimientosPanel :cuenta-operativa-id="cuenta.id" @changed="refrescar" />
+            <MovimientosPanel :cuenta-operativa-id="cuenta.id" :puede-registrar="cuenta.permitida"
+                              @changed="refrescar" />
         </div>
     </div>
 </template>

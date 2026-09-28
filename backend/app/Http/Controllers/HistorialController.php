@@ -61,7 +61,8 @@ class HistorialController extends Controller
             'contratos' => in_array($id, $this->scope->sectoresVisibles() ?? [$id], true),
             'ejecucion_movimientos' => (function () use ($id) {
                 $m = EjecucionMovimiento::withTrashed()->find($id);
-                return $m !== null && $this->contratoVisible((int) $m->expediente_id);
+                // Tan reservado como la cuenta en la que está el movimiento.
+                return $m !== null && $this->scope->puedeVerCuenta((int) $m->cuenta_operativa_id);
             })(),
             // Los contratos principales ya no se gestionan: su historial queda
             // disponible sólo para el administrador de sistema.

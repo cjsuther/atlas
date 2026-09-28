@@ -19,14 +19,20 @@ class ExpedienteService
     ) {
     }
 
-    /** Subquery SQL para sumar movimientos por tipo en esta ejecución. */
+    /**
+     * Subquery SQL para sumar movimientos por tipo en esta ejecución. Suma sólo
+     * los de las cuentas que el usuario puede ver: lo registrado en otras no se
+     * muestra, ni siquiera sumado.
+     */
     private function sumMovimientosSub(string $tipo)
     {
-        return DB::table('ejecucion_movimientos')
-            ->whereColumn('expediente_id', 'expedientes.id')
-            ->where('tipo', $tipo)
-            ->whereNull('deleted_at')
-            ->selectRaw('COALESCE(SUM(monto), 0)');
+        return $this->scope->aplicarAMovimientos(
+            DB::table('ejecucion_movimientos')
+                ->whereColumn('expediente_id', 'expedientes.id')
+                ->where('tipo', $tipo)
+                ->whereNull('deleted_at')
+                ->selectRaw('COALESCE(SUM(monto), 0)')
+        );
     }
 
     public function buildQuery(array $filters): Builder
@@ -131,9 +137,15 @@ class ExpedienteService
             'gasto'   => 'gasto',
         };
 
+        // Las mismas cuentas que suma el listado; los ids son enteros propios.
+        $cuentas = $this->scope->cuentasVisibles();
+        $recorte = $cuentas === null
+            ? ''
+            : ' AND m.cuenta_operativa_id IN (' . (implode(',', array_map('intval', $cuentas)) ?: '0') . ')';
+
         return "COALESCE((SELECT SUM(m.monto) FROM ejecucion_movimientos m
                  WHERE m.expediente_id = expedientes.id
-                   AND m.tipo = '{$tipo}' AND m.deleted_at IS NULL), 0)";
+                   AND m.tipo = '{$tipo}' AND m.deleted_at IS NULL{$recorte}), 0)";
     }
 
     public function paginate(array $filters): LengthAwarePaginator

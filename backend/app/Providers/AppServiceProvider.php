@@ -10,6 +10,7 @@ use App\Models\Contrato;
 use App\Models\ContratoPrincipal;
 use App\Models\EjecucionMovimiento;
 use App\Observers\ContratoHistorialObserver;
+use App\Services\AccessScopeService;
 use App\Support\SectorTree;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -25,6 +26,10 @@ class AppServiceProvider extends ServiceProvider
         // La jerarquía de sectores se consulta muchas veces por request
         // (alcance del usuario, agrupaciones del panel): se resuelve una vez.
         $this->app->singleton(SectorTree::class);
+
+        // El alcance del usuario también: los atributos calculados de cada
+        // fila lo consultan, y así se resuelve una vez por request.
+        $this->app->scoped(AccessScopeService::class);
     }
 
     public function boot(): void

@@ -65,7 +65,8 @@ class EjecucionMovimientoController extends Controller
     public function update(EjecucionMovimientoRequest $request, int $id): JsonResponse
     {
         $actual = $this->service->find($id);
-        if (!$actual || !$this->movimientoEditable($actual)) return $this->notFound();
+        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
+        if (!$actual->editable) return $this->sinPermiso();
         $m = $this->service->update(
             $id,
             $request->validated(),
@@ -79,7 +80,8 @@ class EjecucionMovimientoController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $actual = $this->service->find($id);
-        if (!$actual || !$this->movimientoEditable($actual)) return $this->notFound();
+        if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
+        if (!$actual->editable) return $this->sinPermiso();
         if (!$this->service->softDelete($id)) return $this->notFound();
         return response()->json(['message' => 'Movimiento dado de baja.']);
     }
@@ -121,9 +123,16 @@ class EjecucionMovimientoController extends Controller
         return $this->scope->puedeVerCuenta((int) $m->cuenta_operativa_id);
     }
 
-    private function movimientoEditable(EjecucionMovimiento $m): bool
+    /**
+     * Se ve pero no se puede modificar: la cuenta es de sólo lectura o, en una
+     * transferencia, la contraparte está fuera de su escritura.
+     */
+    private function sinPermiso(): JsonResponse
     {
-        return $this->scope->puedeUsarCuenta((int) $m->cuenta_operativa_id);
+        return response()->json([
+            'error'   => 'forbidden',
+            'message' => 'No tiene permiso de escritura sobre las cuentas de este movimiento.',
+        ], 403);
     }
 
     private function notFoundCuenta(): JsonResponse

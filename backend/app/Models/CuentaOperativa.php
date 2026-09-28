@@ -36,7 +36,7 @@ class CuentaOperativa extends Model
         'saldo_inicial' => 'decimal:2',
     ];
 
-    protected $appends = ['nivel', 'ruta', 'ingresos', 'gastos', 'saldo'];
+    protected $appends = ['nivel', 'ruta', 'ingresos', 'gastos', 'saldo', 'permitida'];
 
     public function sector()
     {
@@ -65,6 +65,15 @@ class CuentaOperativa extends Model
     public function getGastosAttribute(): float
     {
         return $this->sumMovimientos('gasto', 'sum_gastos');
+    }
+
+    /**
+     * Si el usuario puede registrar movimientos en ella: escritura sobre su
+     * rama. Es el mismo nombre que usa el árbol de la estructura.
+     */
+    public function getPermitidaAttribute(): bool
+    {
+        return app(AccessScopeService::class)->puedeUsarCuenta((int) $this->id);
     }
 
     /** Saldo de la cuenta: con lo que arrancó más lo que entró menos lo que salió. */
