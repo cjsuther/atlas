@@ -38,3 +38,7 @@ definiciones/*
 !definiciones/ATLAS_Manual_Implementacion.docx
 !definiciones/ATLAS_Adaptacion_Autenticacion_API.docx
 
+
+# Dumps y paquetes locales en la raíz
+/*.sql
+/*.zip
