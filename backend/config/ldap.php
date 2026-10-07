@@ -20,6 +20,15 @@ return [
                 LDAP_OPT_REFERRALS    => 0,
                 LDAP_OPT_PROTOCOL_VERSION => 3,
                 LDAP_OPT_NETWORK_TIMEOUT  => 5,
+                // Se verifica el certificado del AD salvo que el .env diga
+                // "never". Sirve para un AD con certificado de una CA interna
+                // que el contenedor no conoce, pero deja el bind expuesto a
+                // quien se haga pasar por el servidor: lo correcto es instalar
+                // esa CA en la imagen.
+                LDAP_OPT_X_TLS_REQUIRE_CERT =>
+                    strtolower((string) env('LDAP_TLS_REQUIRE_CERT', 'demand')) === 'never'
+                        ? LDAP_OPT_X_TLS_NEVER
+                        : LDAP_OPT_X_TLS_DEMAND,
             ],
         ],
     ],
