@@ -24,22 +24,13 @@ return new class extends Migration
             return;
         }
 
-        // El ENUM debe admitir los valores viejos y los nuevos a la vez para
-        // poder reasignar los roles sin perder filas.
-        DB::statement("
-            ALTER TABLE user_roles MODIFY COLUMN rol
-            ENUM('admin','operador','consulta','admin_sistema','admin_gerencia','operador_gerencia')
-            NOT NULL DEFAULT 'operador_gerencia'
-        ");
-
-        DB::table('user_roles')->where('rol', 'admin')->update(['rol' => 'admin_sistema']);
-        DB::table('user_roles')->whereIn('rol', ['operador', 'consulta'])->update(['rol' => 'operador_gerencia']);
-
-        DB::statement("
-            ALTER TABLE user_roles MODIFY COLUMN rol
-            ENUM('admin_sistema','admin_gerencia','operador_gerencia')
-            NOT NULL DEFAULT 'operador_gerencia'
-        ");
+        // Una base instalada con el esquema de agosto ya tiene los roles nuevos
+        // (y `sin_acceso`, que el ENUM de transición no admite): no hay nada
+        // que reasignar.
+        $tipo = DB::selectOne("SHOW COLUMNS FROM user_roles LIKE 'rol'")->Type;
+        if (str_contains($tipo, "'consulta'")) {
+            $this->reasignarRoles();
+        }
 
         if (!Schema::hasColumn('user_roles', 'sector_id')) {
             DB::statement('ALTER TABLE user_roles ADD COLUMN sector_id INT NULL AFTER rol');
@@ -65,6 +56,26 @@ return new class extends Migration
         // No se asigna una Gerencia de Área por defecto: el alcance de cada
         // usuario lo define la organización. Los que quedan sin sector no ven
         // contratos hasta que un administrador se los asigne.
+    }
+
+    private function reasignarRoles(): void
+    {
+        // El ENUM debe admitir los valores viejos y los nuevos a la vez para
+        // poder reasignar los roles sin perder filas.
+        DB::statement("
+            ALTER TABLE user_roles MODIFY COLUMN rol
+            ENUM('admin','operador','consulta','admin_sistema','admin_gerencia','operador_gerencia')
+            NOT NULL DEFAULT 'operador_gerencia'
+        ");
+
+        DB::table('user_roles')->where('rol', 'admin')->update(['rol' => 'admin_sistema']);
+        DB::table('user_roles')->whereIn('rol', ['operador', 'consulta'])->update(['rol' => 'operador_gerencia']);
+
+        DB::statement("
+            ALTER TABLE user_roles MODIFY COLUMN rol
+            ENUM('admin_sistema','admin_gerencia','operador_gerencia')
+            NOT NULL DEFAULT 'operador_gerencia'
+        ");
     }
 
     private function foreignKeyExists(string $constraint): bool
