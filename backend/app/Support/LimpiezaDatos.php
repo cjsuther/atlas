@@ -26,6 +26,7 @@ class LimpiezaDatos
         'historial_cambios',
         'ejecucion_movimientos',
         'expedientes',
+        'contratos_ejecucion', // los expedientes, antes de renombrarse
         'cuentas_operativas',
         'contratos_principal',
         'contrato_archivos',
