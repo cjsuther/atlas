@@ -54,6 +54,14 @@ class EjecucionMovimientoRequest extends FormRequest
 
             // bandera del frontend para eliminar la factura existente al editar.
             'eliminar_factura' => ['nullable', 'boolean'],
+
+            // Reparto de un ingreso por factura entre otras cuentas. `distribuir`
+            // dice que viene el reparto completo (vacío lo quita); sin él, el
+            // reparto existente se conserva y se recalcula sobre el monto.
+            'distribuir'                         => ['nullable', 'boolean'],
+            'distribucion'                       => ['nullable', 'array', 'max:50'],
+            'distribucion.*.cuenta_operativa_id' => ['required', 'integer', 'distinct', 'exists:cuentas_operativas,id'],
+            'distribucion.*.porcentaje'          => ['required', 'numeric', 'gt:0', 'max:100'],
         ];
     }
 
@@ -71,6 +79,12 @@ class EjecucionMovimientoRequest extends FormRequest
             'cotizacion.required_if'     => 'La cotización es obligatoria cuando la moneda es Dólar.',
             'factura.mimes'              => 'La factura debe ser PDF, JPG o PNG.',
             'factura.max'                => 'La factura no puede superar los 10 MB.',
+            'distribucion.*.cuenta_operativa_id.required' => 'Elija la cuenta de cada parte del reparto.',
+            'distribucion.*.cuenta_operativa_id.distinct' => 'Una cuenta aparece más de una vez en el reparto.',
+            'distribucion.*.cuenta_operativa_id.exists'   => 'Una de las cuentas del reparto no existe.',
+            'distribucion.*.porcentaje.required'          => 'Indique el porcentaje de cada parte del reparto.',
+            'distribucion.*.porcentaje.gt'                => 'Cada porcentaje del reparto tiene que ser mayor que cero.',
+            'distribucion.*.porcentaje.max'               => 'Un porcentaje del reparto no puede superar el 100 %.',
         ];
     }
 
@@ -119,11 +133,50 @@ class EjecucionMovimientoRequest extends FormRequest
             // El expediente puede ser de cualquier rama: es uno solo para todo
             // el sistema y una distribución de fondos lo lleva a varias cuentas.
 
+            $this->validarDistribucion($v, $accion, $tipo);
+
             if ($this->hasFile('factura')
                 && ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'gasto')) {
                 $v->errors()->add('factura', 'Sólo se adjunta factura en los gastos por factura.');
             }
         });
+    }
+
+    /**
+     * El reparto es sólo de ingresos por factura, a otras cuentas en las que
+     * el usuario puede registrar, y no puede pasar del total.
+     */
+    private function validarDistribucion(Validator $v, ?string $accion, ?string $tipo): void
+    {
+        $partes = $this->input('distribucion') ?? [];
+        if (!is_array($partes) || !$partes) {
+            return;
+        }
+
+        if ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'ingreso') {
+            $v->errors()->add('distribucion', 'Sólo se reparte un ingreso por factura.');
+            return;
+        }
+
+        $total = 0.0;
+        $scope = app(AccessScopeService::class);
+        foreach ($partes as $i => $p) {
+            $total += (float) ($p['porcentaje'] ?? 0);
+            $cuenta = (int) ($p['cuenta_operativa_id'] ?? 0);
+            if ($cuenta === $this->cuentaActualId()) {
+                $v->errors()->add("distribucion.{$i}.cuenta_operativa_id",
+                    'Lo que no se reparte ya queda en esta cuenta: no hace falta incluirla.');
+            } elseif ($cuenta && !$scope->puedeUsarCuenta($cuenta)) {
+                $v->errors()->add("distribucion.{$i}.cuenta_operativa_id",
+                    'No tiene permisos para registrar en una de las cuentas del reparto.');
+            }
+        }
+
+        if ($total > 100.0001) {
+            $v->errors()->add('distribucion',
+                'Los porcentajes del reparto suman ' . rtrim(rtrim(number_format($total, 2, ',', ''), '0'), ',')
+                . ' %: no pueden pasar del 100 %.');
+        }
     }
 
     /** Cuenta en la que se registra el movimiento (alta por ruta, edición por el registro). */

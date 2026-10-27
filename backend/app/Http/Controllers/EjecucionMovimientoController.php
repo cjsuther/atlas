@@ -66,7 +66,7 @@ class EjecucionMovimientoController extends Controller
     {
         $actual = $this->service->find($id);
         if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
-        if (!$actual->editable) return $this->sinPermiso();
+        if (!$actual->editable) return $this->sinPermiso($actual);
         $m = $this->service->update(
             $id,
             $request->validated(),
@@ -81,7 +81,7 @@ class EjecucionMovimientoController extends Controller
     {
         $actual = $this->service->find($id);
         if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
-        if (!$actual->editable) return $this->sinPermiso();
+        if (!$actual->editable) return $this->sinPermiso($actual);
         if (!$this->service->softDelete($id)) return $this->notFound();
         return response()->json(['message' => 'Movimiento dado de baja.']);
     }
@@ -127,11 +127,14 @@ class EjecucionMovimientoController extends Controller
      * Se ve pero no se puede modificar: la cuenta es de sólo lectura o, en una
      * transferencia, la contraparte está fuera de su escritura.
      */
-    private function sinPermiso(): JsonResponse
+    private function sinPermiso(EjecucionMovimiento $m): JsonResponse
     {
         return response()->json([
             'error'   => 'forbidden',
-            'message' => 'No tiene permiso de escritura sobre las cuentas de este movimiento.',
+            'message' => $m->distribucion_de_id !== null
+                ? "Esta transferencia la generó el reparto del ingreso #{$m->distribucion_de_id}: "
+                  . 'se modifica o se quita desde ese ingreso.'
+                : 'No tiene permiso de escritura sobre las cuentas de este movimiento.',
         ], 403);
     }
 

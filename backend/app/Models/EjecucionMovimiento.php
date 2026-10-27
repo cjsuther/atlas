@@ -54,6 +54,8 @@ class EjecucionMovimiento extends Model
         'cuenta_contraparte_id',
         'rubro',
         'movimiento_espejo_id',
+        'distribucion_de_id',
+        'distribucion_porcentaje',
         'moneda',
         'monto',
         'monto_dolares',
@@ -69,6 +71,7 @@ class EjecucionMovimiento extends Model
         'monto'         => 'decimal:2',
         'monto_dolares' => 'decimal:2',
         'cotizacion'    => 'decimal:4',
+        'distribucion_porcentaje' => 'decimal:2',
         'fecha'         => 'date:Y-m-d',
     ];
 
@@ -97,6 +100,22 @@ class EjecucionMovimiento extends Model
     public function expedienteContraparte()
     {
         return $this->belongsTo(Expediente::class, 'expediente_contraparte_id', 'id');
+    }
+
+    /**
+     * Partes en que se repartió un ingreso: las transferencias que salen de
+     * su cuenta. Sus contrapartidas también apuntan al ingreso, pero son el
+     * otro lado de la misma parte.
+     */
+    public function distribuciones()
+    {
+        return $this->hasMany(self::class, 'distribucion_de_id', 'id')->where('tipo', 'gasto');
+    }
+
+    /** Ingreso que generó esta transferencia al repartirse. */
+    public function distribucionDe()
+    {
+        return $this->belongsTo(self::class, 'distribucion_de_id', 'id');
     }
 
     /** Movimiento generado automáticamente en la cuenta contraparte. */

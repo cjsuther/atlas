@@ -16,6 +16,8 @@ class EjecucionMovimientoService
         'cuenta:id,nombre,sector_id',
         'cuentaContraparte:id,nombre,sector_id',
         'expediente:id,nro_expediente,sector_id',
+        'distribuciones:id,distribucion_de_id,cuenta_contraparte_id,distribucion_porcentaje,monto,monto_dolares,tipo',
+        'distribuciones.cuentaContraparte:id,nombre',
     ];
 
     /** Disk del filesystem donde se persisten las facturas. */
@@ -107,12 +109,27 @@ class EjecucionMovimientoService
             $m->nro_expediente = null;
         }
 
-        $m->setAttribute('editable', $this->scope->puedeEditarMovimiento($m));
+        // Las partes del reparto se nombran sólo si el usuario ve esas cuentas.
+        $reparto = $m->relationLoaded('distribuciones') ? $m->distribuciones : collect();
+        foreach ($reparto as $parte) {
+            if (!$this->scope->puedeVerCuenta((int) $parte->cuenta_contraparte_id)) {
+                $parte->setRelation('cuentaContraparte', null);
+            }
+        }
+
+        // Una parte del reparto se cambia desde el ingreso que la generó, y el
+        // ingreso, sólo con escritura sobre todas las cuentas a las que reparte.
+        $editable = $m->distribucion_de_id === null
+            && $this->scope->puedeEditarMovimiento($m)
+            && $reparto->every(fn ($p) => $this->scope->puedeUsarCuenta((int) $p->cuenta_contraparte_id));
+        $m->setAttribute('editable', $editable);
+        $m->setAttribute('generado_por_reparto', $m->distribucion_de_id !== null);
         return $m;
     }
 
     public function create(int $cuentaOperativaId, array $data, ?UploadedFile $factura = null): EjecucionMovimiento
     {
+        $reparto = $this->repartoPedido($data);
         $data = $this->conNumeroDeExpediente($data);
         $data = $this->normalizeMontos($data);
         $data = $this->normalizeContraparte($data);
@@ -122,13 +139,16 @@ class EjecucionMovimientoService
             $data = array_merge($data, $this->storeFactura($factura));
         }
 
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $reparto) {
             $m = new EjecucionMovimiento();
             $m->fill($data);
             $m->save();
 
             if ($this->esTransferencia($m)) {
                 $this->crearEspejo($m);
+            }
+            if ($reparto) {
+                $this->repartir($m, $reparto);
             }
 
             return $m->fresh();
@@ -140,6 +160,7 @@ class EjecucionMovimientoService
         $m = EjecucionMovimiento::find($id);
         if (!$m) return null;
 
+        $reparto = $this->repartoPedido($data);
         $data = $this->conNumeroDeExpediente($data);
         $data = $this->normalizeMontos($data);
         $data = $this->normalizeContraparte($data);
@@ -155,11 +176,23 @@ class EjecucionMovimientoService
             $data['factura_mime']          = null;
         }
 
-        return DB::transaction(function () use ($m, $data) {
+        return DB::transaction(function () use ($m, $data, $reparto) {
             $m->fill($data);
             $m->save();
 
             $this->sincronizarEspejo($m);
+
+            // Sin un reparto nuevo, el que tenía se recalcula sobre el monto
+            // actual con los mismos porcentajes.
+            $reparto ??= $m->distribuciones()->get()
+                ->map(fn ($p) => [
+                    'cuenta_operativa_id' => (int) $p->cuenta_contraparte_id,
+                    'porcentaje'          => (float) $p->distribucion_porcentaje,
+                ])->all();
+            $this->quitarReparto($m);
+            if ($reparto && $this->admiteReparto($m)) {
+                $this->repartir($m, $reparto);
+            }
 
             return $m->fresh();
         });
@@ -174,6 +207,9 @@ class EjecucionMovimientoService
             $espejo = $m->movimiento_espejo_id
                 ? EjecucionMovimiento::find($m->movimiento_espejo_id)
                 : null;
+
+            // Sin el ingreso, lo que se repartió de él tampoco tiene sentido.
+            $this->quitarReparto($m);
 
             $ok = $m->delete();
 
@@ -225,6 +261,8 @@ class EjecucionMovimientoService
                 'cotizacion'              => $origen->cotizacion,
                 'objeto'                  => $origen->objeto,
                 'fecha'                   => $origen->fecha,
+                'distribucion_de_id'      => $origen->distribucion_de_id,
+                'distribucion_porcentaje' => $origen->distribucion_porcentaje,
             ]);
             $espejo->save();
 
@@ -276,6 +314,109 @@ class EjecucionMovimientoService
         } finally {
             $this->sincronizando = false;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Reparto de un ingreso entre cuentas
+    // ------------------------------------------------------------------
+
+    /**
+     * El reparto que trae el pedido, o null si no trae ninguno. Se saca de
+     * los datos porque no son columnas del movimiento.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, array{cuenta_operativa_id: int, porcentaje: float}>|null
+     */
+    private function repartoPedido(array &$data): ?array
+    {
+        $pedido = !empty($data['distribuir']) || !empty($data['distribucion']);
+        $partes = $data['distribucion'] ?? [];
+        unset($data['distribuir'], $data['distribucion']);
+
+        if (!$pedido) {
+            return null;
+        }
+        return array_values(array_map(fn ($p) => [
+            'cuenta_operativa_id' => (int) $p['cuenta_operativa_id'],
+            'porcentaje'          => (float) $p['porcentaje'],
+        ], $partes ?: []));
+    }
+
+    private function admiteReparto(EjecucionMovimiento $m): bool
+    {
+        return $m->accion === EjecucionMovimiento::ACCION_FACTURA && $m->tipo === 'ingreso';
+    }
+
+    /**
+     * Reparte el ingreso: por cada parte sale de su cuenta una transferencia
+     * por ese porcentaje, con su contrapartida en la cuenta de destino. Lo que
+     * no se reparte queda en la cuenta del ingreso.
+     *
+     * Si el reparto suma 100 %, la última parte se lleva lo que dejó el
+     * redondeo, para que no quede un centavo suelto en la cuenta.
+     *
+     * @param  array<int, array{cuenta_operativa_id: int, porcentaje: float}>  $partes
+     */
+    private function repartir(EjecucionMovimiento $ingreso, array $partes): void
+    {
+        $total    = (float) $ingreso->monto;
+        $totalUsd = $ingreso->moneda === 'Dólar' ? (float) $ingreso->monto_dolares : null;
+        $completo = abs(array_sum(array_column($partes, 'porcentaje')) - 100) < 0.0001;
+
+        $acumulado = 0.0;
+        $acumuladoUsd = 0.0;
+        foreach (array_values($partes) as $i => $parte) {
+            $ultima = $completo && $i === count($partes) - 1;
+            $p = $parte['porcentaje'];
+
+            $monto = $ultima ? round($total - $acumulado, 2) : round($total * $p / 100, 2);
+            $acumulado += $monto;
+            $montoUsd = null;
+            if ($totalUsd !== null) {
+                $montoUsd = $ultima ? round($totalUsd - $acumuladoUsd, 2) : round($totalUsd * $p / 100, 2);
+                $acumuladoUsd += $montoUsd;
+            }
+
+            $t = new EjecucionMovimiento();
+            $t->fill([
+                'cuenta_operativa_id'     => $ingreso->cuenta_operativa_id,
+                'expediente_id'           => $ingreso->expediente_id,
+                'nro_expediente'          => $ingreso->nro_expediente,
+                'tipo'                    => 'gasto',
+                'accion'                  => EjecucionMovimiento::ACCION_TRANSFERENCIA,
+                'contraparte_tipo'        => 'cuenta',
+                'cuenta_contraparte_id'   => $parte['cuenta_operativa_id'],
+                'moneda'                  => $ingreso->moneda,
+                'monto'                   => $monto,
+                'monto_dolares'           => $montoUsd,
+                'cotizacion'              => $ingreso->cotizacion,
+                'objeto'                  => 'Reparto del ' . $this->porcentaje($p) . ' del ingreso #'
+                                             . $ingreso->id . ': ' . $ingreso->objeto,
+                'fecha'                   => $ingreso->fecha,
+                'distribucion_de_id'      => $ingreso->id,
+                'distribucion_porcentaje' => $p,
+            ]);
+            $t->save();
+            $this->crearEspejo($t);
+        }
+    }
+
+    /** Da de baja las transferencias de un reparto, con sus contrapartidas. */
+    private function quitarReparto(EjecucionMovimiento $ingreso): void
+    {
+        $this->sincronizando = true;
+        try {
+            EjecucionMovimiento::where('distribucion_de_id', $ingreso->id)
+                ->get()
+                ->each(fn ($t) => $t->delete());
+        } finally {
+            $this->sincronizando = false;
+        }
+    }
+
+    private function porcentaje(float $p): string
+    {
+        return rtrim(rtrim(number_format($p, 2, ',', '.'), '0'), ',') . ' %';
     }
 
     // ------------------------------------------------------------------

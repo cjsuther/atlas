@@ -44,7 +44,14 @@ function toFormData(obj) {
     const fd = new FormData();
     for (const [k, v] of Object.entries(obj)) {
         if (v === null || v === undefined) continue;
-        if (v instanceof File) {
+        if (Array.isArray(v)) {
+            // Lista de objetos (el reparto): campo[0][clave], como lo lee Laravel.
+            v.forEach((item, i) => {
+                for (const [ck, cv] of Object.entries(item)) {
+                    if (cv !== null && cv !== undefined) fd.append(`${k}[${i}][${ck}]`, String(cv));
+                }
+            });
+        } else if (v instanceof File) {
             fd.append(k, v);
         } else if (typeof v === 'boolean') {
             fd.append(k, v ? '1' : '0');

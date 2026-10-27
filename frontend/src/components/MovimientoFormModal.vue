@@ -111,6 +111,48 @@
                     <div v-if="errors.objeto" class="error">{{ errors.objeto[0] }}</div>
                 </div>
 
+                <!-- Reparto de un ingreso por factura entre otras cuentas. -->
+                <div v-if="admiteReparto" class="field full">
+                    <label style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" v-model="repartir" style="width:auto;margin:0;" />
+                        Repartir este ingreso entre otras cuentas
+                    </label>
+                    <template v-if="repartir">
+                        <div class="hint" style="margin-bottom:8px;">
+                            El ingreso entra completo en esta cuenta y desde acá sale una transferencia
+                            por el porcentaje de cada cuenta. Lo que no se reparte queda en esta cuenta.
+                        </div>
+                        <div v-for="(p, i) in reparto" :key="i" class="reparto-fila">
+                            <div style="flex:1;min-width:0;">
+                                <SelectBuscador v-model="p.cuenta_operativa_id" :opciones="opcionesReparto(i)"
+                                                placeholder="Elegir cuenta…"
+                                                placeholder-busqueda="Buscar por nombre de cuenta o nodo…" />
+                                <div v-if="errors[`distribucion.${i}.cuenta_operativa_id`]" class="error">
+                                    {{ errors[`distribucion.${i}.cuenta_operativa_id`][0] }}
+                                </div>
+                            </div>
+                            <div style="width:110px;">
+                                <input v-model.number="p.porcentaje" type="number" step="0.01" min="0.01" max="100"
+                                       class="input" placeholder="%" />
+                                <div v-if="errors[`distribucion.${i}.porcentaje`]" class="error">
+                                    {{ errors[`distribucion.${i}.porcentaje`][0] }}
+                                </div>
+                            </div>
+                            <div class="reparto-monto">$ {{ fmtMoney(montoParte(p)) }}</div>
+                            <button type="button" class="btn btn-ghost btn-sm" style="color:var(--color-danger);"
+                                    title="Quitar" @click="reparto.splice(i, 1)">✕</button>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-secondary btn-sm" @click="agregarParte">+ Agregar cuenta</button>
+                            <span :style="{ fontSize: '13px', color: restoPct < -0.0001 ? 'var(--color-danger)' : 'inherit' }">
+                                Repartido {{ fmtNum(totalPct) }} % · queda en esta cuenta
+                                {{ fmtNum(restoPct) }} % ($ {{ fmtMoney(montoTotal * Math.max(restoPct, 0) / 100) }})
+                            </span>
+                        </div>
+                        <div v-if="errors.distribucion" class="error">{{ errors.distribucion[0] }}</div>
+                    </template>
+                </div>
+
                 <!-- Factura (sólo gastos por factura) -->
                 <div v-if="admiteFactura" class="field full">
                     <label>Factura (opcional) · PDF / JPG / PNG, máx. 10 MB</label>
@@ -217,6 +259,32 @@ const ayudaAccion = computed(() => AYUDAS[data.accion] || '');
 /** Los incentivos y la MCH son siempre gastos. */
 const tipoFijo = computed(() => data.accion === 'incentivo' || data.accion === 'mch');
 const admiteFactura = computed(() => data.accion === 'factura' && data.tipo === 'gasto');
+const admiteReparto = computed(() => data.accion === 'factura' && data.tipo === 'ingreso');
+
+/** Reparto del ingreso: cuenta y porcentaje de cada parte. */
+const repartir = ref(false);
+const reparto = ref([]);
+
+const montoTotal = computed(() => (data.moneda === 'Peso' ? Number(data.monto) || 0 : montoPesosCalc.value));
+const totalPct = computed(() => reparto.value.reduce((t, p) => t + (Number(p.porcentaje) || 0), 0));
+const restoPct = computed(() => Math.round((100 - totalPct.value) * 100) / 100);
+const montoParte = (p) => Math.round(montoTotal.value * (Number(p.porcentaje) || 0)) / 100;
+const fmtNum = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
+
+/** Cuentas permitidas que no están ya elegidas en otra parte del reparto. */
+function opcionesReparto(i) {
+    const usadas = reparto.value.filter((_, j) => j !== i).map(p => String(p.cuenta_operativa_id));
+    return opcionesCuenta.value.filter(o => !usadas.includes(String(o.value)));
+}
+
+function agregarParte() {
+    reparto.value.push({ cuenta_operativa_id: null, porcentaje: null });
+}
+
+watch(repartir, async (si) => {
+    if (si && !cuentas.value.length) await cargarCuentas();
+    if (si && !reparto.value.length) agregarParte();
+});
 
 /** Campo de contraparte que corresponde a la acción y el tipo elegidos. */
 const contraparte = computed(() => {
@@ -325,8 +393,10 @@ async function cargarCuentas() {
     }
 }
 
-function reset(initial = {}) {
+function reset(initial = {}, partes = []) {
     Object.assign(data, VACIO, { fecha: hoy() }, initial);
+    reparto.value = partes;
+    repartir.value = partes.length > 0;
     archivo.value = null;
     eliminarFactura.value = false;
     errors.value = {};
@@ -350,7 +420,10 @@ async function show({ movimiento = null, accion = 'factura', tipo = 'ingreso' } 
             cotizacion: movimiento.cotizacion != null ? Number(movimiento.cotizacion) : null,
             objeto: movimiento.objeto || '',
             fecha: movimiento.fecha ? String(movimiento.fecha).slice(0, 10) : hoy(),
-        });
+        }, (movimiento.distribuciones || []).map(p => ({
+            cuenta_operativa_id: p.cuenta_contraparte_id,
+            porcentaje: Number(p.distribucion_porcentaje),
+        })));
     } else {
         editingId.value = null;
         currentFactura.value = null;
@@ -358,7 +431,7 @@ async function show({ movimiento = null, accion = 'factura', tipo = 'ingreso' } 
     }
 
     if (!expedientes.value.length) await cargarExpedientes();
-    if (data.accion === 'transferencia' && !cuentas.value.length) await cargarCuentas();
+    if ((data.accion === 'transferencia' || repartir.value) && !cuentas.value.length) await cargarCuentas();
 
     open.value = true;
 }
@@ -385,6 +458,13 @@ async function submit() {
         const payload = { ...data };
         if (archivo.value) payload.factura = archivo.value;
         if (eliminarFactura.value) payload.eliminar_factura = true;
+        // El reparto viaja completo: vacío, quita el que había.
+        if (admiteReparto.value) {
+            payload.distribuir = true;
+            payload.distribucion = repartir.value
+                ? reparto.value.filter(p => p.cuenta_operativa_id || p.porcentaje)
+                : [];
+        }
 
         if (isEdit.value) {
             await movimientosService.update(editingId.value, payload);
@@ -410,4 +490,6 @@ async function submit() {
 
 <style scoped>
 .hint { font-size: 12px; color: var(--color-muted, #888); margin-top: 4px; }
+.reparto-fila { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.reparto-monto { width: 140px; text-align: right; padding-top: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
 </style>

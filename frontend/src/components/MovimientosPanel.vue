@@ -84,6 +84,14 @@
                                     {{ m.objeto || 'Sin objeto' }}
                                 </a>
                                 <template v-else>{{ m.objeto }}</template>
+                                <!-- Cómo se repartió el ingreso entre otras cuentas. -->
+                                <div v-if="m.distribuciones?.length" style="font-size:11px;color:var(--color-muted);white-space:normal;">
+                                    Repartido:
+                                    {{ m.distribuciones.map(p => `${fmtPct(p.distribucion_porcentaje)} a ${p.cuenta_contraparte?.nombre || 'otra cuenta'}`).join(' · ') }}
+                                </div>
+                                <div v-else-if="m.generado_por_reparto" style="font-size:11px;color:var(--color-muted);">
+                                    Generado por un reparto: se modifica desde el ingreso.
+                                </div>
                             </td>
                             <td style="text-align:right;">
                                 <div style="font-weight:600;">${{ fmtMoney(m.monto) }}</div>
@@ -122,6 +130,9 @@ import { movimientosService } from '@/services/movimientos';
 import { useToast } from '@/composables/useToast';
 import { extractError } from '@/services/http';
 import { fmtMoney } from '@/composables/useFormat';
+
+/** Un porcentaje como se lee: 12,5 %. */
+const fmtPct = (v) => `${String(Number(v)).replace('.', ',')} %`;
 import IconLib from './IconLib.vue';
 import SelectBuscador from './SelectBuscador.vue';
 import ThOrden from './ThOrden.vue';
