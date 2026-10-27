@@ -51,7 +51,7 @@ class CuentaOperativaService extends BaseCrudService
         if (empty($params['archivadas'])) {
             $query->where('cuentas_operativas.activo', true);
         }
-        foreach (['gerencia_area_id', 'gerencia_id'] as $filtro) {
+        foreach (['gerencia_area_id', 'gerencia_id', 'contrato_id'] as $filtro) {
             if (!empty($params[$filtro])) {
                 $query->whereIn('cuentas_operativas.sector_id',
                     $this->arbol->ramaDe((int) $params[$filtro]) ?: [0]);

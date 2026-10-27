@@ -19,18 +19,33 @@
                 <input v-model="state.search" type="text" class="input"
                        :placeholder="def.buscar || 'Buscar...'" @input="onSearch" />
             </div>
-            <div v-for="f in def.filtrosEstructura || []" :key="f.param" style="min-width:220px;">
-                <SelectBuscador v-model="filtros[f.param]"
-                                :opciones="nodosParaFiltro(f).map(n => ({ value: n.sector_id, etiqueta: n.nombre }))"
-                                :opcion-vacia="`${f.label}: todas`" valor-vacio=""
-                                :placeholder="`${f.label}: todas`"
-                                @update:model-value="cambiarFiltro(f)" />
-            </div>
+            <button v-if="def.filtros" type="button" class="btn btn-secondary" @click="verFiltros = !verFiltros">
+                {{ verFiltros ? 'Ocultar filtros' : 'Filtros' }}<template v-if="filtrosActivos"> ({{ filtrosActivos }})</template>
+            </button>
+            <button v-if="def.filtros && filtrosActivos" type="button" class="btn btn-secondary" @click="limpiarFiltros">
+                Limpiar filtros
+            </button>
             <label v-if="def.archivo" style="display:flex;align-items:center;gap:6px;font-size:13px;">
                 <input type="checkbox" v-model="state.archivados" style="width:auto;margin:0;"
                        @change="state.page = 1; load()" />
                 {{ def.archivo.verArchivados }}
             </label>
+        </div>
+
+        <!-- Filtros del catálogo: se combinan entre sí y con la búsqueda. -->
+        <div v-if="def.filtros && verFiltros" class="filters-panel">
+            <div class="filters-grid">
+                <div v-for="f in def.filtros" :key="f.param" class="field">
+                    <label>{{ f.label }}</label>
+                    <input v-if="f.type === 'date' || f.type === 'number'" v-model="filtros[f.param]"
+                           :type="f.type" class="input" :step="f.step" @change="aplicarFiltro(f)" />
+                    <SelectBuscador v-else v-model="filtros[f.param]"
+                                    :opciones="opcionesFiltro(f)"
+                                    :opcion-vacia="f.todos || 'Todos'" valor-vacio=""
+                                    :placeholder="f.todos || 'Todos'"
+                                    @update:model-value="aplicarFiltro(f)" />
+                </div>
+            </div>
         </div>
 
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
@@ -238,17 +253,23 @@ function esObligatorio(f) {
 const onSearch = debounce(() => { state.page = 1; load(); }, 300);
 
 /**
- * Filtros por la estructura (Gerencia de Área, Gerencia). Cada selector
- * ofrece sólo los nodos que caen dentro de lo elegido en los de arriba, y al
- * cambiar uno se descartan los de abajo.
+ * Filtros del catálogo. Los de la estructura (Gerencia de Área, Gerencia)
+ * ofrecen sólo los nodos que caen dentro de lo elegido arriba, y al cambiar
+ * uno se descartan los de abajo. Los demás son combos de otro catálogo, listas
+ * fijas, fechas o importes.
  */
 const filtros = reactive({});
+const verFiltros = ref(false);
 const nodosEstructura = ref([]);
+const opcionesCatalogo = reactive({});
 const NIVEL_NUM = { gerencia_area: 1, gerencia: 2, contrato: 3 };
 
+const filtrosActivos = computed(() =>
+    Object.values(filtros).filter(v => v !== '' && v !== null && v !== undefined).length);
+
 function nodosParaFiltro(f) {
-    const arriba = (def.value.filtrosEstructura || [])
-        .filter(o => o.nivel < f.nivel && filtros[o.param]);
+    const arriba = (def.value.filtros || [])
+        .filter(o => o.type === 'estructura' && o.nivel < f.nivel && filtros[o.param]);
     const padreDe = new Map(nodosEstructura.value.map(n => [String(n.sector_id), n.dependencia_id]));
     const ancestros = (n) => {
         const out = [];
@@ -265,19 +286,53 @@ function nodosParaFiltro(f) {
         .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
 }
 
-function cambiarFiltro(f) {
-    for (const o of def.value.filtrosEstructura || []) {
-        if (o.nivel > f.nivel) filtros[o.param] = '';
+function opcionesFiltro(f) {
+    if (f.type === 'estructura') {
+        return nodosParaFiltro(f).map(n => ({ value: n.sector_id, etiqueta: n.nombre }));
     }
+    if (f.type === 'select-async') {
+        return (opcionesCatalogo[f.param] || []).map(o => ({
+            value: o[f.valueKey],
+            etiqueta: typeof f.labelKey === 'function' ? f.labelKey(o) : o[f.labelKey],
+        }));
+    }
+    return (f.options || []).map(o => ({ value: o.value, etiqueta: o.label }));
+}
+
+function aplicarFiltro(f) {
+    if (f.type === 'estructura') {
+        for (const o of def.value.filtros || []) {
+            if (o.type === 'estructura' && o.nivel > f.nivel) filtros[o.param] = '';
+        }
+    }
+    state.page = 1;
+    load();
+}
+
+function limpiarFiltros() {
+    for (const k of Object.keys(filtros)) filtros[k] = '';
     state.page = 1;
     load();
 }
 
 async function prepararFiltros() {
     for (const k of Object.keys(filtros)) delete filtros[k];
-    if (!def.value?.filtrosEstructura) return;
-    for (const f of def.value.filtrosEstructura) filtros[f.param] = '';
-    nodosEstructura.value = await listAll('sectores').catch(() => []);
+    for (const k of Object.keys(opcionesCatalogo)) delete opcionesCatalogo[k];
+    // El panel arranca abierto: a la vista, los filtros se usan.
+    verFiltros.value = true;
+    const lista = def.value?.filtros;
+    if (!lista) return;
+    for (const f of lista) filtros[f.param] = '';
+    // Cada catálogo se pide una vez aunque lo usen varios filtros.
+    const pedidos = {};
+    if (lista.some(f => f.type === 'estructura')) {
+        pedidos.sectores = listAll('sectores').catch(() => []);
+        nodosEstructura.value = await pedidos.sectores;
+    }
+    for (const f of lista.filter(f => f.type === 'select-async')) {
+        pedidos[f.endpoint] ??= listAll(f.endpoint).catch(() => []);
+        opcionesCatalogo[f.param] = await pedidos[f.endpoint];
+    }
 }
 
 watch(() => route.params.slug, () => {

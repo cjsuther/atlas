@@ -122,6 +122,45 @@ export const ENTITY_DEFS = {
     },
     'contratos': {
         title: 'Contratos',
+        buscar: 'Buscar por contrato, gerencia, solicitante, responsable, tipo, UVT, Caja BAS…',
+        filtros: [
+            { param: 'gerencia_area_id', label: 'Gerencia de Área', type: 'estructura', nivel: 1, todos: 'Todas' },
+            { param: 'gerencia_id',      label: 'Gerencia',         type: 'estructura', nivel: 2, todos: 'Todas' },
+            { param: 'contrato_id',      label: 'Contrato',         type: 'estructura', nivel: 3 },
+            { param: 'tipo_contrato_id', label: 'Tipo', type: 'select-async',
+              endpoint: 'tipos-contrato-ejecucion', valueKey: 'id', labelKey: (o) => `${o.sigla} — ${o.nombre}` },
+            { param: 'estado_id',        label: 'Estado', type: 'select-async',
+              endpoint: 'estados-ejecucion', valueKey: 'id', labelKey: 'nombre' },
+            { param: 'uvt_id',           label: 'UVT', type: 'select-async', todos: 'Todas',
+              endpoint: 'uvt', valueKey: 'uvt_id', labelKey: (o) => `${o.siglas} — ${o.nombre}` },
+            { param: 'solicitante_id',   label: 'Solicitante', type: 'select-async',
+              endpoint: 'solicitantes', valueKey: 'solicitante_id', labelKey: 'razon_social' },
+            { param: 'responsable_id',   label: 'Responsable', type: 'select-async',
+              endpoint: 'personal', valueKey: 'legajo', labelKey: (p) => personaConLegajo(p) },
+            { param: 'moneda',           label: 'Moneda', type: 'select', todos: 'Todas',
+              options: [
+                  { value: 'Peso',  label: 'Pesos' },
+                  { value: 'Dólar', label: 'Dólares' },
+                  { value: 'Euro',  label: 'Euros' },
+              ] },
+            { param: 'vencimiento',      label: 'Vencimiento', type: 'select',
+              options: [
+                  { value: 'vencidos',  label: 'Vencidos' },
+                  { value: 'vigentes',  label: 'Vigentes' },
+                  { value: '30',        label: 'Vencen en 30 días' },
+                  { value: '60',        label: 'Vencen en 60 días' },
+                  { value: '90',        label: 'Vencen en 90 días' },
+                  { value: 'sin_fecha', label: 'Sin fecha de vencimiento' },
+              ] },
+            { param: 'vence_desde',      label: 'Vence desde', type: 'date' },
+            { param: 'vence_hasta',      label: 'Vence hasta', type: 'date' },
+            { param: 'monto_desde',      label: 'Monto en pesos desde', type: 'number', step: '0.01' },
+            { param: 'monto_hasta',      label: 'Monto en pesos hasta', type: 'number', step: '0.01' },
+            { param: 'con_archivos',     label: 'Archivos adjuntos', type: 'select',
+              options: [{ value: '1', label: 'Con archivos' }, { value: '0', label: 'Sin archivos' }] },
+            { param: 'con_ficha',        label: 'Ficha', type: 'select', todos: 'Todas',
+              options: [{ value: '1', label: 'Con datos cargados' }, { value: '0', label: 'Sin datos cargados' }] },
+        ],
         subtitle: 'La ficha de cada Contrato, el tercer nivel de la estructura. Los contratos se '
                 + 'crean y se borran desde Estructura; acá se completan sus datos y se adjuntan sus '
                 + 'archivos. Si el monto no está en pesos, la cotización lo lleva a pesos.',
@@ -210,10 +249,11 @@ export const ENTITY_DEFS = {
                 + 'las transferencias, los incentivos y la MCH.',
         endpoint: 'cuentas-operativas',
         keyField: 'id',
-        // Filtros de la estructura: cada uno alcanza a toda la rama del nodo.
-        filtrosEstructura: [
-            { param: 'gerencia_area_id', label: 'Gerencia de Área', nivel: 1 },
-            { param: 'gerencia_id',      label: 'Gerencia',         nivel: 2 },
+        // Cada filtro de la estructura alcanza a toda la rama del nodo.
+        filtros: [
+            { param: 'gerencia_area_id', label: 'Gerencia de Área', type: 'estructura', nivel: 1, todos: 'Todas' },
+            { param: 'gerencia_id',      label: 'Gerencia',         type: 'estructura', nivel: 2, todos: 'Todas' },
+            { param: 'contrato_id',      label: 'Contrato',         type: 'estructura', nivel: 3 },
         ],
         archivo: {
             param: 'archivadas',

@@ -48,14 +48,8 @@ class ContratoService
     {
         $q = $this->baseQuery();
 
-        if (!empty($params['search'])) {
-            $term = '%' . $params['search'] . '%';
-            $q->where(function (Builder $w) use ($term) {
-                $w->where('sector.nombre', 'like', $term)
-                  ->orWhere('contratos.caja_bas', 'like', $term)
-                  ->orWhere('contratos.descripcion_objeto', 'like', $term);
-            });
-        }
+        $this->buscar($q, (string) ($params['search'] ?? ''));
+        $this->filtrar($q, $params);
 
         // Los archivados no se listan salvo que se pidan.
         if (empty($params['archivados'])) {
@@ -176,6 +170,132 @@ class ContratoService
     public function puedeEditar(int $sectorId): bool
     {
         return (bool) $this->scope->usuario()?->esAdmin();
+    }
+
+    /**
+     * Búsqueda libre. Cada palabra tiene que aparecer en alguno de los datos
+     * del contrato: "GAEN dolar ortega" trae los contratos de GAEN, en
+     * dólares, de los que Ortega es responsable.
+     */
+    private function buscar(Builder $q, string $texto): void
+    {
+        $palabras = preg_split('/\s+/u', trim($texto), -1, PREG_SPLIT_NO_EMPTY);
+
+        foreach ($palabras as $palabra) {
+            $term = '%' . $palabra . '%';
+            // Gerencia o Gerencia de Área cuyo nombre coincide: el contrato
+            // aparece si cuelga de ellas.
+            $ramas = [];
+            foreach (DB::table('sector')->where('nombre', 'like', $term)->pluck('sector_id') as $id) {
+                array_push($ramas, ...$this->arbol->ramaDe((int) $id));
+            }
+
+            $q->where(function (Builder $w) use ($term, $ramas) {
+                foreach (['sector.nombre', 'contratos.caja_bas', 'contratos.descripcion_objeto',
+                          'contratos.observaciones', 'contratos.acta_finalizacion', 'contratos.moneda'] as $col) {
+                    $w->orWhere($col, 'like', $term);
+                }
+                if ($ramas) {
+                    $w->orWhereIn('sector.sector_id', array_unique($ramas));
+                }
+                $w->orWhereExists(fn ($e) => $e->from('solicitantes')
+                      ->whereColumn('solicitantes.solicitante_id', 'contratos.solicitante_id')
+                      ->where(fn ($x) => $x->where('razon_social', 'like', $term)
+                                          ->orWhere('cuil_cuit', 'like', $term)
+                                          ->orWhere('nombre_contacto', 'like', $term)))
+                  ->orWhereExists(fn ($e) => $e->from('personal')
+                      ->where(fn ($x) => $x->whereColumn('personal.legajo', 'contratos.resp1_id')
+                                          ->orWhereColumn('personal.legajo', 'contratos.resp2_id'))
+                      ->where(fn ($x) => $x->where('apellido', 'like', $term)
+                                          ->orWhere('personal.nombre', 'like', $term)
+                                          ->orWhere('legajo', 'like', $term)))
+                  ->orWhereExists(fn ($e) => $e->from('tipo_contrato_ejecucion')
+                      ->whereColumn('tipo_contrato_ejecucion.id', 'contratos.tipo_contrato_id')
+                      ->where(fn ($x) => $x->where('sigla', 'like', $term)->orWhere('nombre', 'like', $term)))
+                  ->orWhereExists(fn ($e) => $e->from('estado_ejecucion')
+                      ->whereColumn('estado_ejecucion.id', 'contratos.estado_id')
+                      ->where('nombre', 'like', $term))
+                  ->orWhereExists(fn ($e) => $e->from('uvt')
+                      ->whereColumn('uvt.uvt_id', 'contratos.uvt_id')
+                      ->where(fn ($x) => $x->where('siglas', 'like', $term)->orWhere('uvt.nombre', 'like', $term)));
+            });
+        }
+    }
+
+    /**
+     * Filtros del panel. Se combinan: cada uno recorta sobre los anteriores.
+     */
+    private function filtrar(Builder $q, array $p): void
+    {
+        $valor = fn (string $k) => isset($p[$k]) && $p[$k] !== '' && $p[$k] !== null ? $p[$k] : null;
+
+        // La Gerencia de Área y la Gerencia alcanzan a toda su rama.
+        foreach (['gerencia_area_id', 'gerencia_id', 'contrato_id'] as $f) {
+            if ($valor($f) !== null) {
+                $q->whereIn('sector.sector_id', $this->arbol->ramaDe((int) $p[$f]) ?: [0]);
+            }
+        }
+
+        foreach ([
+            'tipo_contrato_id' => 'contratos.tipo_contrato_id',
+            'estado_id'        => 'contratos.estado_id',
+            'uvt_id'           => 'contratos.uvt_id',
+            'solicitante_id'   => 'contratos.solicitante_id',
+            'moneda'           => 'contratos.moneda',
+        ] as $f => $col) {
+            if ($valor($f) !== null) {
+                $q->where($col, $p[$f]);
+            }
+        }
+
+        if ($valor('responsable_id') !== null) {
+            $legajo = (int) $p['responsable_id'];
+            $q->where(fn ($w) => $w->where('contratos.resp1_id', $legajo)
+                                   ->orWhere('contratos.resp2_id', $legajo));
+        }
+
+        // Situación según la fecha de vencimiento.
+        $hoy = now()->toDateString();
+        match ($valor('vencimiento')) {
+            'vencidos'   => $q->where('contratos.fecha_vencimiento', '<', $hoy),
+            'vigentes'   => $q->where(fn ($w) => $w->whereNull('contratos.fecha_vencimiento')
+                                                   ->orWhere('contratos.fecha_vencimiento', '>=', $hoy)),
+            '30', '60', '90' => $q->whereBetween('contratos.fecha_vencimiento',
+                                    [$hoy, now()->addDays((int) $p['vencimiento'])->toDateString()]),
+            'sin_fecha'  => $q->whereNull('contratos.fecha_vencimiento'),
+            default      => null,
+        };
+
+        if ($valor('vence_desde') !== null) {
+            $q->where('contratos.fecha_vencimiento', '>=', $p['vence_desde']);
+        }
+        if ($valor('vence_hasta') !== null) {
+            $q->where('contratos.fecha_vencimiento', '<=', $p['vence_hasta']);
+        }
+
+        // El monto se compara en pesos, que es como se ve en la grilla.
+        $enPesos = "(CASE WHEN contratos.moneda = 'Peso' THEN contratos.monto
+                          ELSE contratos.monto * contratos.cotizacion END)";
+        if (is_numeric($valor('monto_desde'))) {
+            $q->whereRaw("{$enPesos} >= ?", [(float) $p['monto_desde']]);
+        }
+        if (is_numeric($valor('monto_hasta'))) {
+            $q->whereRaw("{$enPesos} <= ?", [(float) $p['monto_hasta']]);
+        }
+
+        match ($valor('con_archivos')) {
+            '1' => $q->whereExists(fn ($e) => $e->from('contrato_archivos')
+                        ->whereColumn('contrato_archivos.sector_id', 'sector.sector_id')),
+            '0' => $q->whereNotExists(fn ($e) => $e->from('contrato_archivos')
+                        ->whereColumn('contrato_archivos.sector_id', 'sector.sector_id')),
+            default => null,
+        };
+
+        match ($valor('con_ficha')) {
+            '1' => $q->whereNotNull('contratos.sector_id'),
+            '0' => $q->whereNull('contratos.sector_id'),
+            default => null,
+        };
     }
 
     private function baseQuery(): Builder
