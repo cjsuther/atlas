@@ -7,7 +7,7 @@
         </button>
 
         <div v-if="abierto" class="select-buscador-panel">
-            <input v-if="conBuscador" ref="buscadorRef" v-model="busqueda" class="input" type="text"
+            <input v-if="conBuscador" ref="buscadorRef" v-model="busqueda" class="input" type="text" data-sin-cambio
                    :placeholder="placeholderBusqueda" @keydown.esc.prevent="cerrar" />
             <ul class="select-buscador-lista">
                 <li v-if="opcionVacia">
@@ -80,7 +80,11 @@ function cerrar() {
 }
 
 function elegir(value) {
+    const cambio = String(value ?? '') !== String(props.modelValue ?? '');
     emit('update:modelValue', value);
+    // Avisa hacia arriba, como un campo nativo, que se cargó un dato: la
+    // ventana que lo contiene lo usa para no cerrarse sin preguntar.
+    if (cambio) raiz.value?.dispatchEvent(new Event('cambio-campo', { bubbles: true }));
     cerrar();
 }
 
