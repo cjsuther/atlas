@@ -24,7 +24,7 @@ class Sector extends Model
     protected $fillable = [
         'nombre',
         'dependencia_id',
-        'responsable',
+        'responsable_id',
         'web',
         'ubicacion',
     ];
@@ -34,6 +34,12 @@ class Sector extends Model
     public function dependencia()
     {
         return $this->belongsTo(Sector::class, 'dependencia_id', 'sector_id');
+    }
+
+    /** Responsable del nodo: una persona del personal. */
+    public function responsable()
+    {
+        return $this->belongsTo(Personal::class, 'responsable_id', 'legajo');
     }
 
     public function dependientes()

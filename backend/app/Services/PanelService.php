@@ -101,8 +101,9 @@ class PanelService
             ->whereNull('deleted_at')
             ->whereIn('cuenta_operativa_id', $this->cuentasQuery($filters)->select('id'));
 
-        if (!empty($filters['desde'])) $q->whereDate('created_at', '>=', $filters['desde']);
-        if (!empty($filters['hasta'])) $q->whereDate('created_at', '<=', $filters['hasta']);
+        // Por la fecha del comprobante, no por la de carga.
+        if (!empty($filters['desde'])) $q->where('fecha', '>=', $filters['desde']);
+        if (!empty($filters['hasta'])) $q->where('fecha', '<=', $filters['hasta']);
 
         return $q;
     }

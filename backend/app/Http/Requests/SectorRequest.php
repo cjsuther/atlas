@@ -13,7 +13,7 @@ class SectorRequest extends FormRequest
         return [
             'nombre'         => ['required', 'string', 'max:200'],
             'dependencia_id' => ['nullable', 'integer', 'exists:sector,sector_id'],
-            'responsable'    => ['nullable', 'string', 'max:200'],
+            'responsable_id' => ['nullable', 'integer', 'exists:personal,legajo'],
             'web'            => ['nullable', 'string', 'max:300'],
             'ubicacion'      => ['nullable', 'string', 'max:200'],
         ];

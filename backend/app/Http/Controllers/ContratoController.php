@@ -54,7 +54,6 @@ class ContratoController extends Controller
             'resp1_id'              => ['nullable', 'integer', 'exists:personal,legajo'],
             'resp2_id'              => ['nullable', 'integer', 'exists:personal,legajo'],
             'descripcion_objeto'    => ['nullable', 'string'],
-            'cliente'               => ['nullable', 'string', 'max:300'],
             'caja_bas'              => ['nullable', 'string', 'max:200'],
             'fecha_inicio'          => ['nullable', 'date'],
             'fecha_vencimiento'     => ['nullable', 'date', 'after_or_equal:fecha_inicio'],
@@ -80,6 +79,20 @@ class ContratoController extends Controller
         }
 
         return response()->json(['data' => $this->service->guardar($id, $data)]);
+    }
+
+    /** POST /api/contratos/{id}/archivar — body: archivar (bool) */
+    public function archivar(Request $request, int $id): JsonResponse
+    {
+        if (!$this->service->esContrato($id) || !$this->service->puedeVer($id)) {
+            return $this->noEncontrado();
+        }
+        if (!$this->service->puedeEditar($id)) {
+            return $this->sinPermiso();
+        }
+        $data = $request->validate(['archivar' => ['required', 'boolean']]);
+
+        return response()->json(['data' => $this->service->archivar($id, (bool) $data['archivar'])]);
     }
 
     // ------------------------------------------------------------------

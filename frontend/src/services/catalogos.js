@@ -12,8 +12,18 @@ export function catalogoService(slug) {
     };
 }
 
-/** Listado liviano para selectores: trae hasta 500 items. */
+/**
+ * Listado completo para selectores. El servidor entrega de a 200 como máximo:
+ * se piden todas las páginas, para que no falte nadie en el combo.
+ */
 export async function listAll(slug, params = {}) {
-    const res = await http.get(`/${slug}`, { params: { per_page: 500, ...params } });
-    return res.data?.data ?? res.data ?? [];
+    const filas = [];
+    for (let page = 1; ; page++) {
+        const res = await http.get(`/${slug}`, { params: { per_page: 200, ...params, page } });
+        const datos = res.data?.data ?? res.data ?? [];
+        filas.push(...datos);
+        const ultima = res.data?.last_page ?? 1;
+        if (!Array.isArray(res.data?.data) || page >= ultima) break;
+    }
+    return filas;
 }

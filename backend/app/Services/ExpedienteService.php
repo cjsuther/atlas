@@ -54,9 +54,13 @@ class ExpedienteService
 
         // Cada filtro de la estructura alcanza a toda la rama del nodo elegido,
         // y se combinan: cada uno recorta sobre el anterior.
+        // Un expediente está en una rama o en una cuenta si es de ahí o si tiene
+        // movimientos ahí.
         foreach (['gerencia_area_id', 'sector_id', 'nodo_id'] as $filtro) {
             if (!empty($filters[$filtro])) {
-                $q->whereIn('sector_id', $this->arbol->ramaDe((int) $filters[$filtro]) ?: [0]);
+                $rama = $this->arbol->ramaDe((int) $filters[$filtro]) ?: [0];
+                $this->relacionadoCon($q, 'sector_id', $rama,
+                    CuentaOperativa::whereIn('sector_id', $rama)->pluck('id')->all());
             }
         }
         if (!empty($filters['search'])) {
@@ -65,7 +69,8 @@ class ExpedienteService
         }
 
         if (!empty($filters['cuenta_operativa_id'])) {
-            $q->where('cuenta_operativa_id', (int) $filters['cuenta_operativa_id']);
+            $cuenta = [(int) $filters['cuenta_operativa_id']];
+            $this->relacionadoCon($q, 'cuenta_operativa_id', $cuenta, $cuenta);
         }
 
         if (!empty($filters['mostrar_baja'])) {
@@ -73,6 +78,37 @@ class ExpedienteService
         }
 
         return $this->aplicarOrden($q, $filters);
+    }
+
+    /**
+     * Expedientes cuya columna propia está entre `$valores` o que tienen
+     * movimientos vigentes en alguna de `$cuentas`.
+     *
+     * @param  array<int>  $valores
+     * @param  array<int>  $cuentas
+     */
+    private function relacionadoCon(Builder $q, string $columna, array $valores, array $cuentas): void
+    {
+        $q->where(fn ($w) => $w
+            ->whereIn("expedientes.{$columna}", $valores)
+            ->orWhereExists(fn ($m) => $m->from('ejecucion_movimientos')
+                ->whereColumn('ejecucion_movimientos.expediente_id', 'expedientes.id')
+                ->whereNull('ejecucion_movimientos.deleted_at')
+                ->whereIn('ejecucion_movimientos.cuenta_operativa_id', $cuentas ?: [0])));
+    }
+
+    /**
+     * Todos los expedientes vigentes, sólo número e id, para elegir el de un
+     * movimiento: un expediente de otra rama también se puede usar.
+     *
+     * @return \Illuminate\Support\Collection<int, Expediente>
+     */
+    public function opciones()
+    {
+        return Expediente::query()
+            ->orderBy('nro_expediente')
+            ->get(['id', 'nro_expediente'])
+            ->each->setAppends([]);
     }
 
     /** Columnas propias de la tabla por las que se puede ordenar. */
@@ -151,7 +187,9 @@ class ExpedienteService
     public function paginate(array $filters): LengthAwarePaginator
     {
         $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 200));
-        return $this->buildQuery($filters)->paginate($perPage);
+        $pagina = $this->buildQuery($filters)->paginate($perPage);
+        $pagina->getCollection()->each(fn ($e) => $this->recortar($e));
+        return $pagina;
     }
 
     public function find(int $id, bool $withTrashed = false): ?Expediente
@@ -167,7 +205,21 @@ class ExpedienteService
 
         $this->scope->aplicarAContratos($q);
 
-        return $q->find($id);
+        $e = $q->find($id);
+        return $e ? $this->recortar($e) : null;
+    }
+
+    /**
+     * Un expediente se ve desde otra rama si tiene movimientos en cuentas de
+     * ella; la cuenta de origen, si el usuario no la ve, no se nombra.
+     */
+    private function recortar(Expediente $e): Expediente
+    {
+        if ($e->relationLoaded('cuentaOperativa') && $e->cuentaOperativa
+            && !$this->scope->puedeVerCuenta((int) $e->cuenta_operativa_id)) {
+            $e->setRelation('cuentaOperativa', null);
+        }
+        return $e;
     }
 
     public function create(array $data): Expediente

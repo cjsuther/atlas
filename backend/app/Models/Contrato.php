@@ -31,7 +31,6 @@ class Contrato extends Model
         'resp1_id',
         'resp2_id',
         'descripcion_objeto',
-        'cliente',
         'caja_bas',
         'fecha_inicio',
         'fecha_vencimiento',
@@ -43,9 +42,11 @@ class Contrato extends Model
         'moneda',
         'cotizacion',
         'observaciones',
+        'archivado',
     ];
 
     protected $casts = [
+        'archivado'             => 'boolean',
         'fecha_inicio'          => 'date:Y-m-d',
         'fecha_vencimiento'     => 'date:Y-m-d',
         'fecha_finalizacion'    => 'date:Y-m-d',

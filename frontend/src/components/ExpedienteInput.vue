@@ -32,7 +32,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['update:modelValue']);
 
-const DEFAULT_REPARTICION = 'GVTYEA#CNEA';
+const DEFAULT_REPARTICION = 'GAAYG#CNEA';
 
 const anio = ref('');
 const numero = ref('');

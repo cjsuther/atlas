@@ -16,8 +16,21 @@
 
         <div class="toolbar">
             <div class="search-box">
-                <input v-model="state.search" type="text" class="input" placeholder="Buscar..." @input="onSearch" />
+                <input v-model="state.search" type="text" class="input"
+                       :placeholder="def.buscar || 'Buscar...'" @input="onSearch" />
             </div>
+            <div v-for="f in def.filtrosEstructura || []" :key="f.param" style="min-width:220px;">
+                <SelectBuscador v-model="filtros[f.param]"
+                                :opciones="nodosParaFiltro(f).map(n => ({ value: n.sector_id, etiqueta: n.nombre }))"
+                                :opcion-vacia="`${f.label}: todas`" valor-vacio=""
+                                :placeholder="`${f.label}: todas`"
+                                @update:model-value="cambiarFiltro(f)" />
+            </div>
+            <label v-if="def.archivo" style="display:flex;align-items:center;gap:6px;font-size:13px;">
+                <input type="checkbox" v-model="state.archivados" style="width:auto;margin:0;"
+                       @change="state.page = 1; load()" />
+                {{ def.archivo.verArchivados }}
+            </label>
         </div>
 
         <div v-if="loading" class="empty-state"><span class="loader dark" /> Cargando…</div>
@@ -49,6 +62,10 @@
                         <td class="actions">
                             <button v-if="puedeEditar(r)" @click="openEdit(r)" title="Editar">
                                 <IconLib name="edit" :size="14" />
+                            </button>
+                            <button v-if="def.archivo && auth.canAdminEstructura" @click="archivar(r)"
+                                    :title="def.archivo.archivado(r) ? 'Desarchivar' : 'Archivar'">
+                                <IconLib name="archive" :size="14" />
                             </button>
                             <button v-if="auth.canAdminEstructura && !def.sinBaja" class="danger" @click="remove(r)" title="Eliminar">
                                 <IconLib name="trash" :size="14" />
@@ -141,7 +158,7 @@ import { useRoute } from 'vue-router';
 import { catalogoService, listAll } from '@/services/catalogos';
 import { useAuthStore } from '@/stores/auth';
 import { useToast } from '@/composables/useToast';
-import { extractError } from '@/services/http';
+import http, { extractError } from '@/services/http';
 import { debounce } from '@/composables/useFormat';
 import { ENTITY_DEFS } from './definitions';
 import BasePager from '@/components/BasePager.vue';
@@ -158,7 +175,7 @@ const toast = useToast();
 const def = computed(() => ENTITY_DEFS[route.params.slug] || null);
 const service = computed(() => def.value ? catalogoService(def.value.endpoint) : null);
 
-const state = reactive({ search: '', page: 1, per_page: 20 });
+const state = reactive({ search: '', page: 1, per_page: 20, archivados: false });
 const orden = reactive({ by: '', dir: 'asc' });
 const rows = ref([]);
 const total = ref(0);
@@ -220,10 +237,54 @@ function esObligatorio(f) {
 
 const onSearch = debounce(() => { state.page = 1; load(); }, 300);
 
+/**
+ * Filtros por la estructura (Gerencia de Área, Gerencia). Cada selector
+ * ofrece sólo los nodos que caen dentro de lo elegido en los de arriba, y al
+ * cambiar uno se descartan los de abajo.
+ */
+const filtros = reactive({});
+const nodosEstructura = ref([]);
+const NIVEL_NUM = { gerencia_area: 1, gerencia: 2, contrato: 3 };
+
+function nodosParaFiltro(f) {
+    const arriba = (def.value.filtrosEstructura || [])
+        .filter(o => o.nivel < f.nivel && filtros[o.param]);
+    const padreDe = new Map(nodosEstructura.value.map(n => [String(n.sector_id), n.dependencia_id]));
+    const ancestros = (n) => {
+        const out = [];
+        let p = n.dependencia_id;
+        while (p !== null && p !== undefined && !out.includes(String(p))) {
+            out.push(String(p));
+            p = padreDe.get(String(p));
+        }
+        return out;
+    };
+    return nodosEstructura.value
+        .filter(n => NIVEL_NUM[n.nivel] === f.nivel)
+        .filter(n => arriba.every(o => ancestros(n).includes(String(filtros[o.param]))))
+        .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+}
+
+function cambiarFiltro(f) {
+    for (const o of def.value.filtrosEstructura || []) {
+        if (o.nivel > f.nivel) filtros[o.param] = '';
+    }
+    state.page = 1;
+    load();
+}
+
+async function prepararFiltros() {
+    for (const k of Object.keys(filtros)) delete filtros[k];
+    if (!def.value?.filtrosEstructura) return;
+    for (const f of def.value.filtrosEstructura) filtros[f.param] = '';
+    nodosEstructura.value = await listAll('sectores').catch(() => []);
+}
+
 watch(() => route.params.slug, () => {
-    state.search = ''; state.page = 1;
+    state.search = ''; state.page = 1; state.archivados = false;
     orden.by = ''; orden.dir = 'asc';
     rows.value = []; total.value = 0;
+    prepararFiltros();
     if (def.value) load();
 });
 
@@ -235,6 +296,8 @@ async function load() {
             page: state.page, per_page: state.per_page,
             ...(state.search ? { search: state.search } : {}),
             ...(orden.by ? { order_by: orden.by, order_dir: orden.dir } : {}),
+            ...(def.value.archivo && state.archivados ? { [def.value.archivo.param]: 1 } : {}),
+            ...Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '' && v !== null)),
         });
         rows.value = res.data || [];
         total.value = res.total || 0;
@@ -352,12 +415,38 @@ async function remove(r) {
         load();
     } catch (err) {
         if (err?.response?.status === 409) {
-            toast.error(extractError(err, 'No se puede eliminar (hay dependencias).'));
+            // El motivo está en `detalles`: sin él, el aviso no dice qué lo impide.
+            const detalles = err.response.data?.detalles ?? [];
+            toast.error([extractError(err, 'No se puede eliminar (hay dependencias).'), ...detalles].join(' '));
         } else {
             toast.error(extractError(err, 'No se pudo eliminar.'));
         }
     }
 }
 
-onMounted(() => { if (def.value) load(); });
+/**
+ * Archivar saca el registro de los listados sin borrar nada; desarchivar lo
+ * devuelve. Qué implica cada uno lo explica el catálogo.
+ */
+async function archivar(r) {
+    const archivar = !def.value.archivo.archivado(r);
+    const nombre = def.value.tituloFila?.(r) || r.nombre || `#${r[def.value.keyField]}`;
+    const ok = await confirmRef.value.show({
+        title: archivar ? 'Archivar' : 'Desarchivar',
+        message: archivar
+            ? `¿Archivar «${nombre}»? ${def.value.archivo.alArchivar}`
+            : `¿Desarchivar «${nombre}»? Vuelve a aparecer en los listados.`,
+        confirmText: archivar ? 'Archivar' : 'Desarchivar',
+    });
+    if (!ok) return;
+    try {
+        await http.post(`/${def.value.endpoint}/${r[def.value.keyField]}/archivar`, { archivar });
+        toast.success(archivar ? 'Archivado.' : 'Desarchivado.');
+        load();
+    } catch (err) {
+        toast.error(extractError(err, 'No se pudo archivar.'));
+    }
+}
+
+onMounted(() => { prepararFiltros(); if (def.value) load(); });
 </script>

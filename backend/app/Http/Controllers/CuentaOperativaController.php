@@ -23,6 +23,9 @@ class CuentaOperativaController extends CrudController
             // Toda cuenta cuelga de un nodo del árbol; no hay cuentas sueltas.
             'sector_id'   => ['required', 'integer', 'exists:sector,sector_id'],
             'descripcion' => ['nullable', 'string', 'max:500'],
+            // Toda cuenta tiene a alguien que responde por ella.
+            'responsable_id' => ['required', 'integer', 'exists:personal,legajo'],
+            'saldo_inicial'  => ['nullable', 'numeric'],
             'activo'      => ['nullable', 'boolean'],
         ];
     }
@@ -42,7 +45,23 @@ class CuentaOperativaController extends CrudController
             'nombre.unique'      => 'Ya existe una cuenta operativa con ese nombre en el mismo nodo.',
             'sector_id.required' => 'Debe indicar de qué nodo de la estructura cuelga la cuenta.',
             'sector_id.exists'   => 'El nodo indicado no existe.',
+            'responsable_id.required' => 'Debe indicar el responsable de la cuenta.',
+            'responsable_id.exists'   => 'La persona indicada no está en el personal.',
         ];
+    }
+
+    /** POST /api/cuentas-operativas/{id}/archivar — body: archivar (bool) */
+    public function archivar(Request $request, int $id): \Illuminate\Http\JsonResponse
+    {
+        $data = $request->validate(['archivar' => ['required', 'boolean']]);
+        $cuenta = $this->service->archivar($id, (bool) $data['archivar']);
+        if (!$cuenta) {
+            return response()->json([
+                'error'   => 'not_found',
+                'message' => 'Recurso no encontrado.',
+            ], 404);
+        }
+        return response()->json(['data' => $cuenta]);
     }
 
     /** Árbol de la estructura con sus cuentas, para los selectores. */

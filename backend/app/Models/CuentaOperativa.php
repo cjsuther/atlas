@@ -27,6 +27,7 @@ class CuentaOperativa extends Model
         'nombre',
         'sector_id',
         'descripcion',
+        'responsable_id',
         'saldo_inicial',
         'activo',
     ];
@@ -41,6 +42,12 @@ class CuentaOperativa extends Model
     public function sector()
     {
         return $this->belongsTo(Sector::class, 'sector_id', 'sector_id');
+    }
+
+    /** Responsable de la cuenta: una persona del personal. */
+    public function responsable()
+    {
+        return $this->belongsTo(Personal::class, 'responsable_id', 'legajo');
     }
 
     public function expedientes()

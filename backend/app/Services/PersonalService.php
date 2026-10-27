@@ -10,7 +10,11 @@ use Illuminate\Database\Eloquent\Builder;
 class PersonalService extends BaseCrudService
 {
     protected string $modelClass = Personal::class;
-    protected array $searchableFields = ['apellido', 'nombre', 'mail', 'interno'];
+    // Calificados: al ordenar por lugar de trabajo se suma la tabla de la
+    // estructura, que también tiene `nombre`.
+    protected array $searchableFields = [
+        'personal.legajo', 'personal.apellido', 'personal.nombre', 'personal.mail', 'personal.interno',
+    ];
 
     protected function baseQuery(): Builder
     {

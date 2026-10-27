@@ -13,10 +13,14 @@ use Illuminate\Database\Eloquent\Model;
 class CuentaOperativaService extends BaseCrudService
 {
     protected string $modelClass = CuentaOperativa::class;
-    protected array $searchableFields = ['nombre', 'descripcion'];
+    // Calificados: al ordenar por ubicación se suma la tabla de la estructura,
+    // que también tiene `nombre`.
+    protected array $searchableFields = ['cuentas_operativas.nombre', 'cuentas_operativas.descripcion'];
 
-    public function __construct(protected AccessScopeService $scope)
-    {
+    public function __construct(
+        protected AccessScopeService $scope,
+        protected SectorTree $arbol,
+    ) {
     }
 
     /**
@@ -30,12 +34,70 @@ class CuentaOperativaService extends BaseCrudService
 
         return CuentaOperativa::query()
             ->when($visibles !== null, fn ($q) => $q->whereIn('cuentas_operativas.sector_id', $visibles ?: [0]))
-            ->with('sector:sector_id,nombre,dependencia_id')
+            ->with(['sector:sector_id,nombre,dependencia_id', 'responsable:legajo,apellido,nombre'])
             ->addSelect([
                 'cuentas_operativas.*',
                 'sum_ingresos' => $this->sumMovimientosSub('ingreso'),
                 'sum_gastos'   => $this->sumMovimientosSub('gasto'),
             ]);
+    }
+
+    /**
+     * Las archivadas no se listan salvo que se pidan. La Gerencia de Área y la
+     * Gerencia alcanzan a toda su rama: las cuentas del nodo y las de abajo.
+     */
+    protected function aplicarFiltros(Builder $query, array $params): void
+    {
+        if (empty($params['archivadas'])) {
+            $query->where('cuentas_operativas.activo', true);
+        }
+        foreach (['gerencia_area_id', 'gerencia_id'] as $filtro) {
+            if (!empty($params[$filtro])) {
+                $query->whereIn('cuentas_operativas.sector_id',
+                    $this->arbol->ramaDe((int) $params[$filtro]) ?: [0]);
+            }
+        }
+    }
+
+    /**
+     * Además del nombre y la descripción, se busca en lo que la grilla muestra:
+     * la ubicación en la estructura —una cuenta aparece al buscar su Gerencia—
+     * y el responsable.
+     */
+    protected function aplicarBusqueda(Builder $query, string $term): void
+    {
+        $ramas = [];
+        foreach (DB::table('sector')->where('nombre', 'like', $term)->pluck('sector_id') as $id) {
+            array_push($ramas, ...$this->arbol->ramaDe((int) $id));
+        }
+
+        $query->where(function (Builder $q) use ($term, $ramas) {
+            foreach ($this->searchableFields as $field) {
+                $q->orWhere($field, 'like', $term);
+            }
+            if ($ramas) {
+                $q->orWhereIn('cuentas_operativas.sector_id', array_unique($ramas));
+            }
+            $q->orWhereHas('responsable', fn ($p) => $p
+                ->where('apellido', 'like', $term)
+                ->orWhere('nombre', 'like', $term)
+                ->orWhereRaw("CONCAT(apellido, ', ', nombre) LIKE ?", [$term])
+                ->orWhereRaw("CONCAT(nombre, ' ', apellido) LIKE ?", [$term]));
+        });
+    }
+
+    /**
+     * Archivada, la cuenta deja de verse en listados y selectores; su saldo y
+     * sus movimientos siguen en la base y en el panel.
+     */
+    public function archivar(int $id, bool $archivar): ?Model
+    {
+        $cuenta = $this->find($id);
+        if (!$cuenta) {
+            return null;
+        }
+        CuentaOperativa::whereKey($id)->update(['activo' => !$archivar]);
+        return $this->find($id);
     }
 
     /** Suma de los movimientos de la cuenta, para no consultarlos uno por uno. */
@@ -61,6 +123,18 @@ class CuentaOperativaService extends BaseCrudService
             'ingresos' => 'sum_ingresos',
             'gastos'   => 'sum_gastos',
         ];
+
+        // El responsable se ordena por su apellido, que es como se lo muestra.
+        if ($campo === 'responsable_id') {
+            $query->orderBy(
+                DB::table('personal')
+                    ->selectRaw("CONCAT(apellido, ', ', nombre)")
+                    ->whereColumn('personal.legajo', 'cuentas_operativas.responsable_id')
+                    ->limit(1),
+                $dir
+            );
+            return true;
+        }
 
         if (isset($expresiones[$campo])) {
             $query->orderByRaw($expresiones[$campo] . ' ' . $dir);
@@ -89,14 +163,38 @@ class CuentaOperativaService extends BaseCrudService
 
     public function dependenciesFor(int|string $id): array
     {
+        return $this->dependenciasDe(
+            Expediente::withTrashed()->where('cuenta_operativa_id', $id),
+            EjecucionMovimiento::withTrashed()->where('cuenta_operativa_id', $id),
+            'esta cuenta',
+        );
+    }
+
+    /**
+     * Expedientes y movimientos que impiden borrar una cuenta o un nodo.
+     *
+     * Cuentan también los dados de baja: siguen en la base como historial y la
+     * clave foránea no deja borrar lo que los referencia. Se los nombra aparte
+     * porque no aparecen en los listados ni suman al saldo.
+     *
+     * @param  Builder  $expedientes  consulta con withTrashed()
+     * @param  Builder  $movimientos  consulta con withTrashed()
+     * @return array<string>
+     */
+    public function dependenciasDe(Builder $expedientes, Builder $movimientos, string $donde): array
+    {
         $msgs = [];
-        $expedientes = Expediente::where('cuenta_operativa_id', $id)->count();
-        if ($expedientes > 0) {
-            $msgs[] = "Existen {$expedientes} expediente(s) imputado(s) a esta cuenta.";
-        }
-        $movimientos = EjecucionMovimiento::where('cuenta_operativa_id', $id)->count();
-        if ($movimientos > 0) {
-            $msgs[] = "Existen {$movimientos} movimiento(s) registrado(s) en esta cuenta.";
+        foreach ([
+            [$expedientes, 'expediente(s) imputado(s) a', 'dado(s) de baja'],
+            [$movimientos, 'movimiento(s) registrado(s) en', 'eliminado(s)'],
+        ] as [$query, $texto, $baja]) {
+            $total = (clone $query)->count();
+            if ($total === 0) {
+                continue;
+            }
+            $bajas = (clone $query)->onlyTrashed()->count();
+            $msgs[] = "Existen {$total} {$texto} {$donde}"
+                . ($bajas > 0 ? " ({$bajas} {$baja}, que se conservan en el historial)." : '.');
         }
         return $msgs;
     }
@@ -123,7 +221,9 @@ class CuentaOperativaService extends BaseCrudService
     {
         return CuentaOperativa::firstOrCreate(
             ['sector_id' => $sectorId, 'nombre' => $nombre],
-            ['activo' => true],
+            // Arranca con el responsable del nodo, si lo tiene.
+            ['activo' => true,
+             'responsable_id' => DB::table('sector')->where('sector_id', $sectorId)->value('responsable_id')],
         );
     }
 

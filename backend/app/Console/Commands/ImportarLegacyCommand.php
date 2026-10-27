@@ -83,6 +83,7 @@ class ImportarLegacyCommand extends Command
                         $this->vaciar();
                     }
                     $this->cargar($hojas, $importador);
+                    $importador->alTerminar();
                 } finally {
                     DB::statement('SET FOREIGN_KEY_CHECKS=1');
                 }

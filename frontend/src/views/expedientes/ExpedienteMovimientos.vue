@@ -36,7 +36,7 @@
                     <div class="value money">{{ fmtMoney(c.saldo) }}</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="label">Cuenta</div>
+                    <div class="label">Cuenta de origen</div>
                     <div class="value" style="font-size:15px;">
                         <router-link v-if="c.cuenta_operativa"
                                      :to="{ name: 'cuenta-detalle', params: { id: c.cuenta_operativa.id } }">

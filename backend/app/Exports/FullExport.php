@@ -151,17 +151,19 @@ class FullExport implements WithMultipleSheets
         return new TableSheet(
             'Cuentas Operativas',
             function () {
-                $q = CuentaOperativa::query()->with('sector:sector_id,nombre')->orderBy('id');
+                $q = CuentaOperativa::query()
+                    ->with(['sector:sector_id,nombre', 'responsable:legajo,apellido,nombre'])->orderBy('id');
                 $visibles = $this->cuentasVisibles();
                 return $visibles === null ? $q : $q->whereIn('id', $visibles ?: [0]);
             },
-            ['ID', 'Nombre', 'Nodo', 'Nivel', 'Ubicación en la estructura', 'Activa',
+            ['ID', 'Nombre', 'Nodo', 'Nivel', 'Ubicación en la estructura', 'Responsable', 'Activa',
              'Saldo inicial', 'Ingresos', 'Gastos', 'Saldo'],
             fn ($r) => [
                 $r->id, $r->nombre,
                 optional($r->sector)->nombre,
                 SectorTree::ETIQUETAS[$r->nivel] ?? $r->nivel,
                 $r->ruta,
+                $r->responsable ? "{$r->responsable->apellido}, {$r->responsable->nombre}" : null,
                 $r->activo ? 'Sí' : 'No',
                 $r->saldo_inicial, $r->ingresos, $r->gastos, $r->saldo,
             ],
@@ -241,7 +243,8 @@ class FullExport implements WithMultipleSheets
         return new TableSheet(
             'Gerencias',
             function () {
-                $q = Sector::query()->with('dependencia:sector_id,nombre')->orderBy('sector_id');
+                $q = Sector::query()->with(['dependencia:sector_id,nombre', 'responsable:legajo,apellido,nombre'])
+                    ->orderBy('sector_id');
                 $rama = $this->scope->sectoresVisibles();
                 return $rama === null ? $q : $q->whereIn('sector_id', $rama ?: [0]);
             },
@@ -251,7 +254,8 @@ class FullExport implements WithMultipleSheets
                 SectorTree::ETIQUETAS[$r->nivel] ?? $r->nivel,
                 optional($r->dependencia)->nombre,
                 $r->es_gerencia_area ? 'Sí (es una)' : app(SectorTree::class)->nombre($r->gerenciaAreaId()),
-                $r->responsable, $r->web, $r->ubicacion,
+                $r->responsable ? "{$r->responsable->apellido}, {$r->responsable->nombre}" : null,
+                $r->web, $r->ubicacion,
             ],
         );
     }
@@ -420,7 +424,7 @@ class FullExport implements WithMultipleSheets
                 'Contraparte (tipo)', 'Contraparte',
                 'Proveedor', 'Cliente', 'Cuenta contraparte', 'Rubro', 'Moneda',
                 'Monto (ARS)', 'Monto (USD)', 'Cotización',
-                'Objeto', 'Tiene factura', 'Nombre factura',
+                'Objeto', 'Fecha del comprobante', 'Tiene factura', 'Nombre factura',
                 'Creado',
             ],
             function ($r) {
@@ -443,6 +447,7 @@ class FullExport implements WithMultipleSheets
                     $r->monto_dolares,
                     $r->cotizacion,
                     $r->objeto,
+                    optional($r->fecha)?->format('d/m/Y'),
                     $r->has_factura ? 'Sí' : 'No',
                     $r->factura_original_name,
                     optional($r->created_at)?->format('d/m/Y H:i'),

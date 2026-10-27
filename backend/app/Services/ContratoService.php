@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\Contrato;
 use App\Models\ContratoArchivo;
+use App\Models\CuentaOperativa;
 use App\Models\Sector;
 use App\Support\SectorTree;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -32,7 +34,7 @@ class ContratoService
 
     /** Columnas de la ficha por las que se puede ordenar tal cual. */
     private const ORDENABLES = [
-        'cliente', 'caja_bas', 'fecha_inicio', 'fecha_vencimiento',
+        'caja_bas', 'fecha_inicio', 'fecha_vencimiento',
         'fecha_finalizacion', 'monto', 'moneda',
     ];
 
@@ -50,10 +52,14 @@ class ContratoService
             $term = '%' . $params['search'] . '%';
             $q->where(function (Builder $w) use ($term) {
                 $w->where('sector.nombre', 'like', $term)
-                  ->orWhere('contratos.cliente', 'like', $term)
                   ->orWhere('contratos.caja_bas', 'like', $term)
                   ->orWhere('contratos.descripcion_objeto', 'like', $term);
             });
+        }
+
+        // Los archivados no se listan salvo que se pidan.
+        if (empty($params['archivados'])) {
+            $q->where(fn ($w) => $w->whereNull('contratos.archivado')->orWhere('contratos.archivado', false));
         }
 
         $this->ordenar($q, (string) ($params['order_by'] ?? ''), (string) ($params['order_dir'] ?? 'asc'));
@@ -82,6 +88,23 @@ class ContratoService
         $ficha = Contrato::firstOrNew(['sector_id' => $sectorId]);
         $ficha->fill($data);
         $ficha->save();
+
+        return $this->find($sectorId);
+    }
+
+    /**
+     * Archiva o desarchiva un contrato. Archivado deja de listarse, y sus
+     * cuentas con él, pero nada se borra: el historial sigue completo.
+     */
+    public function archivar(int $sectorId, bool $archivar): array
+    {
+        DB::transaction(function () use ($sectorId, $archivar) {
+            $ficha = Contrato::firstOrNew(['sector_id' => $sectorId]);
+            $ficha->archivado = $archivar;
+            $ficha->save();
+
+            CuentaOperativa::where('sector_id', $sectorId)->update(['activo' => !$archivar]);
+        });
 
         return $this->find($sectorId);
     }
@@ -231,6 +254,7 @@ class ContratoService
         $campos['moneda']                = 'Peso';
         $campos['prorroga']              = false;
         $campos['renovacion_automatica'] = false;
+        $campos['archivado']             = false;
 
         if ($ficha) {
             foreach (array_keys($campos) as $c) {

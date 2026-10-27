@@ -74,6 +74,7 @@ class DatabaseBackupController extends Controller
 
                 try {
                 $this->importTables($spreadsheet, $resumen);
+                $this->importador->alTerminar();
                 } finally {
                     // Restaurar siempre, incluso si una fila aborta la transacción.
                     DB::statement('SET FOREIGN_KEY_CHECKS=1');

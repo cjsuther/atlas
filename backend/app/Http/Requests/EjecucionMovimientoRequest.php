@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Expediente;
 use App\Models\EjecucionMovimiento;
 use App\Services\AccessScopeService;
 use Illuminate\Contracts\Validation\Validator;
@@ -47,6 +46,8 @@ class EjecucionMovimientoRequest extends FormRequest
             'cotizacion'     => ['nullable', 'numeric', 'min:0', 'required_if:moneda,Dólar'],
 
             'objeto'         => ['required', 'string'],
+            // Fecha del comprobante: la de la factura, la transferencia o el pago.
+            'fecha'          => ['required', 'date'],
 
             // factura: opcional, sólo aplica a gastos por factura. PDF / JPG / PNG, hasta 10 MB.
             'factura'        => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:10240'],
@@ -63,6 +64,8 @@ class EjecucionMovimientoRequest extends FormRequest
             'accion.required'            => 'Debe indicar la acción (factura, transferencia, incentivo o MCH).',
             'expediente_id.required'     => 'Debe elegir el expediente del movimiento.',
             'expediente_id.exists'       => 'El expediente indicado no existe.',
+            'fecha.required'             => 'Indique la fecha del comprobante.',
+            'fecha.date'                 => 'La fecha del comprobante no es válida.',
             'monto.required_if'          => 'El monto en pesos es obligatorio.',
             'monto_dolares.required_if'  => 'El monto en dólares es obligatorio cuando la moneda es Dólar.',
             'cotizacion.required_if'     => 'La cotización es obligatoria cuando la moneda es Dólar.',
@@ -113,13 +116,8 @@ class EjecucionMovimientoRequest extends FormRequest
                     break;
             }
 
-            // El expediente tiene que estar dentro del alcance del usuario.
-            if ($this->filled('expediente_id')) {
-                $contrato = Expediente::find((int) $this->input('expediente_id'));
-                if ($contrato && !app(AccessScopeService::class)->puedeVerContrato($contrato)) {
-                    $v->errors()->add('expediente_id', 'El expediente no está a su alcance.');
-                }
-            }
+            // El expediente puede ser de cualquier rama: es uno solo para todo
+            // el sistema y una distribución de fondos lo lleva a varias cuentas.
 
             if ($this->hasFile('factura')
                 && ($accion !== EjecucionMovimiento::ACCION_FACTURA || $tipo !== 'gasto')) {

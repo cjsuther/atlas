@@ -21,14 +21,10 @@ abstract class BaseCrudService
     public function paginate(array $params = [], int $perPage = 20): LengthAwarePaginator
     {
         $query = $this->baseQuery();
+        $this->aplicarFiltros($query, $params);
 
-        if (!empty($params['search']) && !empty($this->searchableFields)) {
-            $term = '%' . $params['search'] . '%';
-            $query->where(function (Builder $q) use ($term) {
-                foreach ($this->searchableFields as $field) {
-                    $q->orWhere($field, 'like', $term);
-                }
-            });
+        if (!empty($params['search'])) {
+            $this->aplicarBusqueda($query, '%' . $params['search'] . '%');
         }
 
         $orderBy = $params['order_by'] ?? null;
@@ -88,6 +84,27 @@ abstract class BaseCrudService
     protected function baseQuery(): Builder
     {
         return ($this->modelClass)::query();
+    }
+
+    /** Filtros propios del listado; `find` no los aplica. */
+    protected function aplicarFiltros(Builder $query, array $params): void
+    {
+    }
+
+    /**
+     * Búsqueda libre: el texto en cualquiera de los campos buscables. Una
+     * subclase puede buscar además en lo que la fila muestra de otras tablas.
+     */
+    protected function aplicarBusqueda(Builder $query, string $term): void
+    {
+        if (empty($this->searchableFields)) {
+            return;
+        }
+        $query->where(function (Builder $q) use ($term) {
+            foreach ($this->searchableFields as $field) {
+                $q->orWhere($field, 'like', $term);
+            }
+        });
     }
 
     protected function getKeyName(): string

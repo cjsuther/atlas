@@ -39,6 +39,7 @@
                 <table class="atlas-table">
                     <thead>
                         <tr>
+                            <ThOrden campo="fecha" :orden="orden" @ordenar="ordenarPor">Fecha</ThOrden>
                             <ThOrden campo="tipo" :orden="orden" @ordenar="ordenarPor">Tipo</ThOrden>
                             <ThOrden campo="accion" :orden="orden" @ordenar="ordenarPor">Acción</ThOrden>
                             <ThOrden campo="relacion" :orden="orden" @ordenar="ordenarPor">
@@ -53,6 +54,7 @@
                     </thead>
                     <tbody>
                         <tr v-for="m in filasOrdenadas" :key="m.id">
+                            <td style="white-space:nowrap;" title="Fecha del comprobante">{{ fechaComprobante(m) }}</td>
                             <td>
                                 <span :class="['badge', m.tipo === 'ingreso' ? 'badge-success' : 'badge-warning']">
                                     {{ m.tipo }}
@@ -170,6 +172,13 @@ const { orden, ordenarPor, filasOrdenadas } = useOrdenTabla(rows, {
         relacion: (m) => (m.cuenta?.nombre ?? m.expediente?.nro_expediente ?? ''),
     },
 });
+/** La fecha llega como AAAA-MM-DD: se muestra sin pasar por la zona horaria. */
+function fechaComprobante(m) {
+    if (!m.fecha) return '—';
+    const [a, mes, d] = String(m.fecha).slice(0, 10).split('-');
+    return `${d}/${mes}/${a}`;
+}
+
 const filter = ref('');
 const filterAccion = ref('');
 const modalRef = ref(null);

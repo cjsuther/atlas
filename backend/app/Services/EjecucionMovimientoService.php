@@ -25,7 +25,7 @@ class EjecucionMovimientoService
     /** Campos que se replican en la contrapartida de una transferencia. */
     private const CAMPOS_ESPEJO = [
         'nro_expediente', 'moneda', 'monto', 'monto_dolares', 'cotizacion', 'objeto',
-        'expediente_id',
+        'expediente_id', 'fecha',
     ];
 
     /** Evita que la sincronización de la contrapartida se dispare a sí misma. */
@@ -76,7 +76,7 @@ class EjecucionMovimientoService
             $q->withTrashed();
         }
 
-        $pagina = $q->orderBy('created_at', 'desc')->paginate($perPage);
+        $pagina = $q->orderBy('fecha', 'desc')->orderBy('id', 'desc')->paginate($perPage);
         $pagina->getCollection()->each(fn ($m) => $this->recortar($m));
         return $pagina;
     }
@@ -224,6 +224,7 @@ class EjecucionMovimientoService
                 'monto_dolares'           => $origen->monto_dolares,
                 'cotizacion'              => $origen->cotizacion,
                 'objeto'                  => $origen->objeto,
+                'fecha'                   => $origen->fecha,
             ]);
             $espejo->save();
 

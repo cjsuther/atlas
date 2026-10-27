@@ -92,6 +92,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // ------------------------------------------------------------------
     Route::get('/expedientes',              [ExpedienteController::class, 'index']);
     Route::get('/expedientes/export/excel', [ExpedienteController::class, 'export']);
+    Route::get('/expedientes/opciones',     [ExpedienteController::class, 'opciones']);
     Route::get('/expedientes/{id}',         [ExpedienteController::class, 'show'])->whereNumber('id');
 
     Route::post  ('/expedientes',        [ExpedienteController::class, 'store']);
@@ -125,6 +126,7 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     // Historial de cambios
     // ------------------------------------------------------------------
     Route::get('/historial/{tabla}/{id}', [HistorialController::class, 'show'])->whereNumber('id');
+    Route::get('/expedientes/{id}/historial', [HistorialController::class, 'expediente'])->whereNumber('id');
 
     // ------------------------------------------------------------------
     // Contratos: la ficha de cada nodo del tercer nivel de la estructura.
@@ -135,12 +137,17 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
     Route::get('/contratos',      [ContratoController::class, 'index']);
     Route::get('/contratos/{id}', [ContratoController::class, 'show'])->whereNumber('id');
     Route::put('/contratos/{id}', [ContratoController::class, 'update'])->whereNumber('id');
+    Route::post('/contratos/{id}/archivar', [ContratoController::class, 'archivar'])->whereNumber('id');
 
     // Archivos adjuntos de cada contrato (convenio, actas, anexos).
     Route::get   ('/contratos/{id}/archivos',           [ContratoController::class, 'archivos'])->whereNumber('id');
     Route::post  ('/contratos/{id}/archivos',           [ContratoController::class, 'adjuntar'])->whereNumber('id');
     Route::get   ('/contrato-archivos/{id}/descargar',  [ContratoController::class, 'descargar'])->whereNumber('id');
     Route::delete('/contrato-archivos/{id}',            [ContratoController::class, 'quitarArchivo'])->whereNumber('id');
+
+    // Archivar una cuenta la saca de listados y selectores sin borrar nada.
+    Route::post('/cuentas-operativas/{id}/archivar', [CuentaOperativaController::class, 'archivar'])
+        ->whereNumber('id')->middleware('admin');
 
     // El árbol de la estructura con las cuentas de cada nodo: lo consumen el
     // selector de cuenta del expediente y la asignación de permisos.

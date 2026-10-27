@@ -135,7 +135,10 @@ class AccessScopeService
     }
 
     /**
-     * Recorta una consulta de expedientes a los nodos que el usuario puede ver.
+     * Recorta una consulta de expedientes a los que el usuario puede ver: los
+     * de su rama y los que tienen movimientos en cuentas que ve. Un expediente
+     * es uno solo para todo el sistema, y una distribución de fondos lo lleva
+     * a cuentas de otras ramas.
      *
      * @template T of Builder|QueryBuilder
      * @param  T  $query
@@ -150,22 +153,41 @@ class AccessScopeService
         if ($ids === null) {
             return $query;
         }
-        return $query->whereIn("{$tabla}.sector_id", $ids ?: [0]);
+        $cuentas = $this->cuentasVisibles($user);
+
+        return $query->where(fn ($q) => $q
+            ->whereIn("{$tabla}.sector_id", $ids ?: [0])
+            ->orWhereExists(fn ($m) => $m->from('ejecucion_movimientos')
+                ->whereColumn('ejecucion_movimientos.expediente_id', "{$tabla}.id")
+                ->whereNull('ejecucion_movimientos.deleted_at')
+                ->whereIn('ejecucion_movimientos.cuenta_operativa_id', $cuentas ?: [0])));
     }
 
-    /** Los saldos tienen el mismo alcance que los expedientes. */
+    /**
+     * Los saldos del panel cuentan los expedientes de la rama: lo que entra en
+     * otras ramas por el mismo expediente ya está en los saldos de sus cuentas.
+     */
     public function aplicarASaldos(
         Builder|QueryBuilder $query,
         string $tabla = 'expedientes',
         ?UserRole $user = null,
     ): Builder|QueryBuilder {
-        return $this->aplicarAContratos($query, $tabla, $user);
+        $ids = $this->sectoresVisibles($user);
+        if ($ids === null) {
+            return $query;
+        }
+        return $query->whereIn("{$tabla}.sector_id", $ids ?: [0]);
     }
 
     public function puedeVerContrato(Expediente $contrato, ?UserRole $user = null): bool
     {
         $ids = $this->sectoresVisibles($user);
-        return $ids === null || in_array((int) $contrato->sector_id, $ids, true);
+        if ($ids === null || in_array((int) $contrato->sector_id, $ids, true)) {
+            return true;
+        }
+        return EjecucionMovimiento::where('expediente_id', $contrato->id)
+            ->whereIn('cuenta_operativa_id', $this->cuentasVisibles($user) ?: [0])
+            ->exists();
     }
 
     /** Modificar un expediente exige escritura sobre su rama. */

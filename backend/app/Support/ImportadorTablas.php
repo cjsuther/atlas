@@ -262,6 +262,24 @@ class ImportadorTablas
         return $this->cuentaPorNodo[$nodo] = (int) $cuenta;
     }
 
+    /**
+     * Lo que se resuelve con todas las tablas ya cargadas: la fecha de los
+     * movimientos que el archivo no trae y los expedientes que repiten número.
+     */
+    public function alTerminar(): void
+    {
+        DB::table('ejecucion_movimientos')
+            ->whereNull('fecha')
+            ->whereNotNull('created_at')
+            ->update(['fecha' => DB::raw('DATE(created_at)')]);
+
+        $unificados = UnificadorExpedientes::unificar();
+        if ($unificados > 0) {
+            $this->avisos[] = "expedientes: {$unificados} registro(s) repetían un número ya cargado; "
+                            . 'quedó uno por número y sus movimientos pasaron a ése.';
+        }
+    }
+
     public function entero(mixed $v): ?int
     {
         if ($v === null || $v === '') {

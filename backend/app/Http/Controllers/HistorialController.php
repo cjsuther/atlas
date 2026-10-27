@@ -6,6 +6,7 @@ use App\Models\Expediente;
 use App\Models\EjecucionMovimiento;
 use App\Models\HistorialCambio;
 use App\Services\AccessScopeService;
+use App\Support\HistorialExpediente;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,6 +48,22 @@ class HistorialController extends Controller
             ->paginate($perPage);
 
         return response()->json($items);
+    }
+
+    /**
+     * GET /api/expedientes/{id}/historial — quién hizo qué y cuándo sobre el
+     * expediente y sobre los movimientos que lo usan.
+     */
+    public function expediente(int $id, HistorialExpediente $historial): JsonResponse
+    {
+        if (!$this->contratoVisible($id)) {
+            return response()->json([
+                'error'   => 'not_found',
+                'message' => 'Expediente no encontrado.',
+            ], 404);
+        }
+
+        return response()->json(['data' => $historial->de($id)]);
     }
 
     /**

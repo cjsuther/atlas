@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\CuentaOperativa;
+use App\Models\EjecucionMovimiento;
+use App\Models\Expediente;
 use App\Models\Personal;
 use App\Models\Sector;
 use App\Support\SectorTree;
@@ -13,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 class SectorService extends BaseCrudService
 {
     protected string $modelClass = Sector::class;
-    protected array $searchableFields = ['nombre', 'responsable', 'ubicacion'];
+    protected array $searchableFields = ['sector.nombre', 'sector.ubicacion'];
 
     public function __construct(
         protected SectorTree $arbol,
@@ -114,7 +117,7 @@ class SectorService extends BaseCrudService
 
         return Sector::query()
             ->when($visibles !== null, fn ($q) => $q->whereIn('sector.sector_id', $visibles ?: [0]))
-            ->with('dependencia:sector_id,nombre');
+            ->with(['dependencia:sector_id,nombre', 'responsable:legajo,apellido,nombre']);
     }
 
     /**
@@ -152,6 +155,15 @@ class SectorService extends BaseCrudService
         if ($pers > 0) {
             $msgs[] = "Existen {$pers} persona(s) con lugar de trabajo en esta gerencia.";
         }
-        return $msgs;
+
+        // Las cuentas del nodo se borran con él, pero no lo registrado en ellas.
+        $cuentas = CuentaOperativa::where('sector_id', $id)->pluck('id')->all();
+        return array_merge($msgs, $this->cuentas->dependenciasDe(
+            Expediente::withTrashed()->where(fn ($q) => $q
+                ->where('sector_id', $id)
+                ->orWhereIn('cuenta_operativa_id', $cuentas ?: [0])),
+            EjecucionMovimiento::withTrashed()->whereIn('cuenta_operativa_id', $cuentas ?: [0]),
+            'este nodo',
+        ));
     }
 }

@@ -41,7 +41,9 @@ class ContratoHistorialObserver
         $regId   = (int) $model->getKey();
 
         foreach ($changes as $campo => $nuevo) {
-            $anterior = $model->getOriginal($campo);
+            // El valor como está en la base, sin pasar por los casts: una fecha
+            // casteada se guardaría como objeto serializado.
+            $anterior = $model->getRawOriginal($campo);
             HistorialCambio::create([
                 'tabla'            => $tabla,
                 'registro_id'      => $regId,

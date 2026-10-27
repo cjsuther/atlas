@@ -224,7 +224,7 @@ const columnas = [
     { label: 'ID',          campo: 'id' },
     { label: 'Expediente',  campo: 'nro_expediente' },
     { label: 'Gerencia',    campo: 'sector' },
-    { label: 'Cuenta',      campo: 'cuenta' },
+    { label: 'Cuenta de origen', campo: 'cuenta' },
     { label: 'Movimientos relacionados', campo: 'saldo' },
 ];
 

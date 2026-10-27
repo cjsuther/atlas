@@ -12,10 +12,22 @@ const http = axios.create({
     },
 });
 
+/**
+ * Las modificaciones y las bajas viajan como POST, con el método real en un
+ * encabezado que Laravel respeta. Hay redes que sólo dejan pasar GET y POST:
+ * detrás de una de ellas, un PUT o un DELETE no llega nunca a la aplicación.
+ */
+const METODOS_DESVIADOS = ['put', 'patch', 'delete'];
+
 http.interceptors.request.use((config) => {
     const auth = useAuthStore();
     if (auth.token) {
         config.headers.Authorization = `Bearer ${auth.token}`;
+    }
+    const metodo = (config.method || 'get').toLowerCase();
+    if (METODOS_DESVIADOS.includes(metodo)) {
+        config.headers['X-HTTP-Method-Override'] = metodo.toUpperCase();
+        config.method = 'post';
     }
     return config;
 });

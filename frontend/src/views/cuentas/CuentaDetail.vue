@@ -13,6 +13,12 @@
                     <p class="page-subtitle">
                         {{ NIVELES[cuenta.nivel] || cuenta.nivel }} · {{ cuenta.ruta }}
                     </p>
+                    <p class="page-subtitle">
+                        Responsable:
+                        {{ cuenta.responsable
+                            ? `${cuenta.responsable.apellido}, ${cuenta.responsable.nombre}`
+                            : 'sin asignar' }}
+                    </p>
                 </div>
                 <router-link :to="{ name: 'catalogo', params: { slug: 'cuentas-operativas' } }"
                              class="btn btn-secondary">Volver</router-link>

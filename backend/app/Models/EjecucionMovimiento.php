@@ -59,6 +59,7 @@ class EjecucionMovimiento extends Model
         'monto_dolares',
         'cotizacion',
         'objeto',
+        'fecha',
         'factura_path',
         'factura_original_name',
         'factura_mime',
@@ -68,6 +69,7 @@ class EjecucionMovimiento extends Model
         'monto'         => 'decimal:2',
         'monto_dolares' => 'decimal:2',
         'cotizacion'    => 'decimal:4',
+        'fecha'         => 'date:Y-m-d',
     ];
 
     protected $hidden = ['factura_path']; // se entrega vía endpoint, no se expone la ruta

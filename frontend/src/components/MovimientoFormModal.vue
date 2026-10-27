@@ -37,6 +37,13 @@
                     <div v-if="errors.expediente_id" class="error">{{ errors.expediente_id[0] }}</div>
                 </div>
 
+                <!-- Fecha del comprobante: la de la factura, la transferencia o el pago. -->
+                <div class="field">
+                    <label>Fecha del comprobante *</label>
+                    <input v-model="data.fecha" type="date" class="input" required />
+                    <div v-if="errors.fecha" class="error">{{ errors.fecha[0] }}</div>
+                </div>
+
                 <!-- Contraparte: depende de la acción. No siempre hay cliente o
                      proveedor; a veces es otra cuenta y a veces sólo un rubro. -->
                 <div v-if="contraparte === 'proveedor'" class="field">
@@ -194,7 +201,14 @@ const VACIO = {
     monto_dolares: null,
     cotizacion: null,
     objeto: '',
+    fecha: '',
 };
+
+/** Hoy, como lo espera un <input type="date">, en la hora local. */
+function hoy() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const data = reactive({ ...VACIO });
 
@@ -221,10 +235,13 @@ const opcionesCuenta = computed(() => cuentasDestino.value.map(c => ({
     deshabilitada: !c.permitida,
 })));
 
-/** El expediente del movimiento se elige entre los cargados en el sistema. */
+/**
+ * El expediente del movimiento se elige entre todos los cargados: es uno solo
+ * por número, y el de una distribución de fondos lo usan cuentas de varias ramas.
+ */
 const opcionesExpediente = computed(() => expedientes.value.map(e => ({
     value: e.id,
-    etiqueta: `${e.nro_expediente}${e.cuenta_operativa ? ` · ${e.cuenta_operativa.nombre}` : ''}`,
+    etiqueta: e.nro_expediente,
 })));
 
 const expedienteModalRef = ref(null);
@@ -280,8 +297,7 @@ watch(() => data.moneda, (m) => {
 
 async function cargarExpedientes() {
     try {
-        const res = await expedientesService.list({ per_page: 500 });
-        expedientes.value = res.data || [];
+        expedientes.value = await expedientesService.opciones();
     } catch (err) {
         toast.error(extractError(err, 'No se pudieron cargar los expedientes.'));
     }
@@ -310,7 +326,7 @@ async function cargarCuentas() {
 }
 
 function reset(initial = {}) {
-    Object.assign(data, VACIO, initial);
+    Object.assign(data, VACIO, { fecha: hoy() }, initial);
     archivo.value = null;
     eliminarFactura.value = false;
     errors.value = {};
@@ -333,6 +349,7 @@ async function show({ movimiento = null, accion = 'factura', tipo = 'ingreso' } 
             monto_dolares: movimiento.monto_dolares != null ? Number(movimiento.monto_dolares) : null,
             cotizacion: movimiento.cotizacion != null ? Number(movimiento.cotizacion) : null,
             objeto: movimiento.objeto || '',
+            fecha: movimiento.fecha ? String(movimiento.fecha).slice(0, 10) : hoy(),
         });
     } else {
         editingId.value = null;

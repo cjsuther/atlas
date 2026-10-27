@@ -20,6 +20,12 @@ class ExpedienteController extends Controller
         return response()->json($this->service->paginate($request->all()));
     }
 
+    /** GET /api/expedientes/opciones — todos los números, para el selector del movimiento */
+    public function opciones(): JsonResponse
+    {
+        return response()->json(['data' => $this->service->opciones()]);
+    }
+
     public function show(Request $request, int $id): JsonResponse
     {
         $withTrashed = (bool) $request->input('mostrar_baja');
@@ -41,11 +47,16 @@ class ExpedienteController extends Controller
 
     public function update(ExpedienteRequest $request, int $id): JsonResponse
     {
-        if (!$this->service->find($id)) {
+        $actual = $this->service->find($id);
+        if (!$actual) {
             return response()->json([
                 'error'   => 'not_found',
                 'message' => 'Expediente no encontrado.',
             ], 404);
+        }
+        // Se ve desde otra rama por sus movimientos, pero lo modifica la suya.
+        if (!$actual->editable) {
+            return $this->sinPermiso();
         }
         $this->service->update($id, $request->validated());
         return response()->json(['data' => $this->service->find($id)]);
@@ -53,6 +64,10 @@ class ExpedienteController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
+        $actual = $this->service->find($id);
+        if ($actual && !$actual->editable) {
+            return $this->sinPermiso();
+        }
         if (!$this->service->softDelete($id)) {
             return response()->json([
                 'error'   => 'not_found',
@@ -65,6 +80,14 @@ class ExpedienteController extends Controller
         ]);
     }
 
+
+    private function sinPermiso(): JsonResponse
+    {
+        return response()->json([
+            'error'   => 'forbidden',
+            'message' => 'El expediente lo modifica la rama de su cuenta de origen.',
+        ], 403);
+    }
 
     public function export(Request $request): BinaryFileResponse
     {

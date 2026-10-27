@@ -20,7 +20,15 @@ function fecha(v) {
     return `${d}/${m}/${a}`;
 }
 
+/** Contrato con fecha de vencimiento pasada: candidato a archivar. */
+function vencido(r) {
+    return !!r.fecha_vencimiento && String(r.fecha_vencimiento).slice(0, 10) < new Date().toISOString().slice(0, 10);
+}
+
 const persona = (p) => [p.apellido, p.nombre].filter(Boolean).join(', ');
+
+/** Una persona en un combo: con su legajo, para poder buscarla también por él. */
+const personaConLegajo = (p) => `${persona(p)} (${p.legajo})`;
 
 /**
  * Definiciones de cada catálogo para el ABM genérico:
@@ -97,7 +105,8 @@ export const ENTITY_DEFS = {
             { key: 'nivel',       label: 'Nivel',
               render: (r) => NIVELES[r.nivel] || (r.es_gerencia_area ? 'Gerencia de Área' : 'Gerencia') },
             { key: 'dependencia', label: 'Depende de', render: (r) => r.dependencia?.nombre || '—' },
-            { key: 'responsable', label: 'Responsable' },
+            { key: 'responsable_id', label: 'Responsable',
+              render: (r) => (r.responsable ? persona(r.responsable) : '—') },
             { key: 'ubicacion',   label: 'Ubicación' },
         ],
         formFields: [
@@ -105,7 +114,8 @@ export const ENTITY_DEFS = {
             { name: 'dependencia_id', label: 'Depende de (vacío = Gerencia de Área)',
 
               type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre', allowEmpty: true },
-            { name: 'responsable',    label: 'Responsable', type: 'text', max: 200 },
+            { name: 'responsable_id', label: 'Responsable', type: 'select-async',
+              endpoint: 'personal', valueKey: 'legajo', labelKey: personaConLegajo },
             { name: 'web',            label: 'Web',         type: 'text', max: 300 },
             { name: 'ubicacion',      label: 'Ubicación',   type: 'text', max: 200 },
         ],
@@ -126,6 +136,13 @@ export const ENTITY_DEFS = {
         // Dentro de la ficha, los archivos del contrato: se suben y se quitan en el momento.
         panelExtra: markRaw(ContratoArchivos),
         modalGrande: true,
+        archivo: {
+            param: 'archivados',
+            verArchivados: 'Ver archivados',
+            archivado: (r) => !!r.archivado,
+            alArchivar: 'Deja de aparecer en los listados, y sus cuentas con él. '
+                      + 'No se borra nada: los movimientos y el historial se conservan.',
+        },
         columns: [
             { key: 'nombre',            label: 'Contrato' },
             { key: 'gerencia',          label: 'Gerencia',
@@ -133,13 +150,16 @@ export const ENTITY_DEFS = {
             { key: 'tipo',              label: 'Tipo',   render: (r) => r.tipo || '—' },
             { key: 'estado',            label: 'Estado', render: (r) => r.estado || '—' },
             { key: 'uvt',               label: 'UVT',    render: (r) => r.uvt || '—' },
-            { key: 'fecha_vencimiento', label: 'Vence',  render: (r) => fecha(r.fecha_vencimiento) },
+            { key: 'fecha_vencimiento', label: 'Vence',
+              render: (r) => fecha(r.fecha_vencimiento) + (vencido(r) ? ' · vencido' : '') },
             { key: 'monto',             label: 'Monto',
               render: (r) => (r.monto === null ? '—' : `${SIMBOLOS[r.moneda] || ''} ${fmtMoney(r.monto)}`) },
             { key: 'monto_pesos',       label: 'Monto en pesos',
               render: (r) => (r.monto_pesos === null ? '—' : fmtMoney(r.monto_pesos)) },
             { key: 'caja_bas',          label: 'Caja BAS', render: (r) => r.caja_bas || '—' },
             { key: 'archivos',          label: 'Archivos', render: (r) => (r.archivos ? `📎 ${r.archivos}` : '—') },
+            { key: 'archivado',         label: 'Estado de la ficha', orden: false,
+              render: (r) => (r.archivado ? 'Archivado' : 'Vigente') },
         ],
         formFields: [
             { name: 'tipo_contrato_id', label: 'Tipo', type: 'select-async',
@@ -151,10 +171,9 @@ export const ENTITY_DEFS = {
             { name: 'solicitante_id',   label: 'Solicitante', type: 'select-async',
               endpoint: 'solicitantes', valueKey: 'solicitante_id', labelKey: 'razon_social' },
             { name: 'resp1_id',         label: 'Responsable 1', type: 'select-async',
-              endpoint: 'personal', valueKey: 'legajo', labelKey: persona },
+              endpoint: 'personal', valueKey: 'legajo', labelKey: personaConLegajo },
             { name: 'resp2_id',         label: 'Responsable 2', type: 'select-async',
-              endpoint: 'personal', valueKey: 'legajo', labelKey: persona },
-            { name: 'cliente',          label: 'Cliente',  type: 'text', max: 300 },
+              endpoint: 'personal', valueKey: 'legajo', labelKey: personaConLegajo },
             { name: 'caja_bas',         label: 'Caja BAS', type: 'text', max: 200 },
             { name: 'fecha_inicio',       label: 'Fecha de inicio',       type: 'date' },
             { name: 'fecha_vencimiento',  label: 'Fecha de vencimiento',  type: 'date' },
@@ -185,11 +204,24 @@ export const ENTITY_DEFS = {
     },
     'cuentas-operativas': {
         title: 'Cuentas',
+        buscar: 'Buscar por nombre, gerencia, contrato o responsable…',
         subtitle: 'Cada cuenta cuelga de un nodo de la estructura —Gerencia de Área, Gerencia o '
                 + 'Contrato—. En la cuenta vive el saldo: ahí se registran los ingresos, los gastos, '
                 + 'las transferencias, los incentivos y la MCH.',
         endpoint: 'cuentas-operativas',
         keyField: 'id',
+        // Filtros de la estructura: cada uno alcanza a toda la rama del nodo.
+        filtrosEstructura: [
+            { param: 'gerencia_area_id', label: 'Gerencia de Área', nivel: 1 },
+            { param: 'gerencia_id',      label: 'Gerencia',         nivel: 2 },
+        ],
+        archivo: {
+            param: 'archivadas',
+            verArchivados: 'Ver archivadas',
+            archivado: (r) => !r.activo,
+            alArchivar: 'Deja de aparecer en los listados y en los selectores. '
+                      + 'No se borra nada: su saldo y sus movimientos se conservan.',
+        },
         columns: [
             { key: 'id',          label: 'ID' },
             { key: 'nombre',      label: 'Nombre',
@@ -197,16 +229,19 @@ export const ENTITY_DEFS = {
             { key: 'nivel',       label: 'Nivel', render: (r) => NIVELES[r.nivel] || r.nivel },
             { key: 'saldo',       label: 'Saldo', render: (r) => fmtMoney(r.saldo) },
             { key: 'ruta',        label: 'Ubicación en la estructura' },
+            { key: 'responsable_id', label: 'Responsable',
+              render: (r) => (r.responsable ? persona(r.responsable) : '—') },
             { key: 'descripcion', label: 'Descripción' },
-            { key: 'activo',      label: 'Activa', render: (r) => (r.activo ? 'Sí' : 'No') },
+            { key: 'activo',      label: 'Estado', render: (r) => (r.activo ? 'Vigente' : 'Archivada') },
         ],
         formFields: [
             { name: 'nombre',        label: 'Nombre', type: 'text', required: true, max: 200 },
             { name: 'sector_id',     label: 'Cuelga de', required: true,
               type: 'select-async', endpoint: 'sectores', valueKey: 'sector_id', labelKey: 'nombre' },
+            { name: 'responsable_id', label: 'Responsable', required: true, type: 'select-async',
+              endpoint: 'personal', valueKey: 'legajo', labelKey: personaConLegajo },
             { name: 'saldo_inicial', label: 'Saldo inicial', type: 'number', step: '0.01' },
             { name: 'descripcion',   label: 'Descripción', type: 'textarea', max: 500 },
-            { name: 'activo',        label: 'Activa', type: 'checkbox' },
         ],
     },
     'uvt': {
@@ -231,6 +266,7 @@ export const ENTITY_DEFS = {
         // Los catálogos generales son del administrador del sistema.
         soloAdmin: true,
         title: 'Personal',
+        buscar: 'Buscar por legajo, apellido, nombre, e-mail o interno…',
         endpoint: 'personal',
         keyField: 'legajo',
         columns: [
