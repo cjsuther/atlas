@@ -163,6 +163,11 @@ class DatabaseBackupController extends Controller
                         continue;
                     }
 
+                    // Los usuarios y sus permisos ya se ubican por su clave única.
+                    if (!in_array($table, ['user_roles', 'usuario_permisos'], true)) {
+                        $this->importador->liberarUnicos($table, $pk, $row);
+                    }
+
                     if ($pkValue !== null && $pkValue !== '') {
                         $exists = DB::table($table)->where($pk, $pkValue)->exists();
                         $attrs = $row;
@@ -187,6 +192,8 @@ class DatabaseBackupController extends Controller
                     );
                 }
             }
+
+            $this->importador->alTerminarTabla($table, $pk);
 
             $resumen[] = [
                 'tabla'        => $table,

@@ -280,6 +280,121 @@ class ImportadorTablas
         }
     }
 
+    // ------------------------------------------------------------------
+    // Claves únicas que cambian de dueño
+    // ------------------------------------------------------------------
+
+    /**
+     * Filas de la base que cedieron un valor único: tabla => pk => [columna, valor original].
+     *
+     * @var array<string, array<int|string, array{0: string, 1: string}>>
+     */
+    private array $desplazados = [];
+
+    /**
+     * Deja libre el valor único que la fila del archivo va a ocupar.
+     *
+     * Entre dos instalaciones un mismo catálogo puede estar numerado distinto:
+     * en el archivo "CP" es el tipo 3 y en la base el 4. Como se graba fila
+     * por fila, al poner "CP" en el 3 el 4 todavía lo tiene y la clave única
+     * rechaza el cambio, aunque al terminar ya no habría repetidos. La fila de
+     * la base que estorba toma un valor provisorio; `alTerminarTabla` se lo
+     * devuelve si quedó libre.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    public function liberarUnicos(string $tabla, string $pk, array $fila): void
+    {
+        foreach ($this->clavesUnicas($tabla) as [$columnas, $texto]) {
+            $valores = array_intersect_key($fila, array_flip($columnas));
+            if (count($valores) !== count($columnas) || in_array(null, $valores, true)) {
+                continue;
+            }
+            $q = DB::table($tabla)->where($valores);
+            if (isset($fila[$pk]) && $fila[$pk] !== '') {
+                $q->where($pk, '<>', $fila[$pk]);
+            }
+            foreach ($q->get([$pk, $texto]) as $estorba) {
+                $id = $estorba->{$pk};
+                $this->desplazados[$tabla][$id] ??= [$texto, (string) $estorba->{$texto}];
+                DB::table($tabla)->where($pk, $id)->update([$texto => "~{$id}"]);
+            }
+        }
+    }
+
+    /**
+     * Devuelve su valor a las filas que lo cedieron y que el archivo no
+     * reescribió. Si el valor ya lo tiene otra, se le agrega el id para que
+     * no se repita, y se avisa.
+     */
+    public function alTerminarTabla(string $tabla, string $pk): void
+    {
+        foreach ($this->desplazados[$tabla] ?? [] as $id => [$columna, $original]) {
+            $actual = DB::table($tabla)->where($pk, $id)->value($columna);
+            if ($actual !== "~{$id}") {
+                continue; // el archivo la reescribió
+            }
+            $libre = !DB::table($tabla)->where($columna, $original)->where($pk, '<>', $id)->exists();
+            $valor = $libre ? $original : mb_substr("{$original} #{$id}", 0, $this->largo($tabla, $columna));
+            DB::table($tabla)->where($pk, $id)->update([$columna => $valor]);
+            if (!$libre) {
+                $this->avisos[] = "{$tabla}: el registro {$id} tenía \"{$original}\", que en el archivo "
+                                . "es de otro registro; quedó como \"{$valor}\" para revisarlo.";
+            }
+        }
+        unset($this->desplazados[$tabla]);
+    }
+
+    /**
+     * Claves únicas de la tabla, salvo la primaria, con la columna de texto
+     * que se puede cambiar provisoriamente. Las que no tienen una columna de
+     * texto no se tocan.
+     *
+     * @return array<int, array{0: array<int, string>, 1: string}>
+     */
+    private function clavesUnicas(string $tabla): array
+    {
+        static $cache = [];
+        if (isset($cache[$tabla])) {
+            return $cache[$tabla];
+        }
+
+        $filas = DB::select(
+            "SELECT s.INDEX_NAME AS indice, s.COLUMN_NAME AS columna, c.DATA_TYPE AS tipo
+               FROM information_schema.STATISTICS s
+               JOIN information_schema.COLUMNS c
+                 ON c.TABLE_SCHEMA = s.TABLE_SCHEMA AND c.TABLE_NAME = s.TABLE_NAME
+                AND c.COLUMN_NAME = s.COLUMN_NAME
+              WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME = ?
+                AND s.NON_UNIQUE = 0 AND s.INDEX_NAME <> 'PRIMARY'
+              ORDER BY s.INDEX_NAME, s.SEQ_IN_INDEX",
+            [$tabla]
+        );
+
+        $indices = [];
+        foreach ($filas as $f) {
+            $indices[$f->indice]['columnas'][] = $f->columna;
+            if (in_array($f->tipo, ['varchar', 'char', 'text'], true)) {
+                $indices[$f->indice]['texto'] = $f->columna;
+            }
+        }
+
+        return $cache[$tabla] = array_values(array_map(
+            fn ($i) => [$i['columnas'], $i['texto']],
+            array_filter($indices, fn ($i) => isset($i['texto']))
+        ));
+    }
+
+    private function largo(string $tabla, string $columna): int
+    {
+        $fila = DB::select(
+            'SELECT CHARACTER_MAXIMUM_LENGTH AS largo FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            [$tabla, $columna]
+        );
+        return (int) ($fila[0]->largo ?? 255);
+    }
+
     public function entero(mixed $v): ?int
     {
         if ($v === null || $v === '') {
