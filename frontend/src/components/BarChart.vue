@@ -4,7 +4,8 @@
         <div v-for="(r, i) in rows" :key="i" class="row">
             <div class="label" :title="r.label">{{ r.label || '—' }}</div>
             <div class="bar">
-                <div class="fill" :style="{ width: pct(r.value) + '%' }" />
+                <div class="fill" :class="{ negativo: Number(r.value) < 0 }"
+                     :style="{ width: pct(r.value) + '%' }" />
             </div>
             <div class="count" :class="{ negativo: Number(r.value) < 0 }">{{ formatValue(r.value) }}</div>
             <!-- Importe asociado a la fila: acompaña al conteo sin competir con él. -->
@@ -42,4 +43,6 @@ function formatValue(v) { return props.money ? fmtMoney(v) : fmtInt(v); }
 }
 .bar-chart .extra.negativo { color: var(--color-danger, #c0392b); }
 .bar-chart .count.negativo { color: var(--color-danger, #c0392b); }
+/* Un saldo negativo se ve en rojo también en la barra, como en el PDF. */
+.bar-chart .row .bar .fill.negativo { background: var(--color-danger, #c0392b); }
 </style>
