@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\EjecucionMovimiento;
 use App\Models\Expediente;
 use App\Models\HistorialCambio;
 use App\Support\SectorTree;
@@ -97,8 +98,10 @@ class PanelService
     /** Movimientos registrados en esas cuentas, dentro del rango de fechas. */
     private function movimientosQuery(array $filters): \Illuminate\Database\Query\Builder
     {
+        // Sólo lo aprobado: lo que espera aprobación no mueve los saldos.
         $q = DB::table('ejecucion_movimientos')
             ->whereNull('deleted_at')
+            ->where('ejecucion_movimientos.estado_aprobacion', EjecucionMovimiento::APROBADO)
             ->whereIn('cuenta_operativa_id', $this->cuentasQuery($filters)->select('id'));
 
         // Por la fecha del comprobante, no por la de carga.
@@ -407,6 +410,7 @@ class PanelService
 
         $rows = $this->scope->aplicarAMovimientos(DB::table('ejecucion_movimientos'))
             ->whereNull('deleted_at')
+            ->where('estado_aprobacion', EjecucionMovimiento::APROBADO)
             ->whereIn('expediente_id', $contratoIds)
             ->select('expediente_id', 'tipo', DB::raw('SUM(monto) as total'))
             ->groupBy('expediente_id', 'tipo')

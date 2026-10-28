@@ -37,6 +37,7 @@ class DatabaseBackupSchema
             ['table' => 'contratos_principal',     'pk' => 'id',             'exclude' => []],
             ['table' => 'expedientes',     'pk' => 'id',             'exclude' => []],
             ['table' => 'ejecucion_movimientos',   'pk' => 'id',             'exclude' => []],
+            ['table' => 'log_actividades',         'pk' => 'id',             'exclude' => []],
         ];
     }
 

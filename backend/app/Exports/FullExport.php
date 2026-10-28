@@ -425,7 +425,7 @@ class FullExport implements WithMultipleSheets
                 'Proveedor', 'Cliente', 'Cuenta contraparte', 'Rubro', 'Moneda',
                 'Monto (ARS)', 'Monto (USD)', 'Cotización',
                 'Objeto', 'Fecha del comprobante', 'Tiene factura', 'Nombre factura',
-                'Creado',
+                'Aprobación', 'Creado',
             ],
             function ($r) {
                 $this->recortarMovimiento($r);
@@ -450,6 +450,7 @@ class FullExport implements WithMultipleSheets
                     optional($r->fecha)?->format('d/m/Y'),
                     $r->has_factura ? 'Sí' : 'No',
                     $r->factura_original_name,
+                    $r->estado_aprobacion_label,
                     optional($r->created_at)?->format('d/m/Y H:i'),
                 ];
             },

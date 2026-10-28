@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\ActividadController;
+use App\Http\Controllers\AprobacionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContratoController;
 use App\Http\Controllers\ExpedienteController;
@@ -121,6 +123,18 @@ Route::middleware(['auth:sanctum', 'con_acceso'])->group(function () {
         [EjecucionMovimientoController::class, 'update'])->whereNumber('id');
     Route::delete('/movimientos/{id}',
         [EjecucionMovimientoController::class, 'destroy'])->whereNumber('id');
+
+    // ------------------------------------------------------------------
+    // Aprobación: lo que se carga no mueve el saldo hasta que lo aprueba un
+    // usuario con la marca de aprobador y alcance sobre la cuenta.
+    // ------------------------------------------------------------------
+    Route::get ('/aprobaciones',               [AprobacionController::class, 'index']);
+    Route::get ('/aprobaciones/cantidad',      [AprobacionController::class, 'cantidad']);
+    Route::post('/aprobaciones/{id}/aprobar',  [AprobacionController::class, 'aprobar'])->whereNumber('id');
+    Route::post('/aprobaciones/{id}/rechazar', [AprobacionController::class, 'rechazar'])->whereNumber('id');
+
+    // Log de actividades: quién pidió, aprobó o rechazó, cuándo y por qué.
+    Route::get('/actividades', [ActividadController::class, 'index']);
 
     // ------------------------------------------------------------------
     // Historial de cambios

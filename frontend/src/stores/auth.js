@@ -45,6 +45,9 @@ export const useAuthStore = defineStore('auth', {
         /** Se autenticó pero todavía no tiene ningún permiso asignado. */
         sinAcceso: (s) => !s.user?.es_admin && !(s.user?.permisos?.length),
 
+        /** Aprueba o rechaza lo que se carga en las cuentas de su alcance. */
+        isAprobador: (s) => !!s.user?.es_aprobador,
+
         /** Tiene escritura en alguna rama, así que puede cargar y modificar. */
         canEdit: (s) => !!s.user?.puede_editar,
 

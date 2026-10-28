@@ -1,6 +1,8 @@
 <template>
     <BaseModal v-model="open" :title="title" size="large">
         <form @submit.prevent="submit">
+            <!-- Cómo afecta al saldo lo que se guarde. -->
+            <div v-if="aviso" :class="['aviso-aprobacion', aviso.clase]">{{ aviso.texto }}</div>
             <div class="form-grid">
                 <!-- Acción: qué originó el movimiento -->
                 <div class="field">
@@ -226,6 +228,24 @@ const errors = ref({});
 const archivo = ref(null);
 const eliminarFactura = ref(false);
 const editingId = ref(null);
+/** El movimiento que se edita: su estado de aprobación decide qué pasa al guardar. */
+const editado = ref(null);
+
+const aviso = computed(() => {
+    const m = editado.value;
+    if (!m) {
+        return { clase: '', texto: 'Lo que cargue queda «Sin aprobar»: no mueve el saldo hasta que lo apruebe un aprobador.' };
+    }
+    if (m.estado_aprobacion === 'aprobado') {
+        return { clase: '', texto: m.cambio_pendiente
+            ? 'Ya hay un pedido de cambio esperando aprobación: lo que guarde ahora lo reemplaza. El saldo sigue con los valores aprobados hasta que se decida.'
+            : 'Este movimiento está aprobado: el cambio queda pedido y el saldo sigue con los valores aprobados hasta que un aprobador lo acepte.' };
+    }
+    if (m.estado_aprobacion === 'rechazado') {
+        return { clase: 'rechazado', texto: `Rechazado${m.aprobacion_observacion ? ': «' + m.aprobacion_observacion + '»' : ''}. Al guardar la corrección vuelve a quedar sin aprobar.` };
+    }
+    return { clase: '', texto: 'Todavía sin aprobar: el cambio se guarda y sigue esperando aprobación.' };
+});
 const currentFactura = ref(null);
 const expedientes = ref([]);
 const cuentas = ref([]);
@@ -403,6 +423,7 @@ function reset(initial = {}, partes = []) {
 }
 
 async function show({ movimiento = null, accion = 'factura', tipo = 'ingreso' } = {}) {
+    editado.value = movimiento;
     if (movimiento) {
         editingId.value = movimiento.id;
         currentFactura.value = movimiento.has_factura ? (movimiento.factura_original_name || 'factura adjunta') : null;
@@ -467,11 +488,11 @@ async function submit() {
         }
 
         if (isEdit.value) {
-            await movimientosService.update(editingId.value, payload);
-            toast.success('Movimiento actualizado.');
+            const r = await movimientosService.update(editingId.value, payload);
+            toast.success(r?.message || 'Movimiento actualizado.');
         } else {
-            await movimientosService.create(props.cuentaOperativaId, payload);
-            toast.success('Movimiento creado.');
+            const r = await movimientosService.create(props.cuentaOperativaId, payload);
+            toast.success(r?.message || 'Movimiento creado.');
         }
         open.value = false;
         emit('saved');
@@ -489,6 +510,15 @@ async function submit() {
 </script>
 
 <style scoped>
+.aviso-aprobacion {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border-left: 3px solid var(--color-warning);
+    background: var(--color-surface-2);
+    font-size: 13px;
+}
+.aviso-aprobacion.rechazado { border-left-color: var(--color-danger); }
 .hint { font-size: 12px; color: var(--color-muted, #888); margin-top: 4px; }
 .reparto-fila { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
 .reparto-monto { width: 140px; text-align: right; padding-top: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }

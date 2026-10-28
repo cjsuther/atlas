@@ -142,14 +142,15 @@ class Expediente extends Model
         $cuentas = $scope->usuario() ? $scope->cuentasVisibles() : null;
 
         if ($this->relationLoaded('movimientos')) {
-            $movimientos = $this->movimientos->where('tipo', $tipo);
+            $movimientos = $this->movimientos->where('tipo', $tipo)
+                ->where('estado_aprobacion', EjecucionMovimiento::APROBADO);
             if ($cuentas !== null) {
                 $movimientos = $movimientos->whereIn('cuenta_operativa_id', $cuentas);
             }
             return round((float) $movimientos->sum('monto'), 2);
         }
 
-        $q = $this->movimientos()->where('tipo', $tipo);
+        $q = $this->movimientos()->aprobados()->where('tipo', $tipo);
         if ($cuentas !== null) {
             $q->whereIn('cuenta_operativa_id', $cuentas ?: [0]);
         }

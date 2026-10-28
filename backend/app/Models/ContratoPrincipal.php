@@ -169,9 +169,10 @@ class ContratoPrincipal extends Model
             $total = 0.0;
             foreach ($this->ejecuciones as $e) {
                 if ($e->relationLoaded('movimientos')) {
-                    $total += (float) $e->movimientos->where('tipo', $tipo)->sum('monto');
+                    $total += (float) $e->movimientos->where('tipo', $tipo)
+                        ->where('estado_aprobacion', EjecucionMovimiento::APROBADO)->sum('monto');
                 } else {
-                    $total += (float) $e->movimientos()->where('tipo', $tipo)->sum('monto');
+                    $total += (float) $e->movimientos()->aprobados()->where('tipo', $tipo)->sum('monto');
                 }
             }
             return round($total, 2);
@@ -182,6 +183,7 @@ class ContratoPrincipal extends Model
                 ->join('expedientes as ce', 'ce.id', '=', 'm.expediente_id')
                 ->where('ce.contrato_principal_id', $this->id)
                 ->where('m.tipo', $tipo)
+                ->where('m.estado_aprobacion', EjecucionMovimiento::APROBADO)
                 ->whereNull('m.deleted_at')
                 ->whereNull('ce.deleted_at')
                 ->sum('m.monto'),

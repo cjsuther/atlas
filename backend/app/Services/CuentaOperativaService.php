@@ -106,6 +106,7 @@ class CuentaOperativaService extends BaseCrudService
         return DB::table('ejecucion_movimientos')
             ->whereColumn('ejecucion_movimientos.cuenta_operativa_id', 'cuentas_operativas.id')
             ->whereNull('deleted_at')
+            ->where('estado_aprobacion', EjecucionMovimiento::APROBADO)
             ->where('tipo', $tipo)
             ->selectRaw('COALESCE(SUM(monto), 0)');
     }

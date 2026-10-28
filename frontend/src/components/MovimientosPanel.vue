@@ -5,7 +5,8 @@
             <span style="font-weight:400;opacity:0.9;font-size:13px;">
                 ({{ totalGastos > 0 || totalIngresos > 0
                     ? `Ingresos $${fmtMoney(totalIngresos)} · Gastos $${fmtMoney(totalGastos)}`
-                    : 'sin movimientos' }})
+                    : 'sin movimientos' }}<template v-if="sinAprobar.cantidad">
+                    · {{ sinAprobar.cantidad }} sin aprobar por ${{ fmtMoney(sinAprobar.monto) }}, que todavía no mueven el saldo</template>)
             </span>
         </summary>
         <div class="collapsible-body">
@@ -49,6 +50,7 @@
                             <ThOrden campo="objeto" :orden="orden" @ordenar="ordenarPor">Objeto</ThOrden>
                             <ThOrden campo="monto" :orden="orden" derecha @ordenar="ordenarPor">Monto</ThOrden>
                             <ThOrden campo="has_factura" :orden="orden" @ordenar="ordenarPor">Factura</ThOrden>
+                            <ThOrden campo="estado_aprobacion" :orden="orden" @ordenar="ordenarPor">Aprobación</ThOrden>
                             <th></th>
                         </tr>
                     </thead>
@@ -103,6 +105,19 @@
                                 <button v-if="m.has_factura" class="btn btn-ghost btn-sm" @click="descargar(m)"
                                         :title="m.factura_original_name">📎 Descargar</button>
                                 <span v-else style="color:var(--color-muted);font-size:12px;">—</span>
+                            </td>
+                            <td style="white-space:nowrap;">
+                                <span :class="['badge', ESTADO_BADGE[m.estado_aprobacion]]"
+                                      :title="m.estado_aprobacion === 'rechazado' ? m.aprobacion_observacion : ''">
+                                    {{ m.estado_aprobacion_label }}
+                                </span>
+                                <div v-if="m.estado_aprobacion === 'rechazado' && m.aprobacion_observacion"
+                                     style="font-size:11px;color:var(--color-danger);white-space:normal;max-width:220px;">
+                                    {{ m.aprobacion_observacion }}
+                                </div>
+                                <div v-if="m.cambio_pendiente" style="font-size:11px;color:var(--color-muted);">
+                                    {{ m.cambio_pendiente === 'baja' ? 'Baja pedida' : 'Modificación pedida' }}, esperando aprobación
+                                </div>
                             </td>
                             <td class="actions">
                                 <button v-if="m.editable && !soloConsulta" @click="editar(m)" title="Editar">
@@ -163,6 +178,12 @@ const ACCION_LABELS = {
     mch:           'MCH',
 };
 
+const ESTADO_BADGE = {
+    pendiente: 'badge-warning',
+    aprobado:  'badge-success',
+    rechazado: 'badge-danger',
+};
+
 const CONTRAPARTE_LABELS = {
     cliente:   'Cliente',
     proveedor: 'Proveedor',
@@ -195,10 +216,16 @@ const filterAccion = ref('');
 const modalRef = ref(null);
 const confirmRef = ref(null);
 
+// Los totales son los del saldo: sólo lo aprobado.
+const aprobados = computed(() => rows.value.filter(r => r.estado_aprobacion === 'aprobado'));
 const totalIngresos = computed(() =>
-    rows.value.filter(r => r.tipo === 'ingreso').reduce((s, r) => s + Number(r.monto || 0), 0));
+    aprobados.value.filter(r => r.tipo === 'ingreso').reduce((s, r) => s + Number(r.monto || 0), 0));
 const totalGastos = computed(() =>
-    rows.value.filter(r => r.tipo === 'gasto').reduce((s, r) => s + Number(r.monto || 0), 0));
+    aprobados.value.filter(r => r.tipo === 'gasto').reduce((s, r) => s + Number(r.monto || 0), 0));
+const sinAprobar = computed(() => {
+    const p = rows.value.filter(r => r.estado_aprobacion === 'pendiente');
+    return { cantidad: p.length, monto: p.reduce((s, r) => s + Number(r.monto || 0), 0) };
+});
 
 async function load() {
     loading.value = true;
@@ -240,18 +267,20 @@ async function descargar(m) {
     }
 }
 async function darBaja(m) {
+    const aprobado = m.estado_aprobacion === 'aprobado';
     const ok = await confirmRef.value.show({
-        title: 'Dar de baja',
-        message: m.accion === 'transferencia'
+        title: aprobado ? 'Pedir la baja' : 'Dar de baja',
+        message: (m.accion === 'transferencia'
             ? '¿Eliminar esta transferencia? También se dará de baja la contrapartida en la otra cuenta.'
-            : `¿Eliminar este ${m.tipo}? Queda registrado en el historial.`,
-        confirmText: 'Eliminar',
+            : `¿Eliminar este ${m.tipo}? Queda registrado en el historial.`)
+            + (aprobado ? ' Como está aprobado, la baja la tiene que aprobar un aprobador: hasta entonces sigue sumando en el saldo.' : ''),
+        confirmText: aprobado ? 'Pedir la baja' : 'Eliminar',
         danger: true,
     });
     if (!ok) return;
     try {
-        await movimientosService.remove(m.id);
-        toast.success('Movimiento eliminado.');
+        const r = await movimientosService.remove(m.id);
+        toast.success(r?.message || 'Movimiento eliminado.');
         load();
         emit('changed');
     } catch (err) {

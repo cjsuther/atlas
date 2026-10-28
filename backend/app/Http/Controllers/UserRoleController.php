@@ -55,6 +55,10 @@ class UserRoleController extends Controller
             });
         }
 
+        if (($aprobador = $request->query('es_aprobador')) !== null && $aprobador !== '') {
+            $q->where('es_aprobador', filter_var($aprobador, FILTER_VALIDATE_BOOLEAN) ? 1 : 0);
+        }
+
         if (($activo = $request->query('activo')) !== null && $activo !== '') {
             $q->where('activo', filter_var($activo, FILTER_VALIDATE_BOOLEAN) ? 1 : 0);
         }
@@ -106,6 +110,7 @@ class UserRoleController extends Controller
             'display_name' => ['nullable', 'string', 'max:200'],
             'email'        => ['nullable', 'email', 'max:200'],
             'es_admin'     => ['sometimes', 'boolean'],
+            'es_aprobador' => ['sometimes', 'boolean'],
             'activo'       => ['sometimes', 'boolean'],
             'auth_source'  => ['required', 'in:local,ldap'],
             'password'     => ['exclude_if:auth_source,ldap', 'required', 'string', 'min:8', 'confirmed'],
@@ -119,6 +124,7 @@ class UserRoleController extends Controller
         $user->display_name = $data['display_name'] ?? $data['username'];
         $user->email        = $data['email'] ?? null;
         $user->es_admin     = (bool) ($data['es_admin'] ?? false);
+        $user->es_aprobador = (bool) ($data['es_aprobador'] ?? false);
         $user->activo       = array_key_exists('activo', $data) ? (bool) $data['activo'] : true;
         $user->auth_source  = $data['auth_source'];
         $user->password     = $data['auth_source'] === 'local' ? $data['password'] : null; // el cast 'hashed' lo hashea
@@ -139,6 +145,7 @@ class UserRoleController extends Controller
             'display_name' => ['sometimes', 'nullable', 'string', 'max:200'],
             'email'        => ['sometimes', 'nullable', 'email', 'max:200'],
             'es_admin'     => ['sometimes', 'boolean'],
+            'es_aprobador' => ['sometimes', 'boolean'],
             'activo'       => ['sometimes', 'boolean'],
             'permisos'                 => ['sometimes', 'array'],
             'permisos.*.sector_id'     => ['nullable', 'integer', 'exists:sector,sector_id'],

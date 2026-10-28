@@ -203,6 +203,7 @@ class AuthController extends Controller
             'display_name'      => $user->display_name,
             'email'             => $user->email,
             'es_admin'          => $user->esAdmin(),
+            'es_aprobador'      => (bool) $user->es_aprobador,
             'auth_source'       => $user->auth_source,
             'permisos'          => $user->permisos->map(fn ($p) => [
                 'sector_id' => $p->sector_id,

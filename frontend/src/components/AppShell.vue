@@ -15,6 +15,8 @@
                                  @click="onNavClick">
                         <IconLib :name="item.icon" :size="18" />
                         <span class="label">{{ item.label }}</span>
+                        <span v-if="item.contador && pendientes > 0" class="nav-contador"
+                              :title="`${pendientes} esperando su aprobación`">{{ pendientes }}</span>
                     </router-link>
                 </template>
             </nav>
@@ -45,12 +47,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useUiStore } from '@/stores/ui';
 import { useToast } from '@/composables/useToast';
 import { authService } from '@/services/auth';
+import { usePendientes } from '@/composables/usePendientes';
 import AtlasLogo from './AtlasLogo.vue';
 import IconLib from './IconLib.vue';
 
@@ -61,6 +64,11 @@ const router = useRouter();
 const toast = useToast();
 
 const pageTitle = computed(() => route.meta?.title || '');
+
+// Lo que espera la decisión del aprobador: se revisa al cambiar de pantalla,
+// que es cuando se suele cargar o decidir algo.
+const { cantidad: pendientes, refrescar: refrescarPendientes } = usePendientes();
+watch(() => route.fullPath, () => { if (auth.isAprobador) refrescarPendientes(); }, { immediate: true });
 
 /** Visible para cualquiera con permisos; `soloAdmin` reserva la opción. */
 
@@ -78,6 +86,13 @@ const NAV_SECTIONS = [
             { label: 'Cuentas',          icon: 'database',  to: { name: 'catalogo', params: { slug: 'cuentas-operativas' } } },
             { label: 'Contratos',        icon: 'contratos', to: { name: 'catalogo', params: { slug: 'contratos' } } },
             { label: 'Expedientes',      icon: 'contratos', to: { name: 'expedientes' } },
+        ],
+    },
+    {
+        title: 'Control',
+        items: [
+            { label: 'Para aprobar',       icon: 'check', to: { name: 'aprobaciones' }, soloAprobador: true, contador: true },
+            { label: 'Log de actividades', icon: 'list',  to: { name: 'actividades' } },
         ],
     },
     {
@@ -101,7 +116,8 @@ const NAV_SECTIONS = [
 ];
 
 const visibleNav = computed(() => NAV_SECTIONS
-    .map(s => ({ ...s, items: s.items.filter(i => !i.soloAdmin || auth.isAdmin) }))
+    .map(s => ({ ...s, items: s.items.filter(i => (!i.soloAdmin || auth.isAdmin)
+                                              && (!i.soloAprobador || auth.isAprobador)) }))
     .filter(s => s.items.length > 0));
 
 function onNavClick() {
@@ -124,3 +140,17 @@ onMounted(async () => {
     } catch { /* 401 handler en interceptor */ }
 });
 </script>
+
+<style scoped>
+.nav-contador {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+}
+</style>

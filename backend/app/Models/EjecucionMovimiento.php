@@ -34,6 +34,21 @@ class EjecucionMovimiento extends Model
         self::ACCION_MCH,
     ];
 
+    /**
+     * Aprobación. Lo que se carga queda pendiente —«Sin aprobar»— y no mueve
+     * el saldo hasta que un aprobador con alcance sobre la cuenta lo aprueba.
+     * Lo rechazado tampoco suma: vuelve a quien lo cargó para corregirlo.
+     */
+    public const PENDIENTE = 'pendiente';
+    public const APROBADO  = 'aprobado';
+    public const RECHAZADO = 'rechazado';
+
+    public const ESTADOS_APROBACION = [
+        self::PENDIENTE => 'Sin aprobar',
+        self::APROBADO  => 'Aprobado',
+        self::RECHAZADO => 'Rechazado',
+    ];
+
     /** Campo de contraparte que aplica según la acción. */
     public const CONTRAPARTES = ['cliente', 'proveedor', 'cuenta', 'rubro'];
 
@@ -56,6 +71,8 @@ class EjecucionMovimiento extends Model
         'movimiento_espejo_id',
         'distribucion_de_id',
         'distribucion_porcentaje',
+        'estado_aprobacion',
+        'cargado_por',
         'moneda',
         'monto',
         'monto_dolares',
@@ -73,11 +90,39 @@ class EjecucionMovimiento extends Model
         'cotizacion'    => 'decimal:4',
         'distribucion_porcentaje' => 'decimal:2',
         'fecha'         => 'date:Y-m-d',
+        'aprobacion_fecha'       => 'datetime',
+        'cambio_propuesto'       => 'array',
+        'cambio_propuesto_fecha' => 'datetime',
     ];
 
-    protected $hidden = ['factura_path']; // se entrega vía endpoint, no se expone la ruta
+    // La factura se entrega vía endpoint, no se expone la ruta. El cambio
+    // propuesto se muestra traducido desde la bandeja del aprobador.
+    protected $hidden = ['factura_path', 'cambio_propuesto'];
 
-    protected $appends = ['has_factura', 'contraparte'];
+    protected $appends = ['has_factura', 'contraparte', 'estado_aprobacion_label', 'cambio_pendiente'];
+
+    /** Lo que suma en los saldos. */
+    public function scopeAprobados($q)
+    {
+        return $q->where($this->qualifyColumn('estado_aprobacion'), self::APROBADO);
+    }
+
+    public function estaAprobado(): bool
+    {
+        return $this->estado_aprobacion === self::APROBADO;
+    }
+
+    public function getEstadoAprobacionLabelAttribute(): ?string
+    {
+        return self::ESTADOS_APROBACION[$this->estado_aprobacion] ?? null;
+    }
+
+    /** Si hay un pedido de modificación o de baja esperando: 'modificacion', 'baja' o null. */
+    public function getCambioPendienteAttribute(): ?string
+    {
+        $c = $this->cambio_propuesto;
+        return is_array($c) ? ($c['tipo'] ?? 'modificacion') : null;
+    }
 
     public function expediente()
     {

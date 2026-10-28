@@ -29,6 +29,14 @@
                                     opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
                                     @update:model-value="reload" />
                 </div>
+                <div class="field">
+                    <label>Aprobadores</label>
+                    <SelectBuscador v-model="state.es_aprobador"
+                                    :opciones="[{ value: '1', etiqueta: 'Aprobadores' },
+                                                { value: '0', etiqueta: 'No aprobadores' }]"
+                                    opcion-vacia="Todos" valor-vacio="" placeholder="Todos"
+                                    @update:model-value="reload" />
+                </div>
                 <div v-if="pendientes > 0" class="field aviso-pendientes">
                     <label>Pendientes de asignación</label>
                     <button type="button" class="btn btn-secondary" @click="verPendientes">
@@ -82,6 +90,7 @@
                         <td>{{ u.display_name || '—' }}</td>
                         <td>{{ u.email || '—' }}</td>
                         <td>
+                            <span v-if="u.es_aprobador" class="badge badge-success" style="margin-right:4px;">Aprobador</span>
                             <span v-if="u.es_admin" class="badge badge-warning">Administrador del sistema</span>
                             <span v-else-if="!u.permisos?.length" class="badge badge-danger">Sin permisos</span>
                             <template v-else>
@@ -129,6 +138,14 @@
                             Administra estructura, cuentas, catálogos y usuarios
                         </label>
                         <div class="hint">Ve y opera sobre toda la organización.</div>
+                    </div>
+                    <div class="field">
+                        <label>Aprobador</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+                            <input v-model="formData.es_aprobador" type="checkbox" style="width:auto;margin:0;" />
+                            Aprueba o rechaza lo que se carga
+                        </label>
+                        <div class="hint">En las cuentas de su alcance. Hasta que se aprueba, no mueve el saldo.</div>
                     </div>
                     <div class="field" v-if="!editing">
                         <label>Tipo de usuario <span style="color:var(--color-danger);">*</span></label>
@@ -248,7 +265,7 @@ import ThOrden from '@/components/ThOrden.vue';
 
 const toast = useToast();
 const auth = useAuthStore();
-const state = reactive({ search: '', es_admin: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
+const state = reactive({ search: '', es_admin: '', es_aprobador: '', sector_id: '', auth_source: '', activo: '', page: 1, per_page: 20 });
 const rows = ref([]);
 const orden = reactive({ by: '', dir: 'asc' });
 
@@ -328,6 +345,7 @@ async function load() {
         if (orden.by) { params.order_by = orden.by; params.order_dir = orden.dir; }
         if (state.search) params.search = state.search;
         if (state.es_admin !== '') params.es_admin = state.es_admin;
+        if (state.es_aprobador !== '') params.es_aprobador = state.es_aprobador;
         if (state.sector_id) params.sector_id = state.sector_id;
         if (state.auth_source) params.auth_source = state.auth_source;
         if (state.activo !== '') params.activo = state.activo;
@@ -386,7 +404,7 @@ function openNew() {
     editing.value = null;
     resetForm({
         username: '', display_name: '', email: '',
-        es_admin: false, permisos: [],
+        es_admin: false, es_aprobador: false, permisos: [],
         auth_source: 'local', activo: true,
         password: '', password_confirmation: '',
     });
@@ -400,6 +418,7 @@ function openEdit(u) {
         display_name: u.display_name || '',
         email: u.email || '',
         es_admin: !!u.es_admin,
+        es_aprobador: !!u.es_aprobador,
         permisos: (u.permisos || []).map(p => ({ sector_id: p.sector_id, nivel: p.nivel })),
         activo: !!u.activo,
     });
@@ -413,6 +432,7 @@ async function save() {
         if (editing.value) {
             const payload = {
                 es_admin: formData.es_admin,
+                es_aprobador: formData.es_aprobador,
                 activo: formData.activo,
                 // El administrador no se acota: los permisos de rama se limpian.
                 permisos: formData.es_admin ? [] : formData.permisos,
@@ -429,6 +449,7 @@ async function save() {
                 display_name: formData.display_name,
                 email: formData.email,
                 es_admin: formData.es_admin,
+                es_aprobador: formData.es_aprobador,
                 auth_source: formData.auth_source,
                 activo: formData.activo,
                 permisos: formData.es_admin ? [] : formData.permisos,

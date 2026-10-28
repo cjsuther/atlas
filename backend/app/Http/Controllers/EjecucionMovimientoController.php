@@ -38,7 +38,10 @@ class EjecucionMovimientoController extends Controller
             return $this->notFoundCuenta();
         }
         $m = $this->service->create($cuentaOperativaId, $request->validated(), $request->file('factura'));
-        return response()->json(['data' => $m], 201);
+        return response()->json([
+            'data'    => $m,
+            'message' => 'Movimiento cargado. Queda sin aprobar: no mueve el saldo hasta que lo apruebe un aprobador.',
+        ], 201);
     }
 
     /** GET /api/expedientes/{id}/movimientos — lo registrado contra ese contrato */
@@ -73,7 +76,12 @@ class EjecucionMovimientoController extends Controller
             $request->file('factura'),
             (bool) $request->input('eliminar_factura'),
         );
-        return response()->json(['data' => $m]);
+        return response()->json([
+            'data'    => $m,
+            'message' => $actual->estaAprobado()
+                ? 'Se pidió la modificación. El saldo sigue con los valores aprobados hasta que un aprobador la acepte.'
+                : 'Movimiento modificado. Queda sin aprobar hasta que lo apruebe un aprobador.',
+        ]);
     }
 
     /** DELETE /api/movimientos/{id} — baja lógica */
@@ -82,8 +90,11 @@ class EjecucionMovimientoController extends Controller
         $actual = $this->service->find($id);
         if (!$actual || !$this->movimientoAccesible($actual)) return $this->notFound();
         if (!$actual->editable) return $this->sinPermiso($actual);
-        if (!$this->service->softDelete($id)) return $this->notFound();
-        return response()->json(['message' => 'Movimiento dado de baja.']);
+        $resultado = $this->service->softDelete($id);
+        if ($resultado === null) return $this->notFound();
+        return response()->json(['message' => $resultado === 'pedido'
+            ? 'Se pidió la baja. El movimiento sigue sumando en el saldo hasta que un aprobador la acepte.'
+            : 'Movimiento dado de baja.']);
     }
 
     /** GET /api/movimientos/{id}/factura — descarga el archivo */

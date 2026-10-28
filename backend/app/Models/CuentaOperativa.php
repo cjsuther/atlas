@@ -95,12 +95,14 @@ class CuentaOperativa extends Model
             return round((float) $this->attributes[$precargado], 2);
         }
         if ($this->relationLoaded('movimientos')) {
-            return round((float) $this->movimientos->where('tipo', $tipo)->sum('monto'), 2);
+            return round((float) $this->movimientos->where('tipo', $tipo)
+                ->where('estado_aprobacion', EjecucionMovimiento::APROBADO)->sum('monto'), 2);
         }
         if ($this->id === null) {
             return 0.0;
         }
-        return round((float) $this->movimientos()->where('tipo', $tipo)->sum('monto'), 2);
+        // Lo que todavía no se aprobó no mueve el saldo.
+        return round((float) $this->movimientos()->aprobados()->where('tipo', $tipo)->sum('monto'), 2);
     }
 
     /** Nodo del árbol del que cuelga, con sus ancestros. @return array<int> */

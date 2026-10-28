@@ -40,12 +40,16 @@ class HistorialExpediente
         'objeto'                    => 'Objeto',
         'fecha'                     => 'Fecha del comprobante',
         'factura_original_name'     => 'Factura',
+        'estado_aprobacion'         => 'Aprobación',
+        'aprobacion_observacion'    => 'Observación del aprobador',
         'deleted_at'                => 'Estado',
     ];
 
     /** Columnas internas o que se deducen de otra: no le dicen nada al usuario. */
     private const OCULTOS = ['sector_id', 'movimiento_espejo_id', 'factura_path', 'factura_mime',
-                             'contrato_principal_id', 'created_at'];
+                             'contrato_principal_id', 'created_at', 'cargado_por', 'aprobacion_usuario',
+                             'aprobacion_fecha', 'cambio_propuesto', 'cambio_propuesto_por',
+                             'cambio_propuesto_fecha', 'distribucion_de_id', 'distribucion_porcentaje'];
 
     public function __construct(protected AccessScopeService $scope)
     {
@@ -168,6 +172,8 @@ class HistorialExpediente
                 => preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $v, $f) ? "{$f[3]}/{$f[2]}/{$f[1]}" : $v,
             'deleted_at'
                 => ['baja' => 'Dado de baja', 'restaurado' => 'Restaurado'][$v] ?? $v,
+            'estado_aprobacion'
+                => EjecucionMovimiento::ESTADOS_APROBACION[$v] ?? $v,
             default => $v,
         };
     }

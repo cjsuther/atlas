@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\EjecucionMovimiento;
 use App\Models\Expediente;
 use App\Models\CuentaOperativa;
 use App\Models\HistorialCambio;
@@ -31,6 +32,7 @@ class ExpedienteService
                 ->whereColumn('expediente_id', 'expedientes.id')
                 ->where('tipo', $tipo)
                 ->whereNull('deleted_at')
+                ->where('estado_aprobacion', EjecucionMovimiento::APROBADO)
                 ->selectRaw('COALESCE(SUM(monto), 0)')
         );
     }
@@ -181,7 +183,8 @@ class ExpedienteService
 
         return "COALESCE((SELECT SUM(m.monto) FROM ejecucion_movimientos m
                  WHERE m.expediente_id = expedientes.id
-                   AND m.tipo = '{$tipo}' AND m.deleted_at IS NULL{$recorte}), 0)";
+                   AND m.tipo = '{$tipo}' AND m.deleted_at IS NULL
+                   AND m.estado_aprobacion = 'aprobado'{$recorte}), 0)";
     }
 
     public function paginate(array $filters): LengthAwarePaginator

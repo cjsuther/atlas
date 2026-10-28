@@ -17,6 +17,9 @@ use Laravel\Sanctum\HasApiTokens;
  * Aparte del árbol está `es_admin`, que habilita la configuración del sistema:
  * estructura, cuentas, catálogos, usuarios y respaldos.
  *
+ * `es_aprobador` habilita a aprobar o rechazar lo que se carga en las cuentas
+ * que el usuario ve: hasta que se aprueba, no mueve el saldo.
+ *
  * Un usuario sin asignaciones y sin el atributo de administrador se autentica
  * y nada más: es el estado con el que se dan de alta los que llegan por LDAP,
  * hasta que un administrador les asigne permisos.
@@ -37,6 +40,7 @@ class UserRole extends Authenticatable
         'password',
         'auth_source',
         'es_admin',
+        'es_aprobador',
         'saldos_agrupacion',
         'activo',
         'last_login',
@@ -44,6 +48,7 @@ class UserRole extends Authenticatable
 
     protected $casts = [
         'es_admin'   => 'boolean',
+        'es_aprobador' => 'boolean',
         'activo'     => 'boolean',
         'last_login' => 'datetime',
         'password'   => 'hashed',

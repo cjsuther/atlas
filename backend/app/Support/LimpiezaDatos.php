@@ -24,6 +24,7 @@ class LimpiezaDatos
      */
     public const TABLAS = [
         'historial_cambios',
+        'log_actividades',
         'ejecucion_movimientos',
         'expedientes',
         'contratos_ejecucion', // los expedientes, antes de renombrarse

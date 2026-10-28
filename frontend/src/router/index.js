@@ -42,6 +42,14 @@ const routes = [
               component: () => import('@/views/cuentas/CuentaDetail.vue'),
               meta: { title: 'Cuenta' } },
 
+            // Lo que espera aprobación y el registro de quién hizo qué.
+            { path: 'aprobaciones', name: 'aprobaciones',
+              component: () => import('@/views/aprobaciones/Bandeja.vue'),
+              meta: { title: 'Para aprobar', requiresAprobador: true } },
+            { path: 'actividades', name: 'actividades',
+              component: () => import('@/views/actividades/LogActividades.vue'),
+              meta: { title: 'Log de actividades' } },
+
             // Estructura organizativa y catálogos
             { path: 'catalogos/:slug', name: 'catalogo',
               component: () => import('@/views/catalogos/Catalogo.vue') },
@@ -80,6 +88,9 @@ router.beforeEach((to) => {
         return { name: 'sin-acceso' };
     }
     if (to.name === 'sin-acceso' && auth.isAuthenticated && !auth.sinAcceso) {
+        return { name: 'panel' };
+    }
+    if (to.meta?.requiresAprobador && !auth.isAprobador) {
         return { name: 'panel' };
     }
     if (to.meta?.requiresAdmin && !auth.isAdmin) {
